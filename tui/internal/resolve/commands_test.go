@@ -6,8 +6,8 @@ import (
 )
 
 // The settled naming decision, spelled out so a rename cannot happen by
-// accident: sc/sc-job/sc-done are each the sole candidate name — no short
-// alias, no legacy fallback.
+// accident: sc/sc-job/sc-done/sc-delete are each the sole candidate name —
+// no short alias, no legacy fallback.
 func TestCommandSpecs(t *testing.T) {
 	cases := []struct {
 		spec   Spec
@@ -19,6 +19,7 @@ func TestCommandSpecs(t *testing.T) {
 		{Safecode(), "sc", "SAFECODE_BIN", []string{"sc"}, "scripts/run.sh"},
 		{Job(), "sc-job", "SAFECODE_JOB_BIN", []string{"sc-job"}, "scripts/new-job.sh"},
 		{Done(), "sc-done", "SAFECODE_DONE_BIN", []string{"sc-done"}, "scripts/finish-job.sh"},
+		{Delete(), "sc-delete", "SAFECODE_DELETE_BIN", []string{"sc-delete"}, "scripts/delete-job.sh"},
 	}
 	for _, c := range cases {
 		if c.spec.Label != c.label {
@@ -61,7 +62,7 @@ func TestSpecScriptsResolveFromCheckout(t *testing.T) {
 	if !looksLikeCheckout(repo) {
 		t.Skipf("%s is not a safecode checkout", repo)
 	}
-	for _, spec := range []Spec{Safecode(), Job(), Done()} {
+	for _, spec := range []Spec{Safecode(), Job(), Done(), Delete()} {
 		isolate(t)
 		t.Setenv("SAFECODE_HOME", repo)
 

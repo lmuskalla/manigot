@@ -21,6 +21,7 @@ safecode/
     run.sh                ← container launcher      → 'sc'
     new-job.sh            ← job generator           → 'sc-job'
     finish-job.sh         ← job archiver            → 'sc-done'
+    delete-job.sh         ← job deleter             → 'sc-delete'
     tui.sh                ← TUI launcher            → 'sc-tui'
     entrypoint.sh         ← runs inside the container before the agent CLI starts
   tui/                    ← host-side TUI source (Go); `make tui` builds bin/safecode-tui
@@ -137,13 +138,14 @@ allowed, because there it is the normal way to authenticate.
 
 ### The installed commands
 
-`make install` puts four commands on your `PATH`:
+`make install` puts five commands on your `PATH`:
 
 | command | does |
 |---|---|
 | `sc` | start a session in the current project |
 | `sc-job` | create a job directory + branch (off `main`) |
 | `sc-done` | archive a finished job |
+| `sc-delete` | permanently delete a job (directory + branch, no merge) |
 | `sc-tui` | the terminal UI (needs `make tui` first) |
 
 They are symlinks back into the repo, so `git pull` updates them. `make
@@ -158,6 +160,7 @@ If you would rather not write to `/usr/local/bin`, define shell aliases instead:
 alias sc='~/code/safecode/scripts/run.sh'
 alias sc-job='~/code/safecode/scripts/new-job.sh'
 alias sc-done='~/code/safecode/scripts/finish-job.sh'
+alias sc-delete='~/code/safecode/scripts/delete-job.sh'
 alias sc-tui='~/code/safecode/scripts/tui.sh'
 ```
 
@@ -170,6 +173,7 @@ export SAFECODE_HOME="$HOME/code/safecode"   # covers all of the below at once
 export SAFECODE_BIN=…                        # or one at a time: the launcher
 export SAFECODE_JOB_BIN=…                    #   job creation
 export SAFECODE_DONE_BIN=…                   #   job completion
+export SAFECODE_DELETE_BIN=…                 #   job deletion
 ```
 
 Each `*_BIN` takes either a path or a bare command name to look up on `PATH`. A
@@ -393,7 +397,8 @@ Detail view:
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict are agent-written) |
 | `D` | mark the job done (runs the host `sc-done`, in the foreground so its confirmation prompts work) |
-| `c` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/agent keys work on a job that isn't on the current branch |
+| `x` / `del` | permanently delete the job (runs the host `sc-delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
+| `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`x`/agent keys work on a job that isn't on the current branch |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
@@ -421,23 +426,29 @@ local preference, not shared) and apply immediately; a missing file just
 means nothing has been saved yet, and every setting falls back to its default
 above.
 
-### Stage label
+### Stage timeline
 
-The detail view's action bar shows `stage: <name>` as an informational hint of
-where the job's files say it is in the ideal workflow above — it no longer
-restricts which agents can be launched from there. Any of the five agents can
-be fired at any time, so a job worked on outside the ideal flow (e.g. a
-hand-written `brief.md` and `tasks.md`, straight to `@developer`) isn't
-blocked by the TUI.
+The detail view's action bar shows a horizontal timeline of every stage —
+done stages checked, the current one highlighted, stages still ahead dim —
+as an informational hint of where the job's files say it is in the ideal
+workflow above. It no longer restricts which agents can be launched from
+there. Any of the five agents can be fired at any time, so a job worked on
+outside the ideal flow (e.g. a hand-written `brief.md` and `tasks.md`,
+straight to `@developer`) isn't blocked by the TUI.
 
 | stage | when |
 |---|---|
-| analyze | job open, tasks not yet written |
-| develop | `tasks.md` written |
-| review | `implementation.md` written |
+| define | `brief.md` not yet written |
+| plan | `brief.md` written, `tasks.md` not yet |
+| implement | `tasks.md` written, `implementation.md` not yet |
+| review | `implementation.md` written, `verdict.md` not yet |
+| finished | `verdict.md` written and its `## Overall` verdict is APPROVED |
 
 A file counts as "written" once it has real content beyond its `sc-job`
-scaffold (template comments, empty headings, and frontmatter don't count).
+scaffold (template comments, empty headings, and frontmatter don't count). A
+verdict that's written but not approved (REJECTED, NEEDS WORK, or anything
+else) bounces the stage back to implement rather than resolving to review or
+finished — the job needs more work before it goes through review again.
 
 Press `D` from the detail view at any point to run the host `sc-done`
 (`scripts/finish-job.sh`) and mark the job done — it squash-merges the job

@@ -1,5 +1,5 @@
 // Package resolve locates the safecode host commands that the TUI shells out
-// to (sc, sc-job, sc-done).
+// to (sc, sc-job, sc-done, sc-delete).
 //
 // The TUI must not assume a particular installation method. Users may symlink
 // the launchers into /usr/local/bin under their canonical names, or not
@@ -21,19 +21,21 @@
 //
 // # Environment variable contract
 //
-// These four names are a public, user-facing contract. Renaming one is a
+// These five names are a public, user-facing contract. Renaming one is a
 // breaking change for anyone who has put it in their shell profile.
 //
-//	SAFECODE_BIN       path to (or name of) the safecode launcher
-//	                   — scripts/run.sh
-//	SAFECODE_JOB_BIN   path to (or name of) the job-creation command
-//	                   — scripts/new-job.sh
-//	SAFECODE_DONE_BIN  path to (or name of) the job-completion command
-//	                   — scripts/finish-job.sh
-//	SAFECODE_HOME      path to a safecode checkout, used for the script
-//	                   fallback ($SAFECODE_HOME/scripts/<name>.sh)
+//	SAFECODE_BIN         path to (or name of) the safecode launcher
+//	                     — scripts/run.sh
+//	SAFECODE_JOB_BIN     path to (or name of) the job-creation command
+//	                     — scripts/new-job.sh
+//	SAFECODE_DONE_BIN    path to (or name of) the job-completion command
+//	                     — scripts/finish-job.sh
+//	SAFECODE_DELETE_BIN  path to (or name of) the job-deletion command
+//	                     — scripts/delete-job.sh
+//	SAFECODE_HOME        path to a safecode checkout, used for the script
+//	                     fallback ($SAFECODE_HOME/scripts/<name>.sh)
 //
-// The three *_BIN variables take either an absolute or relative path (anything
+// The four *_BIN variables take either an absolute or relative path (anything
 // containing a path separator) or a bare command name that is looked up on
 // $PATH. A value that cannot be resolved is an error: the resolver does not
 // silently ignore a misspelled override.
@@ -63,6 +65,9 @@ const (
 
 	// EnvDone overrides the job-completion command (scripts/finish-job.sh).
 	EnvDone = "SAFECODE_DONE_BIN"
+
+	// EnvDelete overrides the job-deletion command (scripts/delete-job.sh).
+	EnvDelete = "SAFECODE_DELETE_BIN"
 
 	// EnvHome points at a safecode checkout, enabling the script fallback.
 	EnvHome = "SAFECODE_HOME"

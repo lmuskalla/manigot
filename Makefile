@@ -48,7 +48,8 @@ LINKS := \
 	sc:run.sh \
 	sc-tui:tui.sh \
 	sc-job:new-job.sh \
-	sc-done:finish-job.sh
+	sc-done:finish-job.sh \
+	sc-delete:delete-job.sh
 
 install: ## Symlink the safecode launchers into PREFIX/bin (default /usr/local)
 	@mkdir -p "$(BINDIR)"

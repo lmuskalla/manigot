@@ -343,10 +343,16 @@ func (t *fileTab) scroll(msg tea.KeyMsg) {
 	}
 }
 
+// bodyGutter is the width of the vertical rule + gap rendered to the left of
+// the doc body (see renderBody) — reserved out of bodyWidth so the
+// rule-prefixed lines still fit within d.width.
+const bodyGutter = 2
+
 // bodyWidth / bodyHeight compute the markdown viewport given the chrome the
-// detail view draws around it (title, tab bar, footer).
+// detail view draws around it (title, tab bar, footer, and the left-hand
+// vertical rule).
 func (d *detailView) bodyWidth() int {
-	w := d.width - 2 // small left/right margin
+	w := d.width - 2 - bodyGutter // small right margin + left rule/gap
 	if w < 1 {
 		w = 1
 	}
@@ -361,6 +367,22 @@ func (d *detailView) bodyHeight() int {
 		h = 1
 	}
 	return h
+}
+
+// renderBody prefixes the active viewer's rendered lines with a dim vertical
+// rule, so the doc content — already indented by glamour's own document
+// margin — reads as a distinct panel rather than chrome-level text.
+func (d *detailView) renderBody() string {
+	body := d.current().viewer.View()
+	if body == "" {
+		return body
+	}
+	rule := dimStyle.Render("│") + " "
+	lines := strings.Split(body, "\n")
+	for i, l := range lines {
+		lines[i] = rule + l
+	}
+	return strings.Join(lines, "\n")
 }
 
 // footerLines returns how many rows renderFooter will occupy. Normally the
@@ -407,13 +429,13 @@ func (d *detailView) render() string {
 	b.WriteString(d.renderTabs(w))
 	b.WriteString("\n")
 
-	// Agent action bar: an "agents:" line, then "stage: <name>" plus the
+	// Agent action bar: an "agents:" line, then the stage timeline plus the
 	// Done button on its own line beneath.
 	b.WriteString(d.renderActionBar())
 	b.WriteString("\n\n")
 
-	// Body: the active viewer.
-	b.WriteString(d.current().viewer.View())
+	// Body: the active viewer, set off from the chrome by a left rule.
+	b.WriteString(d.renderBody())
 	b.WriteString("\n\n")
 
 	// Footer: scroll position + keys.
@@ -431,16 +453,17 @@ type actionButton struct {
 // renderActionBar draws the two-line action bar: an "agents:" line listing
 // the five agents in agentOrder (always shown regardless of the job's
 // stage — app.go's agentForKey is not stage-gated either), each in a
-// consistent "[key] Label" format; then, on its own line beneath, "stage:
-// <name>" alongside the "[D] Done" mark-done button.
+// consistent "[key] Label" format; then, on its own line beneath, the stage
+// timeline (see renderStageTimeline) alongside the "[D] Done" mark-done
+// button.
 //
-// "stage: <name>" stays purely informational: an at-a-glance hint of where
-// the job's files say it is in the ideal workflow. It no longer restricts
-// which buttons appear (launching any agent is not gated by stage). Done
-// keeps its own colour (statusDoneStyle, the same green used for "done"
-// status elsewhere) to flag that it's categorically different from the five
-// launch actions — it archives the job via sc-done rather than starting a
-// session.
+// The stage timeline stays purely informational: an at-a-glance sense of
+// where the job's files say it is in the ideal workflow, and how far it has
+// come. It no longer restricts which buttons appear (launching any agent is
+// not gated by stage). Done keeps its own colour (statusDoneStyle, the same
+// green used for "done" status elsewhere) to flag that it's categorically
+// different from the five launch actions — it archives the job via sc-done
+// rather than starting a session.
 //
 // Narrow-width handling: this is designed against an 80-column baseline, and
 // there isn't room there for five full "[key] Label" agent buttons —
@@ -501,15 +524,44 @@ func (d *detailView) renderActionBar() string {
 		}
 	}
 
-	stage := "stage: " + string(d.job.Stage())
 	var stageLine strings.Builder
-	stageLine.WriteString(dimStyle.Render(stage))
+	stageLine.WriteString(renderStageTimeline(d.job.Stage()))
 	stageLine.WriteString(sep)
 	stageLine.WriteString(statusDoneStyle.Render("[D]"))
 	stageLine.WriteString(" ")
 	stageLine.WriteString(statusDoneStyle.Render("Done"))
 
 	return agentsLine.String() + "\n" + stageLine.String()
+}
+
+// renderStageTimeline renders every job.Stages entry as a compact horizontal
+// timeline: a checked, done-coloured marker for every stage behind the
+// current one, a highlighted marker for the current stage, and a dim, hollow
+// marker for stages still ahead. Replaces the old bare "stage: <name>" label
+// with an at-a-glance sense of how far along the job actually is — including
+// a verdict that bounced the job back to implement showing review/finished
+// as still ahead, not behind, since job.Stage() already encodes that.
+func renderStageTimeline(current job.Stage) string {
+	idx := -1
+	for i, s := range job.Stages {
+		if s == current {
+			idx = i
+			break
+		}
+	}
+	parts := make([]string, len(job.Stages))
+	for i, s := range job.Stages {
+		label := string(s)
+		switch {
+		case idx >= 0 && i < idx:
+			parts[i] = statusDoneStyle.Render("✓ " + label)
+		case i == idx:
+			parts[i] = accentStyle.Render("● " + label)
+		default:
+			parts[i] = dimStyle.Render("○ " + label)
+		}
+	}
+	return strings.Join(parts, dimStyle.Render(" → "))
 }
 
 // truncateToWidth is truncate() (app.go) with a floor of 0 instead of
@@ -572,7 +624,7 @@ func (d *detailView) renderFooter() string {
 		// checked-out branch — scoped the same way "e edit" is above.
 		hint += " · b switch branch"
 	}
-	hint += " · agent keys above · D mark done · ctrl+r refresh · esc back · q quit"
+	hint += " · agent keys above · D mark done · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {

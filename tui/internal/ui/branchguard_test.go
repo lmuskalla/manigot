@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lmuskalla/safecode/tui/internal/job"
 )
 
@@ -57,6 +58,29 @@ func TestBranchGuardBlocksDone(t *testing.T) {
 	}
 	if !strings.Contains(a.detail.status, "press b to switch") {
 		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
+	}
+}
+
+// TestBranchGuardBlocksDelete verifies both delete triggers — the physical
+// Delete/Entf key and its "x" fallback (see updateDetail's "delete", "x"
+// case) — refuse to delete an off-branch job.
+func TestBranchGuardBlocksDelete(t *testing.T) {
+	keys := map[string]tea.KeyMsg{
+		"delete key": {Type: tea.KeyDelete},
+		"x fallback": keyMsg("x"),
+	}
+	for name, key := range keys {
+		t.Run(name, func(t *testing.T) {
+			a := mkOffBranchApp(t)
+
+			_, cmd := a.updateDetail(key)
+			if cmd != nil {
+				t.Error("expected no tea.Cmd (sc-delete) for an off-branch job")
+			}
+			if !strings.Contains(a.detail.status, "press b to switch") {
+				t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
+			}
+		})
 	}
 }
 

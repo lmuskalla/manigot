@@ -28,6 +28,11 @@ var (
 	// dimStyle is for secondary text.
 	dimStyle = lipgloss.NewStyle().Faint(true)
 
+	// activityStyle is for the recent-activity (git log) strip — a notch
+	// lighter than dimStyle so it reads as background information, less
+	// prominent than the job list and footer above it.
+	activityStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#585858"))
+
 	// headerStyle is for column headers.
 	headerStyle = lipgloss.NewStyle().Bold(true)
 

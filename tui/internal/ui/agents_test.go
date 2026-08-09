@@ -19,19 +19,33 @@ func mkStageJob(t *testing.T, stage job.Stage) job.Job {
 	if err := os.MkdirAll(jobDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: X\n\nstatus: open\n"), 0o644); err != nil {
+
+	// A bare frontmatter-only brief is "unwritten" (StageDefine); every later
+	// stage needs a real body so Stage() doesn't get stuck at define.
+	brief := "# Brief: X\n\nstatus: open\n"
+	if stage != job.StageDefine {
+		brief += "\n## What\n\nAdd a widget so users can schedule recurring exports.\n\n" +
+			"## Why\n\nCustomers asked for it.\n"
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte(brief), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	switch stage {
-	case job.StageDevelop, job.StageReview:
+
+	if stage == job.StageImplement || stage == job.StageReview || stage == job.StageFinished {
 		if err := os.WriteFile(filepath.Join(jobDir, "tasks.md"),
 			[]byte("# Tasks: X\n\n## Task breakdown\n\nTASK-1: real work here\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if stage == job.StageReview {
+	if stage == job.StageReview || stage == job.StageFinished {
 		if err := os.WriteFile(filepath.Join(jobDir, "implementation.md"),
 			[]byte("# Implementation: X\n\n## Summary\n\nReal prose line one here.\nMore real prose line two.\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if stage == job.StageFinished {
+		if err := os.WriteFile(filepath.Join(jobDir, "verdict.md"),
+			[]byte("# Verdict: X\n\n## Review\n\nTASK-1: PASS — matches the brief.\n\n## Overall\n\nAPPROVED.\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -44,6 +58,12 @@ func mkStageJob(t *testing.T, stage job.Stage) job.Job {
 		t.Fatalf("mkStageJob: built stage %s, want %s", got, stage)
 	}
 	return jobs[0]
+}
+
+// allStages is every job.Stage, used to exercise stage-independent behaviour
+// across the whole workflow rather than just a couple of samples.
+var allStages = []job.Stage{
+	job.StageDefine, job.StagePlan, job.StageImplement, job.StageReview, job.StageFinished,
 }
 
 // TestAgentForKeyIgnoresStage is a regression test for the "launch agents
@@ -59,7 +79,7 @@ func TestAgentForKeyIgnoresStage(t *testing.T) {
 		"s": "security",
 	}
 
-	for _, stage := range []job.Stage{job.StageAnalyze, job.StageDevelop, job.StageReview} {
+	for _, stage := range allStages {
 		j := mkStageJob(t, stage)
 		a := &App{root: t.TempDir()}
 		a.detail = newDetailView(j, 80, 24)
@@ -76,7 +96,7 @@ func TestAgentForKeyIgnoresStage(t *testing.T) {
 // returns "".
 func TestAgentForKeyUnknownKey(t *testing.T) {
 	a := &App{}
-	a.detail = newDetailView(mkStageJob(t, job.StageAnalyze), 80, 24)
+	a.detail = newDetailView(mkStageJob(t, job.StageDefine), 80, 24)
 	if got := a.agentForKey("z"); got != "" {
 		t.Errorf("agentForKey(unbound key) = %q, want empty", got)
 	}
@@ -96,25 +116,28 @@ func TestAgentForKeyNoDetail(t *testing.T) {
 // back on "d".
 func TestAgentForKeyVNoLongerResolves(t *testing.T) {
 	a := &App{}
-	a.detail = newDetailView(mkStageJob(t, job.StageAnalyze), 80, 24)
+	a.detail = newDetailView(mkStageJob(t, job.StageDefine), 80, 24)
 	if got := a.agentForKey("v"); got != "" {
 		t.Errorf(`agentForKey("v") = %q, want empty now that Developer uses "d"`, got)
 	}
 }
 
 // TestRenderActionBarAlwaysShowsAllAgents confirms the action bar lists all
-// five agent buttons regardless of the job's stage, and that the stage label
-// is still shown as an informational hint. Uses a generous width so full
-// labels are asserted here — the 80-column truncation behaviour has its own
-// dedicated test (TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact).
+// five agent buttons regardless of the job's stage, and that the stage
+// timeline still names every stage as an informational hint. Uses a generous
+// width so full labels are asserted here — the 80-column truncation
+// behaviour has its own dedicated test
+// (TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact).
 func TestRenderActionBarAlwaysShowsAllAgents(t *testing.T) {
-	for _, stage := range []job.Stage{job.StageAnalyze, job.StageDevelop, job.StageReview} {
+	for _, stage := range allStages {
 		j := mkStageJob(t, stage)
 		d := newDetailView(j, 200, 24)
 		bar := d.renderActionBar()
 
-		if !strings.Contains(bar, "stage: "+string(stage)) {
-			t.Errorf("stage=%s: action bar missing stage label:\n%s", stage, bar)
+		for _, s := range job.Stages {
+			if !strings.Contains(bar, string(s)) {
+				t.Errorf("stage=%s: action bar missing timeline entry %q:\n%s", stage, s, bar)
+			}
 		}
 		for _, want := range []string{"Product Owner", "Analyst", "Developer", "Reviewer", "Security", "Done"} {
 			if !strings.Contains(bar, want) {
@@ -128,7 +151,7 @@ func TestRenderActionBarAlwaysShowsAllAgents(t *testing.T) {
 // agents plus Done — share the same "[key] Label" structural format (TASK-8:
 // no more "5 buttons + a separator + a 6th button in a different style").
 func TestRenderActionBarUnifiedFormat(t *testing.T) {
-	j := mkStageJob(t, job.StageAnalyze)
+	j := mkStageJob(t, job.StageDefine)
 	d := newDetailView(j, 200, 24)
 	bar := d.renderActionBar()
 
@@ -146,16 +169,16 @@ func TestRenderActionBarUnifiedFormat(t *testing.T) {
 // chosen narrow-width behaviour: at 80 columns, five full "[key] Label"
 // agent buttons plus the "agents:" label don't fit on one line, so labels
 // are truncated — but every bracketed key must still be present and
-// untouched. The action bar itself is two lines (agents, then stage/done);
-// only the agents line participates in truncation.
+// untouched. The action bar itself is two lines (agents, then the stage
+// timeline/Done); only the agents line participates in truncation.
 func TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact(t *testing.T) {
-	j := mkStageJob(t, job.StageAnalyze)
+	j := mkStageJob(t, job.StageDefine)
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
 
 	lines := strings.Split(bar, "\n")
 	if len(lines) != 2 {
-		t.Fatalf("action bar should render on two lines (agents, then stage/done), got %d lines:\n%s", len(lines), bar)
+		t.Fatalf("action bar should render on two lines (agents, then stage timeline/Done), got %d lines:\n%s", len(lines), bar)
 	}
 	agentsLine, stageLine := lines[0], lines[1]
 	for _, key := range []string{"[p]", "[a]", "[d]", "[r]", "[s]"} {
@@ -168,5 +191,64 @@ func TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact(t *testing.T) {
 	}
 	if !strings.Contains(stageLine, "[D]") {
 		t.Errorf("stage line missing the Done button:\n%s", stageLine)
+	}
+}
+
+// TestRenderStageTimelineMarksProgress confirms the timeline marks stages
+// behind the current one as done, the current stage as highlighted, and
+// stages still ahead as pending — the visual cue the "define/plan/implement/
+// review/finished" rework replaced the bare "stage: <name>" label with.
+func TestRenderStageTimelineMarksProgress(t *testing.T) {
+	line := renderStageTimeline(job.StageImplement)
+
+	if !strings.Contains(line, "✓ define") || !strings.Contains(line, "✓ plan") {
+		t.Errorf("stages behind the current one should be marked done:\n%s", line)
+	}
+	if !strings.Contains(line, "● implement") {
+		t.Errorf("the current stage should be highlighted:\n%s", line)
+	}
+	if !strings.Contains(line, "○ review") || !strings.Contains(line, "○ finished") {
+		t.Errorf("stages still ahead should be marked pending:\n%s", line)
+	}
+}
+
+// TestRenderStageTimelineRejectedVerdictShowsImplementCurrent confirms a
+// job bounced back by a rejected verdict (job.Stage() = implement even
+// though implementation.md and verdict.md are both written) renders review
+// and finished as still ahead, not behind — the timeline reflects
+// job.Stage()'s own bounce-back decision rather than which files exist.
+func TestRenderStageTimelineRejectedVerdictShowsImplementCurrent(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "zz0002_y")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"brief.md": "# Brief: Y\n\nstatus: open\n\n## What\n\nReal brief body here.\n\n## Why\n\nBecause.\n",
+		"tasks.md": "# Tasks: Y\n\n## Task breakdown\n\nTASK-1: real work here\n",
+		"implementation.md": "# Implementation: Y\n\n## Summary\n\n" +
+			"Real prose line one here.\nMore real prose line two.\n",
+		"verdict.md": "# Verdict: Y\n\n## Review\n\nTASK-1: FAIL.\n\n## Overall\n\nREJECTED.\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(jobDir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+	if got := jobs[0].Stage(); got != job.StageImplement {
+		t.Fatalf("rejected job Stage() = %s, want implement", got)
+	}
+
+	line := renderStageTimeline(jobs[0].Stage())
+	if !strings.Contains(line, "● implement") {
+		t.Errorf("bounced-back job should show implement as current:\n%s", line)
+	}
+	if !strings.Contains(line, "○ review") || !strings.Contains(line, "○ finished") {
+		t.Errorf("bounced-back job should show review/finished as still ahead, not done:\n%s", line)
 	}
 }

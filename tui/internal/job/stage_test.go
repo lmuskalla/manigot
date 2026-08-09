@@ -61,6 +61,18 @@ const tmplVerdict = "# Verdict: X\n\n" +
 	"## Overall\n\n" +
 	"<!-- APPROVED / REJECTED -->\n"
 
+// filledBrief / filledTasks / filledImplementation are past-scaffold, real
+// content for each file — reused across the stage-progression tests below so
+// each only has to override the file that actually changes.
+const filledBrief = "# Brief: X\n\nstatus: open\nid: abc123\ndate: 2026-08-08\n\n" +
+	"## What\n\nAdd a widget so users can schedule recurring exports.\n\n" +
+	"## Why\n\nSeveral customers asked for this instead of the manual workaround.\n"
+
+const filledTasks = "# Tasks: X\n\nid: abc123\n\n## Task breakdown\n\nTASK-1: real work here\n"
+
+const filledImplementation = "# Implementation: X\n\nid: abc123\n\n## Summary\n\n" +
+	"Real prose line one here.\nMore real prose line two.\n"
+
 func writeTempFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -87,15 +99,7 @@ func TestScaffoldTemplatesAreNotWritten(t *testing.T) {
 }
 
 func TestFilledTasksIsWritten(t *testing.T) {
-	filled := "# Tasks: X\n\nid: abc123\nstatus: open\nanalyst: a@b\ndate: 2026-08-08\n\n" +
-		"<!-- Produced by @analyst. -->\n\n" +
-		"## Task breakdown\n\n" +
-		"TASK-1: Do the first thing.\n" +
-		"     files: a.go\n" +
-		"     depends: none\n" +
-		"     risk: low\n\n" +
-		"TASK-2: Do the second thing.\n"
-	path := writeTempFile(t, "tasks.md", filled)
+	path := writeTempFile(t, "tasks.md", filledTasks)
 	if !FileIsWritten(path) {
 		t.Error("filled tasks.md classified as unwritten")
 	}
@@ -104,13 +108,7 @@ func TestFilledTasksIsWritten(t *testing.T) {
 func TestFilledImplementationByProseIsWritten(t *testing.T) {
 	// No TASK- markers (implementation.md is prose, not a task list), but real
 	// substantive lines under Summary → must count as written.
-	filled := "# Implementation: X\n\nid: abc123\nstatus: open\ndeveloper: d@b\ndate: 2026-08-08\n\n" +
-		"## Summary\n\n" +
-		"Added the gallery block component and its tests.\n" +
-		"It renders images from the media collection.\n\n" +
-		"## Changes\n\n" +
-		"src/blocks/gallery.tsx: new component.\n"
-	path := writeTempFile(t, "implementation.md", filled)
+	path := writeTempFile(t, "implementation.md", filledImplementation)
 	if !FileIsWritten(path) {
 		t.Error("prose-filled implementation.md classified as unwritten")
 	}
@@ -122,51 +120,106 @@ func TestMissingFileIsNotWritten(t *testing.T) {
 	}
 }
 
-func TestJobStage(t *testing.T) {
+// TestJobStageProgression walks a job through every stage in order, writing
+// one more file at each step — the same progression a job goes through in
+// real use (brief → tasks → implementation → verdict).
+func TestJobStageProgression(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "brief.md"), []byte(tmplBrief), 0o644)
 
 	// The files written below live in the working tree, so this job is a
 	// current-branch job for read-strategy purposes: Stage() must read them
 	// from disk rather than via git show.
 	mkJob := func() Job { j, _ := ReadJob(dir); j.OnCurrentBranch = true; return j }
 
-	// Only brief → analyze.
-	if got := mkJob().Stage(); got != StageAnalyze {
-		t.Errorf("brief-only stage = %s, want analyze", got)
+	// No brief at all (ReadJob defaults status=open, no file) → define.
+	if got := mkJob().Stage(); got != StageDefine {
+		t.Errorf("no brief.md stage = %s, want define", got)
 	}
 
-	// tasks written → develop.
+	// Scaffold brief.md (unwritten) → still define.
+	os.WriteFile(filepath.Join(dir, "brief.md"), []byte(tmplBrief), 0o644)
+	if got := mkJob().Stage(); got != StageDefine {
+		t.Errorf("scaffold brief.md stage = %s, want define", got)
+	}
+
+	// Real brief content, no tasks.md yet → plan.
+	os.WriteFile(filepath.Join(dir, "brief.md"), []byte(filledBrief), 0o644)
+	if got := mkJob().Stage(); got != StagePlan {
+		t.Errorf("written brief.md stage = %s, want plan", got)
+	}
+
+	// Scaffold tasks.md (unwritten) → still plan.
 	os.WriteFile(filepath.Join(dir, "tasks.md"), []byte(tmplTasks), 0o644)
-	if got := mkJob().Stage(); got != StageAnalyze {
-		t.Errorf("scaffold tasks.md should still be analyze; got %s", got)
-	}
-	os.WriteFile(filepath.Join(dir, "tasks.md"),
-		[]byte("# Tasks: X\n\nid: abc123\n\n## Task breakdown\n\nTASK-1: real work here\n"), 0o644)
-	if got := mkJob().Stage(); got != StageDevelop {
-		t.Errorf("written tasks.md stage = %s, want develop", got)
+	if got := mkJob().Stage(); got != StagePlan {
+		t.Errorf("scaffold tasks.md stage = %s, want plan", got)
 	}
 
-	// implementation written → review (takes precedence over tasks).
-	os.WriteFile(filepath.Join(dir, "implementation.md"),
-		[]byte("# Implementation: X\n\nid: abc123\n\n## Summary\n\nReal prose line one here.\nMore real prose line two.\n"), 0o644)
+	// Written tasks.md → implement.
+	os.WriteFile(filepath.Join(dir, "tasks.md"), []byte(filledTasks), 0o644)
+	if got := mkJob().Stage(); got != StageImplement {
+		t.Errorf("written tasks.md stage = %s, want implement", got)
+	}
+
+	// Written implementation.md, no verdict yet → review.
+	os.WriteFile(filepath.Join(dir, "implementation.md"), []byte(filledImplementation), 0o644)
 	if got := mkJob().Stage(); got != StageReview {
 		t.Errorf("written implementation.md stage = %s, want review", got)
 	}
+
+	// Verdict written but REJECTED → bounces back to implement, not review.
+	rejected := "# Verdict: X\n\nid: abc123\n\n## Review\n\nTASK-1: FAIL — off-by-one in the export loop.\n\n" +
+		"## Overall\n\nREJECTED — TASK-1 has a bug.\n"
+	os.WriteFile(filepath.Join(dir, "verdict.md"), []byte(rejected), 0o644)
+	if got := mkJob().Stage(); got != StageImplement {
+		t.Errorf("rejected verdict.md stage = %s, want implement (bounced back)", got)
+	}
+
+	// Verdict written and APPROVED → finished.
+	approved := "# Verdict: X\n\nid: abc123\n\n## Review\n\nTASK-1: PASS — matches the brief.\n\n" +
+		"## Overall\n\nAPPROVED — nice work.\n"
+	os.WriteFile(filepath.Join(dir, "verdict.md"), []byte(approved), 0o644)
+	if got := mkJob().Stage(); got != StageFinished {
+		t.Errorf("approved verdict.md stage = %s, want finished", got)
+	}
 }
 
-// TestStageOffBranchReadsViaGit confirms Stage() reads a job's files from its
-// branch via git (not the working tree) when OnCurrentBranch is false. Without
-// this, every cross-branch job would falsely report analyze because its files
-// aren't checked out into the working tree at all.
-func TestStageOffBranchReadsViaGit(t *testing.T) {
+// TestJobStageVerdictAmbiguousBouncesToImplement covers a verdict.md that has
+// real content (so fileWritten("verdict.md") is true) but whose "## Overall"
+// section says neither APPROVED nor REJECTED/NEEDS WORK — the safe default is
+// "not approved", same as finish-job.sh's own behaviour when it can't
+// determine the verdict status.
+func TestJobStageVerdictAmbiguousBouncesToImplement(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "brief.md"), []byte(filledBrief), 0o644)
+	os.WriteFile(filepath.Join(dir, "tasks.md"), []byte(filledTasks), 0o644)
+	os.WriteFile(filepath.Join(dir, "implementation.md"), []byte(filledImplementation), 0o644)
+	ambiguous := "# Verdict: X\n\nid: abc123\n\n## Review\n\nTASK-1: looks fine, still checking edge cases.\nTASK-2: pending.\n"
+	os.WriteFile(filepath.Join(dir, "verdict.md"), []byte(ambiguous), 0o644)
+
+	j, _ := ReadJob(dir)
+	j.OnCurrentBranch = true
+	if got := j.Stage(); got != StageImplement {
+		t.Errorf("ambiguous verdict.md stage = %s, want implement", got)
+	}
+}
+
+// TestStageOffBranchImplementReadsViaGit confirms Stage() reads a job's files
+// from its branch via git (not the working tree) when OnCurrentBranch is
+// false. Without this, every cross-branch job would falsely report stage
+// define because its files aren't checked out into the working tree at all.
+func TestStageOffBranchImplementReadsViaGit(t *testing.T) {
 	dir, def := gitInitRepo(t)
 
-	// Build the job on a feature branch: brief + written tasks.md → stage develop.
+	// Build the job on a feature branch: a written brief + tasks.md → stage
+	// implement. The brief's id matches the "ddd01_d" dir name (filledBrief's
+	// hardcoded "abc123" would otherwise override the ID this test filters
+	// on).
 	gitRun(t, dir, "checkout", "-q", "-b", "feature/ddd01_d")
-	gitCommitJob(t, dir, "ddd01_d", "# Brief: Ddd\n\nstatus: open\nid: ddd01\nbranch: feature/ddd01_d\ndate: 2026-01-01\n")
-	tasks := "# Tasks: Ddd\n\nid: ddd01\nstatus: open\n\n## Task breakdown\n\nTASK-1: real work here\n"
-	if err := os.WriteFile(filepath.Join(dir, "docs", "jobs", "ddd01_d", "tasks.md"), []byte(tasks), 0o644); err != nil {
+	brief := "# Brief: Ddd\n\nstatus: open\nid: ddd01\nbranch: feature/ddd01_d\ndate: 2026-01-01\n\n" +
+		"## What\n\nAdd a widget so users can schedule recurring exports.\n\n" +
+		"## Why\n\nSeveral customers asked for this instead of the manual workaround.\n"
+	gitCommitJob(t, dir, "ddd01_d", brief)
+	if err := os.WriteFile(filepath.Join(dir, "docs", "jobs", "ddd01_d", "tasks.md"), []byte(filledTasks), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	gitRun(t, dir, "add", "-A")
@@ -195,14 +248,15 @@ func TestStageOffBranchReadsViaGit(t *testing.T) {
 	if j.OnCurrentBranch {
 		t.Fatal("ddd01 should be an off-branch job (OnCurrentBranch=false) for this test")
 	}
-	if got := j.Stage(); got != StageDevelop {
-		t.Errorf("off-branch job Stage = %s, want develop (tasks.md read via git show)", got)
+	if got := j.Stage(); got != StageImplement {
+		t.Errorf("off-branch job Stage = %s, want implement (tasks.md read via git show)", got)
 	}
 }
 
-// TestStageOffBranchAnalyzeWhenNoTasks confirms an off-branch job with only a
-// brief (no written tasks/implementation) reports analyze via the git-read path.
-func TestStageOffBranchAnalyzeWhenNoTasks(t *testing.T) {
+// TestStageOffBranchDefineWhenBriefUnwritten confirms an off-branch job whose
+// brief is just the bare frontmatter (no real body) reports define via the
+// git-read path.
+func TestStageOffBranchDefineWhenBriefUnwritten(t *testing.T) {
 	dir, def := gitInitRepo(t)
 	gitRun(t, dir, "checkout", "-q", "-b", "feature/eee01_e")
 	gitCommitJob(t, dir, "eee01_e", "# Brief: Eee\n\nstatus: open\nid: eee01\nbranch: feature/eee01_e\ndate: 2026-01-01\n")
@@ -218,7 +272,7 @@ func TestStageOffBranchAnalyzeWhenNoTasks(t *testing.T) {
 	if j.ID == "" {
 		t.Fatalf("eee01 not discovered: %+v", jobs)
 	}
-	if got := j.Stage(); got != StageAnalyze {
-		t.Errorf("off-branch brief-only Stage = %s, want analyze", got)
+	if got := j.Stage(); got != StageDefine {
+		t.Errorf("off-branch brief-only Stage = %s, want define", got)
 	}
 }

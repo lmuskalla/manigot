@@ -106,6 +106,12 @@ type doneMsg struct {
 	err error
 }
 
+// deleteMsg reports the outcome of the "delete" shortcut's tea.ExecProcess
+// once the suspended delete-job.sh run returns.
+type deleteMsg struct {
+	err error
+}
+
 // checkoutMsg reports the outcome of the detail view's "b" switch-to-job-
 // branch action (a `git checkout <branch>`, run off the UI thread via
 // checkoutCmd so a slow git operation doesn't block rendering).
@@ -155,6 +161,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// that was declined or failed is still there. A non-zero exit (the
 		// script itself erroring, e.g. uncommitted changes) still surfaces
 		// through cmdErrorText first, same as any other host-command failure.
+		a.refreshJobs()
+		a.detail = nil
+		a.state = stateList
+		if msg.err != nil {
+			a.status = cmdErrorText(msg.err)
+		} else {
+			a.status = "refreshed"
+		}
+		return a, nil
+	case deleteMsg:
+		// Same reasoning as doneMsg: delete-job.sh's own read -rp confirmation
+		// exits 0 on decline too, so a declined/aborted delete just leaves the
+		// job present in the re-read list — refreshJobs and returning to the
+		// list handles both outcomes uniformly.
 		a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
@@ -290,11 +310,11 @@ const (
 )
 
 // dashboardFixedChrome is the number of renderList rows that are always
-// present outside the job rows and the recent-activity strip's own variable
-// footprint: title line, blank spacer beneath it, "jobs" headline, divider,
-// blank line before the footer, the footer itself, the blank spacer before
-// the git log section, and "log" headline.
-const dashboardFixedChrome = 8
+// present outside the job rows, the job-summary line, and the recent-activity
+// strip's own variable footprint: title line, blank spacer beneath it, "jobs"
+// headline, divider, blank line before the footer, the footer itself, and the
+// blank spacer before the recent-activity strip.
+const dashboardFixedChrome = 7
 
 // refreshRecentCommits re-reads the recent-activity strip from git, always
 // fetching up to the ceiling. How many of those cached commits actually get
@@ -327,11 +347,10 @@ func (a *App) refreshRecentCommits() {
 //
 // The fixed chrome outside the job rows and the strip itself — title line,
 // blank spacer beneath it, "jobs" headline, divider, blank line before the
-// footer, footer, the blank spacer before the git log section, "log"
-// headline — is 8 rows, mirroring the same kind of budget
-// detailView.bodyHeight documents for the detail view. spare is what's left
-// of the terminal height once that chrome and every job row are accounted
-// for.
+// footer, footer, the blank spacer before the recent-activity strip — is 7
+// rows, mirroring the same kind of budget detailView.bodyHeight documents for
+// the detail view. spare is what's left of the terminal height once that
+// chrome and every job row are accounted for.
 //
 // a.height == 0 (an App that has never received a tea.WindowSizeMsg, e.g.
 // some existing tests) falls back to the floor, the same kind of guard
@@ -360,33 +379,6 @@ func clamp(n, lo, hi int) int {
 		return hi
 	}
 	return n
-}
-
-// spareHeaderRoom reports how many more header lines TASK-2's secondary fill
-// (renderJobSummary) can add without pushing the job rows down, once the
-// recent-activity strip has claimed its actual rendered footprint.
-//
-// renderList's activity block always uses at least 1 line (either the strip
-// itself, or the blank spacer line it falls back to when there's nothing to
-// show — see renderList), so the strip's real footprint is
-// max(recentActivityShown(), 1), not recentActivityShown() alone (which can
-// be 0 when there are no commits at all). Returns 0 — never negative, never
-// computed — when a.height is unknown (never resized), matching the same
-// "no real layout to measure against" fallback recentActivityShown uses.
-func (a *App) spareHeaderRoom() int {
-	if a.height == 0 {
-		return 0
-	}
-	spare := a.height - dashboardFixedChrome - len(a.jobs)
-	stripLines := a.recentActivityShown()
-	if stripLines < 1 {
-		stripLines = 1
-	}
-	room := spare - stripLines
-	if room < 0 {
-		room = 0
-	}
-	return room
 }
 
 // refreshJobs re-reads the job list from disk (job.Discover: one os.ReadDir
@@ -579,6 +571,29 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, cmd
+	case "delete", "x":
+		// Permanently delete the job. Bound to both the physical Delete/Entf
+		// key and "x": the forward-delete key's escape sequence (CSI 3~) is
+		// not decoded consistently across every terminal emulator/keyboard
+		// layout, so "x" (same mnemonic tmux/ranger use for a destructive
+		// remove) is a reliable fallback rather than a hidden alias — it's
+		// named in the footer hint too (see renderFooter).
+		//
+		// Same branch-mismatch guard as edit/done (delete-job.sh needs the
+		// job's directory in the current working tree, same as
+		// finish-job.sh does). The destructive confirmation itself lives in
+		// delete-job.sh's own read -rp prompt, not here — same division of
+		// responsibility "D" mark-done already uses.
+		if status, blocked := a.branchGuard(); blocked {
+			a.detail.setStatus(status)
+			return a, nil
+		}
+		cmd, err := a.deleteCmd()
+		if err != nil {
+			a.detail.setStatus(cmdErrorText(err))
+			return a, nil
+		}
+		return a, cmd
 	case "b":
 		// Switch to this job's branch (the mechanism the branch-mismatch
 		// guards on launch/edit/done point the user at). Not gated on
@@ -646,12 +661,27 @@ func (a *App) doneCmd() (tea.Cmd, error) {
 	}), nil
 }
 
+// deleteCmd resolves the sc-delete invocation for the open job and returns
+// the tea.Cmd that runs it. Like doneCmd, this goes through tea.ExecProcess
+// — delete-job.sh's read -rp confirmation needs a real interactive terminal.
+// An error here means the command itself could not be resolved (see
+// hostcmd.DeleteCommand) — the caller surfaces it directly.
+func (a *App) deleteCmd() (tea.Cmd, error) {
+	cmd, err := hostcmd.DeleteCommand(a.detail.job.Name, a.root)
+	if err != nil {
+		return nil, err
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return deleteMsg{err: err}
+	}), nil
+}
+
 // branchGuard reports whether the open job's branch differs from the branch
 // actually checked out right now, and if so a status message pointing the
-// user at "b" — the guard behind the three mutating actions (launch agent,
-// "e" edit, "D" mark-done) named in the "keep-track-of-jobs" brief's coupled
-// scope: none of them may silently run against the wrong branch's working
-// tree once discovery is cross-branch.
+// user at "b" — the guard behind the mutating actions (launch agent, "e"
+// edit, "D" mark-done, "x"/delete remove job) named in the "keep-track-of-jobs" brief's
+// coupled scope: none of them may silently run against the wrong branch's
+// working tree once discovery is cross-branch.
 //
 // The current branch is re-checked fresh via git.CurrentBranch rather than
 // trusted from job.OnCurrentBranch's discovery-time snapshot, since "b" (or a
@@ -772,12 +802,10 @@ func (a *App) renderList() string {
 	b.WriteString("\n")
 	b.WriteString(a.footer())
 
-	// Git log section: kept below the footer, out of the way, since it's
-	// read-only supplementary info rather than something the job list
+	// Recent-activity strip: kept below the footer, out of the way, since
+	// it's read-only supplementary info rather than something the job list
 	// depends on.
 	b.WriteString("\n\n")
-	b.WriteString(headerStyle.Render("log"))
-	b.WriteString("\n")
 	// The activity strip's line count is recentActivityShown() — computed
 	// from the actual spare room the terminal height leaves once the fixed
 	// chrome and every job row are accounted for, so it can grow past its
@@ -787,12 +815,6 @@ func (a *App) renderList() string {
 		b.WriteString(activity)
 	} else {
 		b.WriteString("\n")
-	}
-	// Secondary empty-space fill (TASK-2): only rendered when the strip above
-	// still leaves spare room after claiming its actual footprint — see
-	// spareHeaderRoom.
-	if summary := a.renderJobSummary(); summary != "" {
-		b.WriteString(summary)
 	}
 
 	return b.String()
@@ -837,37 +859,10 @@ func (a *App) renderRecentActivity(w int) string {
 			pad(truncate(c.Subject, subjectW), subjectW) + "  " +
 			pad(c.RelTime, relW) + "  " +
 			truncate(c.Branch, branchW)
-		b.WriteString(dimStyle.Render(strings.TrimRight(line, " ")))
+		b.WriteString(activityStyle.Render(strings.TrimRight(line, " ")))
 		b.WriteString("\n")
 	}
 	return b.String()
-}
-
-// renderJobSummary renders the header's secondary empty-space fill (TASK-2):
-// a compact "<n> open · <n> done" counts line. It's the fallback for the
-// case the recent-activity strip alone can't fill — a sparse list whose
-// strip is already at its ceiling, or a repo with few/no real commits to
-// show — costs nothing to compute (a.jobs is already fully loaded) and needs
-// no new data source, unlike the brief's other offered option (a per-job
-// summary pane).
-//
-// Only renders when spareHeaderRoom reports room left after the strip's
-// actual footprint, and only for a non-empty list — an empty list gets its
-// own dedicated invitation (TASK-10, renderList's zero-jobs branch), where a
-// "0 open · 0 done" line would just be noise ahead of it.
-func (a *App) renderJobSummary() string {
-	if len(a.jobs) == 0 || a.spareHeaderRoom() < 1 {
-		return ""
-	}
-	var open, done int
-	for _, j := range a.jobs {
-		if j.Status == "done" {
-			done++
-		} else {
-			open++
-		}
-	}
-	return dimStyle.Render(fmt.Sprintf("%d open · %d done", open, done)) + "\n"
 }
 
 // renderJobRow renders one job as a single (possibly highlighted) line.

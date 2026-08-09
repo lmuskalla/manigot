@@ -110,7 +110,7 @@ func TestRenderListRecentActivityShowsMostRecentAcrossBranches(t *testing.T) {
 
 	jobs, _ := job.Discover(dir) // no jobs dir here — 0 jobs
 	a := NewApp(dir, jobs)
-	// spare = height - dashboardFixedChrome - len(jobs) = 6 - 8 - 0 = -2,
+	// spare = height - dashboardFixedChrome - len(jobs) = 6 - 7 - 0 = -1,
 	// clamping the strip to its floor of 1 entry.
 	a.width, a.height = 80, 6
 
@@ -131,9 +131,7 @@ func TestRenderListRecentActivityShowsMostRecentAcrossBranches(t *testing.T) {
 
 // TestRenderListRecentActivityScalesWithSpareRoom is TASK-1's core coverage:
 // a sparse (1-job) list at a generous terminal height shows more than the
-// pre-existing 1-line floor, up to the 5-entry ceiling, and — since spare
-// room remains even after the strip renders — TASK-2's open/done summary
-// line as well.
+// pre-existing 1-line floor, up to the 5-entry ceiling.
 func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 	dir, def := gitInitRepo(t)
 	commitEmptyAt(t, dir, "c2", 1)
@@ -156,9 +154,6 @@ func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 	got := a.renderList()
 	if n := strings.Count(got, def); n < 1 {
 		t.Errorf("renderList at generous height should show multiple activity entries; def branch %q not found:\n%s", def, got)
-	}
-	if !strings.Contains(got, "1 open") {
-		t.Errorf("renderList at generous height with spare room left should show the open/done summary line:\n%s", got)
 	}
 }
 
@@ -197,8 +192,8 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 // TestRenderListZeroHeightDoesNotPanic confirms an App that never received a
 // tea.WindowSizeMsg (a.height left at its zero value, e.g. some
 // construction-only tests) renders something sane instead of panicking —
-// recentActivityShown / spareHeaderRoom's a.height == 0 guards exist
-// specifically for this case.
+// recentActivityShown's a.height == 0 guard exists specifically for this
+// case.
 func TestRenderListZeroHeightDoesNotPanic(t *testing.T) {
 	dir, _ := gitInitRepo(t)
 	gitCommitJob(t, dir, "aaaa03_a", "# Brief: A\n\nstatus: open\nid: aaaa03\ndate: 2026-01-01\n")

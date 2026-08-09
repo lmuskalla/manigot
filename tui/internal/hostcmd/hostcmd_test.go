@@ -134,6 +134,62 @@ func TestDoneCommandBuildsResolvedCommand(t *testing.T) {
 	}
 }
 
+func TestDeleteCommandUnresolvable(t *testing.T) {
+	isolate(t)
+	t.Setenv("SAFECODE_DELETE_BIN", "")
+
+	_, err := DeleteCommand("ab0001_x", t.TempDir())
+	if err == nil {
+		t.Fatal("expected an error when no delete command can be resolved")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should explain the command is missing; got: %v", err)
+	}
+}
+
+// Same pattern as TestDoneCommandBuildsResolvedCommand: DeleteCommand returns
+// the *exec.Cmd unstarted, so this test runs it itself rather than exercising
+// it through the TUI.
+func TestDeleteCommandBuildsResolvedCommand(t *testing.T) {
+	isolate(t)
+	t.Setenv("SAFECODE_DELETE_BIN", "")
+	root := t.TempDir()
+	out := filepath.Join(root, "args.txt")
+
+	stub := filepath.Join(t.TempDir(), "stub.sh")
+	script := "#!/bin/sh\n" +
+		"{ echo \"argv0=$0\"; echo \"pwd=$PWD\"; echo \"cwd=$(pwd)\"; " +
+		"for a in \"$@\"; do echo \"arg=$a\"; done; } > " + out + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SAFECODE_DELETE_BIN", stub)
+
+	cmd, err := DeleteCommand("ab0001_x", root)
+	if err != nil {
+		t.Fatalf("DeleteCommand: %v", err)
+	}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("running the built command: %v", err)
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("stub did not run: %v", err)
+	}
+	recorded := string(raw)
+	for _, want := range []string{
+		"argv0=" + stub, // invoked by absolute path, not by bare name
+		"pwd=" + root,   // $PWD explicitly set for find_project_root
+		"cwd=" + root,   // and the real cwd agrees
+		"arg=ab0001_x",  // exact job directory name, not an ID prefix
+	} {
+		if !strings.Contains(recorded, want) {
+			t.Errorf("missing %q in stub record:\n%s", want, recorded)
+		}
+	}
+}
+
 // With no type given, no --type flag may be passed.
 func TestNewJobOmitsEmptyType(t *testing.T) {
 	isolate(t)
