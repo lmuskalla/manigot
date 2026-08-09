@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"os"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/job"
-	"codeberg.org/lmuskalla/safecode/tui/internal/resolve"
-	"codeberg.org/lmuskalla/safecode/tui/internal/ui"
+	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/safecode/tui/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

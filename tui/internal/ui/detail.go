@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/job"
-	"codeberg.org/lmuskalla/safecode/tui/internal/markdown"
+	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/safecode/tui/internal/markdown"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )

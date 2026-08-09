@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/safecode/tui/internal/resolve"
 )
 
 func TestCmdErrorTextResolutionFailure(t *testing.T) {

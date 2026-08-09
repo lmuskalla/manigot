@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/editor"
-	"codeberg.org/lmuskalla/safecode/tui/internal/hostcmd"
-	"codeberg.org/lmuskalla/safecode/tui/internal/job"
-	"codeberg.org/lmuskalla/safecode/tui/internal/launch"
-	"codeberg.org/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/safecode/tui/internal/editor"
+	"github.com/lmuskalla/safecode/tui/internal/hostcmd"
+	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/safecode/tui/internal/launch"
+	"github.com/lmuskalla/safecode/tui/internal/resolve"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

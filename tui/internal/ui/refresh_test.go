@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/safecode/tui/internal/job"
 )
 
 // TestRefreshPicksUpFileEdits verifies that App.refresh re-reads the detail

@@ -10,7 +10,7 @@ import (
 	"os"
 	"os/exec"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/safecode/tui/internal/resolve"
 )
 
 // NewJob runs the host job-creation command — `<cmd> "<title>" [--type <type>]`,

@@ -22,7 +22,7 @@ import (
 	"runtime"
 	"strings"
 
-	"codeberg.org/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/safecode/tui/internal/resolve"
 )
 
 // Agent opens a new terminal that runs safecode with `--agent <agent> --job

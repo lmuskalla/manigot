@@ -1,4 +1,4 @@
-module codeberg.org/lmuskalla/safecode/tui
+module github.com/lmuskalla/safecode/tui
 
 go 1.23
 
