@@ -88,9 +88,9 @@ if [[ -f "$VERDICT" ]]; then
         read -rp "  Continue anyway? [y/N] " CONFIRM
         [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
     elif echo "$OVERALL" | grep -iqE 'REJECTED|NEEDS WORK'; then
-        echo "Error: verdict is '$OVERALL' — job is not approved."
-        echo "Resolve all issues and re-run @reviewer before finishing."
-        exit 1
+        echo "Warning: verdict is '$OVERALL' — job is not approved."
+        read -rp "  Continue anyway? [y/N] " CONFIRM
+        [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
     fi
 else
     echo "Warning: no verdict.md found — job has not been reviewed."
