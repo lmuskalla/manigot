@@ -5,8 +5,9 @@
 //  1. tmux new-window — when the TUI is itself running inside tmux
 //     (detected via the $TMUX env var), this works the same on every platform.
 //  2. macOS Terminal.app via osascript.
-//  3. A Linux terminal emulator, tried in order: gnome-terminal,
-//     x-terminal-emulator (Debian), konsole, xterm.
+//  3. A Linux terminal emulator, tried in order: gnome-terminal, ptyxis
+//     (Fedora's default GNOME terminal since Fedora 41), x-terminal-emulator
+//     (Debian), konsole, xterm.
 //
 // The command opened is always `<manigot> --agent <agent> --job <jobID>` run
 // from the project root, matching the invocation contract in scripts/run.sh.
@@ -78,6 +79,47 @@ func Quick(projectRoot, tool string) (string, error) {
 	}
 	inner := quickShellCommand(found.Path, projectRoot, tool)
 	return launchDetached(inner)
+}
+
+// Jdi starts `mg-jdi --job <jobID>` detached in the background — no spawned
+// terminal window at all, unlike Agent/Quick (Decision 7a in the "fully
+// autonomous mode" brief). mg-jdi drives a fixed, non-interactive agent
+// sequence with no TTY at any point in its own container invocations (see
+// scripts/run.sh's --print flag) and needs no terminal for a human or a
+// subprocess to attach to — spawning one anyway would be pure overhead and
+// would reintroduce exactly the per-agent-window cost the backlog's "in-TUI
+// agent terminal" idea is about removing, not adding to. Visibility into a
+// TUI-launched run is TASK-8's list-row status badge and TASK-9's detail-view
+// log tab, not a window; see those for how a human watches it run.
+//
+// Unlike Agent/Quick there is no "where it opened" description to return —
+// there is no terminal/pane to describe — so this returns only an error (nil
+// on a successful start). Like launchDetached, the started process's stdio is
+// discarded and it is reaped asynchronously so it cannot corrupt the TUI's
+// alt screen or zombie; mg-jdi may run for a long time (several full agent
+// sessions), so this must not block waiting for it.
+func Jdi(jobID, projectRoot string) error {
+	found, err := resolve.Resolve(resolve.Jdi())
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(found.Path, "--job", jobID)
+	cmd.Dir = projectRoot
+	// exec.Cmd sets cwd via chdir but does not update the PWD env var; mg-jdi
+	// (like the mg it shells out to) resolves the project root from $PWD via
+	// job.FindProjectRoot, so set it explicitly to match — same pattern
+	// tui/internal/hostcmd's NewJob/DoneCommand/DeleteCommand use.
+	cmd.Env = append(os.Environ(), "PWD="+projectRoot)
+	cmd.Stdin = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start mg-jdi: %w", err)
+	}
+	if cmd.Process != nil {
+		go func() { _ = cmd.Wait() }()
+	}
+	return nil
 }
 
 // launchDetached is the shared spawn/reap tail used by both launch paths: it
@@ -203,6 +245,7 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 		pre  []string // args between the emulator name and the shell command
 	}{
 		{"gnome-terminal", []string{"--"}},
+		{"ptyxis", []string{"--"}},
 		{"x-terminal-emulator", []string{"-e"}},
 		{"konsole", []string{"-e"}},
 		{"xterm", []string{"-e"}},
@@ -214,5 +257,5 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 		}
 	}
 
-	return nil, "", fmt.Errorf("no supported terminal launcher found (looked for: tmux, Terminal.app, gnome-terminal, x-terminal-emulator, konsole, xterm)")
+	return nil, "", fmt.Errorf("no supported terminal launcher found (looked for: tmux, Terminal.app, gnome-terminal, ptyxis, x-terminal-emulator, konsole, xterm)")
 }

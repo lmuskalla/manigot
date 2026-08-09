@@ -41,6 +41,15 @@ type fileTab struct {
 	content  string // raw markdown (or the placeholder) as last read from disk
 	viewer   *markdown.Viewer
 
+	// isLog marks the fifth "log" tab (TASK-9): unlike the four job files,
+	// its content comes from mg-jdi's sidecar run.log
+	// (job.ReadJDIRunLogTail(d.job.Root, d.job.Name)) rather than d.path —
+	// it is not part of either job.OnCurrentBranch's working-tree read or
+	// the off-branch git-show read (the sidecar isn't tracked in git at
+	// all, tied only to the job name, not a branch), and it is never
+	// editable.
+	isLog bool
+
 	// stale marks a viewer that is out of date with content and/or the
 	// current body size, because the tab wasn't active when that changed —
 	// either a resize (syncViewerSize, TASK-3) or a (re)load (loadTab, see
@@ -79,7 +88,8 @@ type detailView struct {
 	branchFlashGen int
 }
 
-// newDetailView loads all four files for job j at the given viewport size.
+// newDetailView loads all four job files, plus TASK-9's fifth "log" tab, for
+// job j at the given viewport size.
 func newDetailView(j job.Job, width, height int) *detailView {
 	d := &detailView{job: j, width: width, height: height}
 	for _, f := range jobFiles {
@@ -90,6 +100,11 @@ func newDetailView(j job.Job, width, height int) *detailView {
 			viewer:   markdown.NewViewer(d.bodyWidth(), d.bodyHeight()),
 		})
 	}
+	d.tabs = append(d.tabs, fileTab{
+		label:  "log",
+		isLog:  true,
+		viewer: markdown.NewViewer(d.bodyWidth(), d.bodyHeight()),
+	})
 	d.loadTabs()
 	return d
 }
@@ -140,6 +155,25 @@ func (d *detailView) loadTabs() {
 // helper's own comment for why only the leading block is ever touched.
 func (d *detailView) loadTab(i int) {
 	t := &d.tabs[i]
+	if t.isLog {
+		if text, ok := job.ReadJDIRunLogTail(d.job.Root, d.job.Name); ok {
+			t.exists = true
+			t.content = text
+			if t.content == "" {
+				t.content = "_run.log is empty — mg-jdi may still be starting its first invocation._"
+			}
+		} else {
+			t.exists = false
+			t.content = "_no mg-jdi run has happened for this job yet._"
+		}
+		if i == d.cur {
+			t.viewer.SetContent(t.content)
+			t.stale = false
+		} else {
+			t.stale = true
+		}
+		return
+	}
 	data, ok := d.readFile(t)
 	if ok {
 		t.exists = true
@@ -343,6 +377,8 @@ func (d *detailView) update(msg tea.KeyMsg) {
 		d.cur = 2
 	case "4":
 		d.cur = 3
+	case "5":
+		d.cur = 4
 	default:
 		d.active().scroll(msg)
 	}
@@ -495,7 +531,9 @@ type actionButton struct {
 // stage — app.go's agentForKey is not stage-gated either), each in a
 // consistent "[key] Label" format; then, on its own line beneath, the stage
 // timeline (see renderStageTimeline) alongside the "[D] Done" mark-done
-// button.
+// button and "[J] mg-jdi" (TASK-12) — a bigger, composite action like Done,
+// not a single-agent launch, hence its own key rather than living in
+// agentOrder.
 //
 // The stage timeline stays purely informational: an at-a-glance sense of
 // where the job's files say it is in the ideal workflow, and how far it has
@@ -570,6 +608,10 @@ func (d *detailView) renderActionBar() string {
 	stageLine.WriteString(statusDoneStyle.Render("[D]"))
 	stageLine.WriteString(" ")
 	stageLine.WriteString(statusDoneStyle.Render("Done"))
+	stageLine.WriteString(sep)
+	stageLine.WriteString(accentStyle.Render("[J]"))
+	stageLine.WriteString(" ")
+	stageLine.WriteString(accentStyle.Render("mg-jdi"))
 
 	return agentsLine.String() + "\n" + stageLine.String()
 }
@@ -653,7 +695,7 @@ func (d *detailView) renderTabs(width int) string {
 // keeps replacing the hint entirely, same as before.
 func (d *detailView) renderFooter() string {
 	pos := d.current().viewer.Position()
-	hint := "tab/1-4 files · j/k scroll"
+	hint := "tab/1-5 files · j/k scroll"
 	if d.current().editable {
 		// "e" only does anything on editable tabs (brief.md today), so the
 		// hint is scoped to when it would actually work.
@@ -664,7 +706,7 @@ func (d *detailView) renderFooter() string {
 		// checked-out branch — scoped the same way "e edit" is above.
 		hint += " · b switch branch"
 	}
-	hint += " · agent keys above · D mark done · x/del remove job · ctrl+r refresh · esc back · q quit"
+	hint += " · agent keys above · D mark done · J run mg-jdi · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {

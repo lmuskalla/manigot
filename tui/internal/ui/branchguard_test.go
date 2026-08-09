@@ -93,6 +93,14 @@ func TestBranchGuardBlocksAgentLaunch(t *testing.T) {
 	assertBlocked(t, a, cmd)
 }
 
+// TestBranchGuardBlocksJdi verifies "J" refuses to launch mg-jdi against an
+// off-branch job's working tree, the same as the five single-agent keys.
+func TestBranchGuardBlocksJdi(t *testing.T) {
+	a := mkOffBranchApp(t)
+	_, cmd := a.updateDetail(keyMsg("J"))
+	assertBlocked(t, a, cmd)
+}
+
 // TestBranchGuardAllowsCurrentBranchJob confirms the guard is a no-op for a
 // job that IS on the currently-checked-out branch: "e" (on a non-editable
 // tab it would fall through anyway, so pick the editable brief tab) resolves

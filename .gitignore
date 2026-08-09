@@ -11,3 +11,9 @@
 # so tracking them would duplicate docs/ in the repo.
 .claude/
 .opencode/
+
+# mg-jdi's per-job status/run-log sidecar (Decision 4 in the "fully
+# autonomous mode" brief) — kept outside every job's own directory
+# (docs/jobs/<name>/) so it can never be swept into an agent's `git add -A`,
+# and not shared/tracked at all: it's ephemeral run state, not job content.
+docs/jobs/.jdi-status/

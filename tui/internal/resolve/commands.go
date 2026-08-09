@@ -4,11 +4,11 @@ package resolve
 // to. They are functions rather than package-level variables so a caller cannot
 // mutate the shared candidate list by accident.
 //
-// mg/mg-job/mg-done/mg-delete/mg-tui are the only supported install names.
-// Earlier naming (manigot, manigot-job, manigot-done, and the standalone
-// new-job / finish-job commands) is not carried forward as a legacy fallback
-// — a stale install must be re-run through `make install` rather than
-// resolved around.
+// mg/mg-job/mg-done/mg-delete/mg-tui/mg-jdi are the only supported install
+// names. Earlier naming (manigot, manigot-job, manigot-done, and the
+// standalone new-job / finish-job commands) is not carried forward as a
+// legacy fallback — a stale install must be re-run through `make install`
+// rather than resolved around.
 
 // Manigot describes the manigot launcher itself (scripts/run.sh).
 func Manigot() Spec {
@@ -50,5 +50,16 @@ func Delete() Spec {
 		EnvVar: EnvDelete,
 		Names:  []string{"mg-delete"},
 		Script: "scripts/delete-job.sh",
+	}
+}
+
+// Jdi describes the autonomous-mode command (scripts/jdi.sh). Used by
+// launch.Jdi for the job detail view's "run mg-jdi" (capital J) key.
+func Jdi() Spec {
+	return Spec{
+		Label:  "mg-jdi",
+		EnvVar: EnvJdi,
+		Names:  []string{"mg-jdi"},
+		Script: "scripts/jdi.sh",
 	}
 }

@@ -116,5 +116,17 @@ else
     # Placed before "$@" so it composes with the passthrough (--agent <name>
     # and/or the positional job prompt). The opencode branch is intentionally
     # untouched — the brief is a Claude-Code-only request.
+    if [[ "${MANIGOT_PRINT:-false}" == "true" ]]; then
+        # Non-interactive, one-shot mode (run.sh's --print flag, e.g. for
+        # mg-jdi): no attached terminal, so the caller gets the agent's final
+        # response back on stdout instead. --output-format json is used
+        # (confirmed supported by the pinned claude version, whose result is
+        # a single JSON object with a "result" field carrying the final
+        # response text) so callers parse a clean field instead of scanning
+        # raw combined stdout, which could false-positive on the marker text
+        # (see docs/AGENTS.md) appearing incidentally inside a tool call's
+        # own output (e.g. a grep result).
+        exec claude --dangerously-skip-permissions --print --output-format json "$@"
+    fi
     exec claude --dangerously-skip-permissions "$@"
 fi

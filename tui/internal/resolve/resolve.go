@@ -1,5 +1,5 @@
 // Package resolve locates the manigot host commands that the TUI shells out
-// to (sc, mg-job, mg-done, mg-delete).
+// to (sc, mg-job, mg-done, mg-delete, mg-jdi).
 //
 // The TUI must not assume a particular installation method. Users may symlink
 // the launchers into /usr/local/bin under their canonical names, or not
@@ -21,7 +21,7 @@
 //
 // # Environment variable contract
 //
-// These five names are a public, user-facing contract. Renaming one is a
+// These six names are a public, user-facing contract. Renaming one is a
 // breaking change for anyone who has put it in their shell profile.
 //
 //	MANIGOT_BIN         path to (or name of) the manigot launcher
@@ -32,10 +32,12 @@
 //	                     — scripts/finish-job.sh
 //	MANIGOT_DELETE_BIN  path to (or name of) the job-deletion command
 //	                     — scripts/delete-job.sh
+//	MANIGOT_JDI_BIN     path to (or name of) the autonomous-mode command
+//	                     — scripts/jdi.sh
 //	MANIGOT_HOME        path to a manigot checkout, used for the script
 //	                     fallback ($MANIGOT_HOME/scripts/<name>.sh)
 //
-// The four *_BIN variables take either an absolute or relative path (anything
+// The five *_BIN variables take either an absolute or relative path (anything
 // containing a path separator) or a bare command name that is looked up on
 // $PATH. A value that cannot be resolved is an error: the resolver does not
 // silently ignore a misspelled override.
@@ -68,6 +70,9 @@ const (
 
 	// EnvDelete overrides the job-deletion command (scripts/delete-job.sh).
 	EnvDelete = "MANIGOT_DELETE_BIN"
+
+	// EnvJdi overrides the autonomous-mode command (scripts/jdi.sh).
+	EnvJdi = "MANIGOT_JDI_BIN"
 
 	// EnvHome points at a manigot checkout, enabling the script fallback.
 	EnvHome = "MANIGOT_HOME"

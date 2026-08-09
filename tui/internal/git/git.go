@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -293,4 +294,101 @@ func Checkout(root, branch string) error {
 		return wrapErr("git checkout "+branch, err, stderr)
 	}
 	return nil
+}
+
+// verdictCommitPattern matches a commit subject following @reviewer's own
+// convention (agents/reviewer.md): "[<jobID>] verdict: <summary>". Anchored
+// at the start of the subject and exact on jobID (via regexp.QuoteMeta), so
+// it never matches a different job's verdict commit or a message that merely
+// mentions "verdict" elsewhere.
+func verdictCommitPattern(jobID string) *regexp.Regexp {
+	return regexp.MustCompile(`^\[` + regexp.QuoteMeta(jobID) + `\] verdict:`)
+}
+
+// CountVerdictCommits returns how many commits reachable from branch (short
+// name from LocalBranches) have a subject matching verdictCommitPattern for
+// jobID. Used by tui/internal/orchestrate (see the "fully autonomous mode"
+// brief, Decision 2) to track the one-bounce retry budget: 0 or 1 such
+// commits means a REJECTED/NEEDS WORK verdict may still bounce back to
+// @developer once; 2 or more means that budget is exhausted.
+//
+// A commit message a human hand-edited to not follow the exact convention is
+// simply not counted rather than causing a crash or a false positive — this
+// function only ever errors on a real git failure, never on an unparseable
+// message. A branch with no matching commits, or a branch/jobID that doesn't
+// exist at all, returns (0, nil): mirrors ListJobDirs' "nothing here" degrade
+// for an absent ref rather than surfacing it as an error, since a job branch
+// that doesn't exist yet simply has no verdict commits from the caller's
+// perspective. A non-repo / missing git binary returns (0, ErrNotARepo).
+func CountVerdictCommits(root, branch, jobID string) (int, error) {
+	out, stderr, err := run(root, "log", branch, "--format=%s")
+	if err != nil {
+		if notARepo(stderr, err) {
+			return 0, ErrNotARepo
+		}
+		return 0, nil
+	}
+	pattern := verdictCommitPattern(jobID)
+	count := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if pattern.MatchString(line) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// LatestCommitIsVerdict reports whether the most recent commit on branch
+// (the tip, per `git log -1`) is itself a verdict commit for jobID (see
+// verdictCommitPattern / CountVerdictCommits).
+//
+// This resolves an ambiguity job.Stage() cannot: once a REJECTED/NEEDS WORK
+// verdict.md exists, Stage() stays StageImplement until verdict.md's own
+// content changes again — it does not distinguish "@reviewer just rejected,
+// @developer hasn't responded yet" (the verdict commit is still the tip) from
+// "@developer has already committed a fix since that verdict" (something
+// newer sits on top of it). tui/internal/orchestrate uses this alongside
+// CountVerdictCommits to tell the two apart without any new state file.
+//
+// A branch with no commits at all, or a branch/jobID that doesn't exist,
+// returns (false, nil) — mirrors CountVerdictCommits' "nothing here" degrade.
+// A non-repo / missing git binary returns (false, ErrNotARepo).
+func LatestCommitIsVerdict(root, branch, jobID string) (bool, error) {
+	out, stderr, err := run(root, "log", "-1", branch, "--format=%s")
+	if err != nil {
+		if notARepo(stderr, err) {
+			return false, ErrNotARepo
+		}
+		return false, nil
+	}
+	subject := strings.TrimRight(string(out), "\n")
+	if subject == "" {
+		// An unborn/empty branch (should not normally happen for a real job
+		// branch, but guard it the same as the other "nothing here" cases).
+		return false, nil
+	}
+	return verdictCommitPattern(jobID).MatchString(subject), nil
+}
+
+// HeadCommit returns the full commit hash branch (short name from
+// LocalBranches) currently points at, via `git rev-parse <branch>`.
+//
+// Used by mg-jdi's stall backstop (Decision 1a in the "fully autonomous
+// mode" brief's tasks.md): if the same agent is invoked twice in a row for
+// the same job with neither job.Stage() nor the branch HEAD having moved,
+// the previous invocation made no persisted progress at all, so mg-jdi stops
+// rather than looping indefinitely.
+//
+// A branch that doesn't exist, or an unborn repo with no commits yet,
+// returns ("", nil) — mirrors the package's other "nothing here" degrades. A
+// non-repo / missing git binary returns ("", ErrNotARepo).
+func HeadCommit(root, branch string) (string, error) {
+	out, stderr, err := run(root, "rev-parse", branch)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return "", ErrNotARepo
+		}
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
 }

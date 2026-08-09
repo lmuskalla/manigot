@@ -4,11 +4,11 @@ package ui
 // the human label shown on the button.
 //
 // The keys are chosen so they never collide with the detail view's other
-// bindings (tab/h/l file nav, j/k scroll, 1-4 file select, e edit, D mark
-// done, x/del remove job, b switch branch, esc/q, ctrl+r). Developer uses
-// "d" (case matters: distinct from the Shift'd "D" mark-done binding). This
-// table is the single source of truth for both the rendering and the key
-// handling.
+// bindings (tab/h/l file nav, j/k scroll, 1-5 file/log select, e edit, D mark
+// done, J run mg-jdi, x/del remove job, b switch branch, esc/q, ctrl+r).
+// Developer uses "d" (case matters: distinct from the Shift'd "D" mark-done
+// binding). This table is the single source of truth for both the rendering
+// and the key handling.
 var agentMeta = map[string]struct {
 	key     string
 	display string

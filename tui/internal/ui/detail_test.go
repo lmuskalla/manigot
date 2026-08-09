@@ -611,6 +611,105 @@ func TestFilePlaceholderHasNoOwnHeading(t *testing.T) {
 	}
 }
 
+// --- log tab (TASK-9) --------------------------------------------------------
+
+// discoverOneJob is a small helper for the log-tab tests below: a non-repo
+// project (job.Discover's working-tree-only fallback) with a single job
+// whose brief.md is real enough to be "written".
+func discoverOneJob(t *testing.T, root, name string) job.Job {
+	t.Helper()
+	jobDir := filepath.Join(root, "docs", "jobs", name)
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	brief := "# Brief: Log tab test\n\nstatus: open\nid: " + name + "\n\n" +
+		"## What\n\nsomething substantial\nand a second line\n"
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte(brief), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%d", err, len(jobs))
+	}
+	return jobs[0]
+}
+
+func TestDetailViewHasFiveTabsIncludingLog(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa01_x")
+
+	d := newDetailView(j, 80, 24)
+	if len(d.tabs) != 5 {
+		t.Fatalf("len(d.tabs) = %d, want 5", len(d.tabs))
+	}
+	last := d.tabs[4]
+	if last.label != "log" {
+		t.Errorf("tabs[4].label = %q, want %q", last.label, "log")
+	}
+	if !last.isLog {
+		t.Error("tabs[4].isLog = false, want true")
+	}
+	if last.editable {
+		t.Error("the log tab must never be editable")
+	}
+}
+
+func TestDetailViewLogTabPlaceholderWhenNoRun(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa01_x")
+
+	d := newDetailView(j, 80, 24)
+	d.cur = 4 // switch to the log tab so render() catches it up
+	d.ensureCurrentSized()
+
+	if d.tabs[4].exists {
+		t.Error("log tab exists=true with no run.log at all, want false")
+	}
+	if !strings.Contains(d.tabs[4].content, "no mg-jdi run has happened") {
+		t.Errorf("log tab placeholder = %q, want it to explain no run has happened yet", d.tabs[4].content)
+	}
+}
+
+func TestDetailViewLogTabShowsRunLogContent(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa01_x")
+
+	logDir := job.JDIStatusDir(root, j.Name)
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "=== 2026-08-09T00:00:00Z analyst (attempt 1) ===\nwrote tasks.md, all good\n"
+	if err := os.WriteFile(job.JDIRunLogPath(root, j.Name), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := newDetailView(j, 80, 24)
+	d.cur = 4
+	d.ensureCurrentSized()
+
+	if !d.tabs[4].exists {
+		t.Error("log tab exists=false with a real run.log present, want true")
+	}
+	if !strings.Contains(d.tabs[4].content, "wrote tasks.md, all good") {
+		t.Errorf("log tab content = %q, want it to contain the run.log body", d.tabs[4].content)
+	}
+	rendered := d.render()
+	if !strings.Contains(rendered, "wrote tasks.md, all good") {
+		t.Errorf("rendered detail view does not show the log tab's content:\n%s", rendered)
+	}
+}
+
+func TestDetailViewLogTabKeyBindingSwitchesTab(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa01_x")
+
+	d := newDetailView(j, 80, 24)
+	d.update(keyMsg("5"))
+	if d.cur != 4 {
+		t.Errorf("after pressing 5, cur = %d, want 4 (the log tab)", d.cur)
+	}
+}
+
 // TestStripLeadingFrontmatterLeavesNonScaffoldContentAlone confirms a file
 // that doesn't start with an H1, or whose line right after it isn't
 // frontmatter-shaped, is returned unchanged rather than guessed at.

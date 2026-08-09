@@ -1,8 +1,11 @@
 package launch
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestShellCommandFormat(t *testing.T) {
@@ -185,5 +188,76 @@ func TestBuildCmdSmoke(t *testing.T) {
 	}
 	if desc == "" {
 		t.Error("returned cmd has empty description")
+	}
+}
+
+// --- Jdi (detached, no terminal window — Decision 7a) -----------------------
+
+func TestJdiUnresolvable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	t.Setenv("MANIGOT_JDI_BIN", "")
+	t.Setenv("MANIGOT_HOME", "")
+
+	err := Jdi("ab0001_x", t.TempDir())
+	if err == nil {
+		t.Fatal("expected an error when mg-jdi cannot be resolved")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should explain the command is missing; got: %v", err)
+	}
+}
+
+// The resolved command must be started detached (no terminal emulator
+// involved at all, unlike Agent/Quick), by absolute path, in projectRoot,
+// with $PWD matching — the same invocation contract hostcmd's NewJob uses.
+func TestJdiStartsResolvedCommandDetached(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	t.Setenv("MANIGOT_HOME", "")
+
+	root := t.TempDir()
+	out := filepath.Join(root, "args.txt")
+
+	stub := filepath.Join(t.TempDir(), "stub.sh")
+	script := "#!/bin/sh\n" +
+		"{ echo \"argv0=$0\"; echo \"pwd=$PWD\"; echo \"cwd=$(pwd)\"; " +
+		"for a in \"$@\"; do echo \"arg=$a\"; done; } > " + out + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MANIGOT_JDI_BIN", stub)
+
+	if err := Jdi("ab0001_x", root); err != nil {
+		t.Fatalf("Jdi: %v", err)
+	}
+
+	// Jdi starts the process detached and reaps it asynchronously — Start()
+	// only guarantees the process began, not that it has finished writing
+	// its marker file yet, so poll briefly rather than reading immediately.
+	var raw []byte
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(out); err == nil {
+			raw = data
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if raw == nil {
+		t.Fatal("stub did not run within the timeout")
+	}
+
+	recorded := string(raw)
+	for _, want := range []string{
+		"argv0=" + stub, // invoked by absolute path, not by bare name
+		"pwd=" + root,   // $PWD explicitly set for job.FindProjectRoot
+		"cwd=" + root,   // and the real cwd agrees
+		"arg=--job",
+		"arg=ab0001_x",
+	} {
+		if !strings.Contains(recorded, want) {
+			t.Errorf("missing %q in stub record:\n%s", want, recorded)
+		}
 	}
 }

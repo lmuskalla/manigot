@@ -20,6 +20,7 @@ func TestCommandSpecs(t *testing.T) {
 		{Job(), "mg-job", "MANIGOT_JOB_BIN", []string{"mg-job"}, "scripts/new-job.sh"},
 		{Done(), "mg-done", "MANIGOT_DONE_BIN", []string{"mg-done"}, "scripts/finish-job.sh"},
 		{Delete(), "mg-delete", "MANIGOT_DELETE_BIN", []string{"mg-delete"}, "scripts/delete-job.sh"},
+		{Jdi(), "mg-jdi", "MANIGOT_JDI_BIN", []string{"mg-jdi"}, "scripts/jdi.sh"},
 	}
 	for _, c := range cases {
 		if c.spec.Label != c.label {
@@ -62,7 +63,7 @@ func TestSpecScriptsResolveFromCheckout(t *testing.T) {
 	if !looksLikeCheckout(repo) {
 		t.Skipf("%s is not a manigot checkout", repo)
 	}
-	for _, spec := range []Spec{Manigot(), Job(), Done(), Delete()} {
+	for _, spec := range []Spec{Manigot(), Job(), Done(), Delete(), Jdi()} {
 		isolate(t)
 		t.Setenv("MANIGOT_HOME", repo)
 

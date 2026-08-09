@@ -289,6 +289,204 @@ func TestCheckout(t *testing.T) {
 	}
 }
 
+func TestCountVerdictCommits(t *testing.T) {
+	dir, def := initRepo(t)
+	runGit(t, dir, "branch", "feature/aaaa01_x")
+	runGit(t, dir, "checkout", "-q", "feature/aaaa01_x")
+	writeFile(t, dir, "docs/jobs/aaaa01_x/tasks.md", "tasks\n")
+	commitAll(t, dir, "[aaaa01] TASK-1: do a thing")
+	writeFile(t, dir, "docs/jobs/aaaa01_x/verdict.md", "NEEDS WORK\n")
+	commitAll(t, dir, "[aaaa01] verdict: needs work on TASK-1")
+	writeFile(t, dir, "docs/jobs/aaaa01_x/tasks.md", "tasks fixed\n")
+	commitAll(t, dir, "[aaaa01] TASK-1: address review feedback")
+	writeFile(t, dir, "docs/jobs/aaaa01_x/verdict.md", "APPROVED\n")
+	commitAll(t, dir, "[aaaa01] verdict: approved")
+
+	got, err := CountVerdictCommits(dir, "feature/aaaa01_x", "aaaa01")
+	if err != nil {
+		t.Fatalf("CountVerdictCommits: %v", err)
+	}
+	if got != 2 {
+		t.Errorf("CountVerdictCommits = %d, want 2", got)
+	}
+
+	// A different job's verdict commits on the same branch must not count.
+	gotOther, err := CountVerdictCommits(dir, "feature/aaaa01_x", "zzzz99")
+	if err != nil {
+		t.Fatalf("CountVerdictCommits (other id): %v", err)
+	}
+	if gotOther != 0 {
+		t.Errorf("CountVerdictCommits for a different job id = %d, want 0", gotOther)
+	}
+
+	runGit(t, dir, "checkout", "-q", def)
+}
+
+func TestCountVerdictCommitsZero(t *testing.T) {
+	dir, def := initRepo(t)
+	got, err := CountVerdictCommits(dir, def, "aaaa01")
+	if err != nil {
+		t.Fatalf("CountVerdictCommits on a branch with no verdict commits: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("CountVerdictCommits = %d, want 0", got)
+	}
+}
+
+func TestCountVerdictCommitsIgnoresUnparseableMessage(t *testing.T) {
+	dir, def := initRepo(t)
+	writeFile(t, dir, "docs/jobs/aaaa01_x/verdict.md", "note\n")
+	// Mentions "verdict" but doesn't follow the exact "[ID] verdict:" convention.
+	commitAll(t, dir, "verdict was written by hand, sorry")
+	commitAll2 := func(msg string) {
+		writeFile(t, dir, "docs/jobs/aaaa01_x/verdict.md", msg+"\n")
+		commitAll(t, dir, msg)
+	}
+	commitAll2("[aaaa0] verdict: wrong id length, should not match")
+
+	got, err := CountVerdictCommits(dir, def, "aaaa01")
+	if err != nil {
+		t.Fatalf("CountVerdictCommits: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("CountVerdictCommits with only unparseable/mismatched messages = %d, want 0", got)
+	}
+}
+
+func TestCountVerdictCommitsMissingBranch(t *testing.T) {
+	dir, _ := initRepo(t)
+	got, err := CountVerdictCommits(dir, "no-such-branch", "aaaa01")
+	if err != nil {
+		t.Fatalf("CountVerdictCommits on a missing branch: unexpected error %v", err)
+	}
+	if got != 0 {
+		t.Errorf("CountVerdictCommits on a missing branch = %d, want 0", got)
+	}
+}
+
+func TestCountVerdictCommitsNotARepo(t *testing.T) {
+	_, err := CountVerdictCommits(t.TempDir(), "main", "aaaa01")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("CountVerdictCommits on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
+func TestLatestCommitIsVerdict(t *testing.T) {
+	dir, def := initRepo(t)
+	runGit(t, dir, "branch", "feature/aaaa01_x")
+	runGit(t, dir, "checkout", "-q", "feature/aaaa01_x")
+	writeFile(t, dir, "docs/jobs/aaaa01_x/implementation.md", "impl\n")
+	commitAll(t, dir, "[aaaa01] implementation: add summary")
+
+	writeFile(t, dir, "docs/jobs/aaaa01_x/verdict.md", "NEEDS WORK\n")
+	commitAll(t, dir, "[aaaa01] verdict: needs work on TASK-1")
+
+	// Tip is the verdict commit — developer hasn't responded yet.
+	got, err := LatestCommitIsVerdict(dir, "feature/aaaa01_x", "aaaa01")
+	if err != nil {
+		t.Fatalf("LatestCommitIsVerdict: %v", err)
+	}
+	if !got {
+		t.Errorf("LatestCommitIsVerdict = false, want true (tip is the verdict commit)")
+	}
+
+	// A different job's id must not match this branch's verdict commit.
+	gotOther, err := LatestCommitIsVerdict(dir, "feature/aaaa01_x", "zzzz99")
+	if err != nil {
+		t.Fatalf("LatestCommitIsVerdict (other id): %v", err)
+	}
+	if gotOther {
+		t.Errorf("LatestCommitIsVerdict for a different job id = true, want false")
+	}
+
+	// Developer commits a fix on top — tip is no longer the verdict commit.
+	writeFile(t, dir, "docs/jobs/aaaa01_x/implementation.md", "impl fixed\n")
+	commitAll(t, dir, "[aaaa01] TASK-1: address review feedback")
+
+	got2, err := LatestCommitIsVerdict(dir, "feature/aaaa01_x", "aaaa01")
+	if err != nil {
+		t.Fatalf("LatestCommitIsVerdict after fix commit: %v", err)
+	}
+	if got2 {
+		t.Errorf("LatestCommitIsVerdict after a fix commit = true, want false")
+	}
+
+	runGit(t, dir, "checkout", "-q", def)
+}
+
+func TestLatestCommitIsVerdictNoMatchingCommits(t *testing.T) {
+	dir, def := initRepo(t)
+	got, err := LatestCommitIsVerdict(dir, def, "aaaa01")
+	if err != nil {
+		t.Fatalf("LatestCommitIsVerdict: %v", err)
+	}
+	if got {
+		t.Errorf("LatestCommitIsVerdict on a branch with no verdict commit = true, want false")
+	}
+}
+
+func TestLatestCommitIsVerdictMissingBranch(t *testing.T) {
+	dir, _ := initRepo(t)
+	got, err := LatestCommitIsVerdict(dir, "no-such-branch", "aaaa01")
+	if err != nil {
+		t.Fatalf("LatestCommitIsVerdict on a missing branch: unexpected error %v", err)
+	}
+	if got {
+		t.Errorf("LatestCommitIsVerdict on a missing branch = true, want false")
+	}
+}
+
+func TestLatestCommitIsVerdictNotARepo(t *testing.T) {
+	_, err := LatestCommitIsVerdict(t.TempDir(), "main", "aaaa01")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("LatestCommitIsVerdict on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
+func TestHeadCommit(t *testing.T) {
+	dir, def := initRepo(t)
+	want, err := exec.Command("git", "-C", dir, "rev-parse", def).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := HeadCommit(dir, def)
+	if err != nil {
+		t.Fatalf("HeadCommit: %v", err)
+	}
+	if got != strings.TrimSpace(string(want)) {
+		t.Errorf("HeadCommit = %q, want %q", got, strings.TrimSpace(string(want)))
+	}
+
+	// A new commit changes what HeadCommit reports.
+	writeFile(t, dir, "extra.txt", "more\n")
+	commitAll(t, dir, "extra")
+	got2, err := HeadCommit(dir, def)
+	if err != nil {
+		t.Fatalf("HeadCommit after new commit: %v", err)
+	}
+	if got2 == got {
+		t.Errorf("HeadCommit did not change after a new commit")
+	}
+}
+
+func TestHeadCommitMissingBranch(t *testing.T) {
+	dir, _ := initRepo(t)
+	got, err := HeadCommit(dir, "no-such-branch")
+	if err != nil {
+		t.Fatalf("HeadCommit on a missing branch: unexpected error %v", err)
+	}
+	if got != "" {
+		t.Errorf("HeadCommit on a missing branch = %q, want empty", got)
+	}
+}
+
+func TestHeadCommitNotARepo(t *testing.T) {
+	_, err := HeadCommit(t.TempDir(), "main")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("HeadCommit on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
 func TestCheckoutFailureSurfacesGitError(t *testing.T) {
 	dir, _ := initRepo(t)
 	// Uncommitted changes that conflict with the target branch's file.

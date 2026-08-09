@@ -9,6 +9,7 @@ CLAUDE_DIR_NAME="docs"
 AGENT=""
 JOB=""
 TOOL="claude-code"
+PRINT="false"
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
@@ -16,6 +17,7 @@ while [[ $# -gt 0 ]]; do
         --agent) AGENT="$2"; shift 2 ;;
         --job)   JOB="$2";   shift 2 ;;
         --tool)  TOOL="$2";  shift 2 ;;
+        --print) PRINT="true"; shift ;;
         *)       PASSTHROUGH+=("$1"); shift ;;
     esac
 done
@@ -27,6 +29,29 @@ case "$TOOL" in
         exit 1
         ;;
 esac
+
+# --print is a non-interactive, one-shot invocation (see scripts/entrypoint.sh)
+# built for automated/unattended callers like mg-jdi, not for a human's own
+# session. It is Claude Code only for v1 — OpenCode's non-interactive
+# equivalent is unverified (see docs/backlog.md) — so reject the combination
+# with a clear error rather than silently falling back to an interactive run.
+if [[ "$PRINT" == "true" && "$TOOL" == "opencode" ]]; then
+    echo "Error: --print is only supported with --tool claude-code."
+    echo "OpenCode's non-interactive invocation is unverified for v1 — see docs/backlog.md."
+    exit 1
+fi
+
+# ── Diagnostic output redirection ────────────────────────────────────────────
+# --print callers expect a clean stdout carrying only the agent's own output
+# (see the "Run" section below) — run.sh's own info/warning/banner lines below
+# go through fd 3 instead of a bare echo, which points at stderr in --print
+# mode and at stdout otherwise. Interactive behavior is unchanged (both fds
+# render to the same terminal there).
+if [[ "$PRINT" == "true" ]]; then
+    exec 3>&2
+else
+    exec 3>&1
+fi
 
 # ── Load .env from manigot dir ─────────────────────────────────────────────────
 # Follow symlinks to the real script location — this is installed as a
@@ -51,7 +76,7 @@ if [[ -f "$ENV_FILE" ]]; then
     source "$ENV_FILE"
     set +a
 else
-    echo "Warning: no .env found at $ENV_FILE"
+    echo "Warning: no .env found at $ENV_FILE" >&3
 fi
 
 # ── Resolve project root ────────────────────────────────────────────────────────
@@ -108,7 +133,7 @@ if [[ -n "$CONTEXT_FILE" ]]; then
     fi
     CONTEXT_MOUNT=(-v "$CONTEXT_FILE:$CONTEXT_TARGET:ro")
 else
-    echo "Warning: no $CLAUDE_DIR_NAME/AGENTS.md found — the agent will start without project context."
+    echo "Warning: no $CLAUDE_DIR_NAME/AGENTS.md found — the agent will start without project context." >&3
 fi
 
 # ── Resolve job directory ───────────────────────────────────────────────────────
@@ -129,6 +154,13 @@ if [[ -n "$JOB" ]]; then
     fi
     CONTAINER_JOB_DIR="/workspace/docs/jobs/$JOB"
     JOB_PROMPT="Please work on the job at ${CONTAINER_JOB_DIR} — start by reading brief.md"
+    # --print sessions are non-interactive and unattended (no human can answer
+    # a follow-up question), so they get one extra sentence defining the
+    # NEEDS-HUMAN-INPUT marker (see docs/AGENTS.md). Interactive sessions
+    # never see this — a human is there to just answer the question instead.
+    if [[ "$PRINT" == "true" ]]; then
+        JOB_PROMPT="${JOB_PROMPT}"$'\n\n'"You are running non-interactively and unattended — no human is watching this session or able to answer questions. If you cannot proceed without a human decision, stop immediately and print a line starting with exactly \`NEEDS-HUMAN-INPUT:\` followed by a one-sentence reason, and make no further changes."
+    fi
 fi
 
 # --agent is passed as a proper CLI flag to claude, not as prompt text.
@@ -202,30 +234,40 @@ while IFS= read -r -d '' envfile; do
     [[ "$envfile" == *.example ]] && continue
     [[ "$envfile" == *.sample ]] && continue
     container_path="/workspace${envfile#"$PROJECT_ROOT"}"
-    echo "  Shadowing: $envfile → /dev/null inside container"
+    echo "  Shadowing: $envfile → /dev/null inside container" >&3
     ENV_MOUNTS+=(--mount "type=bind,source=/dev/null,target=$container_path,readonly")
 done < <(find "$PROJECT_ROOT" -type f \( -name ".env" -o -name ".env.*" \) -print0)
 
 if [[ ${#ENV_MOUNTS[@]} -eq 0 ]]; then
-    echo "  Shadowed : none (no .env files found)"
+    echo "  Shadowed : none (no .env files found)" >&3
 fi
 
 # ── Info ────────────────────────────────────────────────────────────────────────
-echo "╔══════════════════════════════════════╗"
-echo "║           manigot                   ║"
-echo "╠══════════════════════════════════════╣"
-echo "║  Project : $(basename "$PROJECT_ROOT")"
-echo "║  Root    : $PROJECT_ROOT"
-echo "║  Docs    : $PROJECT_DOCS_DIR"
-[[ -n "$CONTEXT_FILE" ]] && echo "║  Context : $CONTEXT_FILE → $CONTEXT_TARGET"
-[[ -n "$TOOL"  ]] && echo "║  Tool    : $TOOL"
-[[ -n "$AGENT" ]] && echo "║  Agent   : $AGENT"
-[[ -n "$JOB"   ]] && echo "║  Job     : $JOB"
-echo "╚══════════════════════════════════════╝"
-echo ""
+echo "╔══════════════════════════════════════╗" >&3
+echo "║           manigot                   ║" >&3
+echo "╠══════════════════════════════════════╣" >&3
+echo "║  Project : $(basename "$PROJECT_ROOT")" >&3
+echo "║  Root    : $PROJECT_ROOT" >&3
+echo "║  Docs    : $PROJECT_DOCS_DIR" >&3
+[[ -n "$CONTEXT_FILE" ]] && echo "║  Context : $CONTEXT_FILE → $CONTEXT_TARGET" >&3
+[[ -n "$TOOL"  ]] && echo "║  Tool    : $TOOL" >&3
+[[ -n "$AGENT" ]] && echo "║  Agent   : $AGENT" >&3
+[[ -n "$JOB"   ]] && echo "║  Job     : $JOB" >&3
+[[ "$PRINT" == "true" ]] && echo "║  Print   : yes (non-interactive)" >&3
+echo "╚══════════════════════════════════════╝" >&3
+echo "" >&3
 
 # ── Run ─────────────────────────────────────────────────────────────────────────
-docker run -it --rm \
+# --print drops -it in favor of a plain foregrounded run: no pseudo-tty is
+# allocated, so the container's stdout (the agent's own output — see
+# scripts/entrypoint.sh) streams straight through as this script's stdout,
+# uncluttered by the diagnostics above (redirected to fd 3/stderr).
+DOCKER_TTY_FLAGS=(-it)
+if [[ "$PRINT" == "true" ]]; then
+    DOCKER_TTY_FLAGS=()
+fi
+
+docker run "${DOCKER_TTY_FLAGS[@]+"${DOCKER_TTY_FLAGS[@]}"}" --rm \
     --name "manigot-$(basename "$PROJECT_ROOT")-$$" \
     -v "$PROJECT_ROOT:/workspace:z" \
     -v "$PROJECT_DOCS_DIR:$DOCS_MOUNT_TARGET:z" \
@@ -239,6 +281,7 @@ docker run -it --rm \
     -e GIT_AUTHOR_NAME_CFG="${GIT_AUTHOR_NAME:-}" \
     -e GIT_AUTHOR_EMAIL_CFG="${GIT_AUTHOR_EMAIL:-}" \
     -e MANIGOT_TOOL="$TOOL" \
+    -e MANIGOT_PRINT="$PRINT" \
     --network=bridge \
     --memory=2g \
     --security-opt=no-new-privileges \

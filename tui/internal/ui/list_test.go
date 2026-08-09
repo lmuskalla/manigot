@@ -301,3 +301,55 @@ func TestRenderListEmptyStateInvitesNewJob(t *testing.T) {
 		t.Errorf("empty-list state's dedicated message should not mention quitting at all: %q", emptyStateLine)
 	}
 }
+
+// --- mg-jdi status badge (TASK-8) --------------------------------------------
+
+func TestRenderListShowsJDIRunningBadge(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+
+	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIRunning, "developer"); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	got := a.renderList()
+	if !strings.Contains(got, "mg-jdi: running @developer") {
+		t.Errorf("renderList missing the running badge:\n%s", got)
+	}
+}
+
+func TestRenderListShowsJDINeedsHumanBadge(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+
+	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIStoppedNeedsHuman, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	got := a.renderList()
+	if !strings.Contains(got, "mg-jdi: needs human") {
+		t.Errorf("renderList missing the needs-human badge:\n%s", got)
+	}
+}
+
+func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	got := a.renderList()
+	if strings.Contains(got, "mg-jdi:") {
+		t.Errorf("renderList should not mention mg-jdi with no status sidecar:\n%s", got)
+	}
+}

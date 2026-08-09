@@ -130,3 +130,98 @@ func TestRefreshJobsClampsCursorWithoutTouchingDetail(t *testing.T) {
 		t.Errorf("cursor went negative: %d", a.cursor)
 	}
 }
+
+// --- mg-jdi stop-notification bell (TASK-11) ---------------------------------
+
+// withFakeBell swaps out ringBell for the duration of the test and returns a
+// pointer to a counter tracking how many times it was called.
+func withFakeBell(t *testing.T) *int {
+	t.Helper()
+	count := 0
+	orig := ringBell
+	ringBell = func() { count++ }
+	t.Cleanup(func() { ringBell = orig })
+	return &count
+}
+
+func mkJDIJob(t *testing.T, root, name string) {
+	t.Helper()
+	dir := filepath.Join(root, "docs", "jobs", name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "brief.md"),
+		[]byte("# Brief: "+name+"\n\nstatus: open\ndate: 2026-01-01\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPollJDIBellNeverRingsOnFirstObservation confirms a job already
+// stopped before the TUI ever polled it does not ring on the very first
+// refreshJobs — only a *transition* observed after that first poll should.
+func TestPollJDIBellNeverRingsOnFirstObservation(t *testing.T) {
+	root := t.TempDir()
+	mkJDIJob(t, root, "aaaa01_a")
+	if err := job.WriteJDIStatus(root, "aaaa01_a", job.JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _ := job.Discover(root)
+	a := NewApp(root, jobs)
+	count := withFakeBell(t)
+
+	a.refreshJobs()
+	if *count != 0 {
+		t.Errorf("bell rang %d times on the first observation of an already-stopped job, want 0", *count)
+	}
+}
+
+// TestPollJDIBellRingsOnceOnFreshTransition confirms a job observed as
+// running, then observed as stopped on a later poll, rings exactly once —
+// not again on a third poll where the state hasn't changed.
+func TestPollJDIBellRingsOnceOnFreshTransition(t *testing.T) {
+	root := t.TempDir()
+	mkJDIJob(t, root, "aaaa01_a")
+	if err := job.WriteJDIStatus(root, "aaaa01_a", job.JDIRunning, "developer"); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _ := job.Discover(root)
+	a := NewApp(root, jobs)
+	count := withFakeBell(t)
+
+	a.refreshJobs() // seeds jdiSeen[aaaa01_a] = running, no ring
+	if *count != 0 {
+		t.Fatalf("bell rang %d times while status was still running, want 0", *count)
+	}
+
+	if err := job.WriteJDIStatus(root, "aaaa01_a", job.JDIStoppedNeedsHuman, "developer"); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshJobs() // fresh transition running -> stopped:needs-human
+	if *count != 1 {
+		t.Errorf("bell rang %d times on the fresh stop transition, want 1", *count)
+	}
+
+	a.refreshJobs() // same stopped state again, no new transition
+	if *count != 1 {
+		t.Errorf("bell rang %d times after a second poll with no state change, want still 1", *count)
+	}
+}
+
+// TestPollJDIBellIgnoresJobsWithNoStatus confirms a job with no mg-jdi
+// status sidecar at all (the common case) never rings, and doesn't panic.
+func TestPollJDIBellIgnoresJobsWithNoStatus(t *testing.T) {
+	root := t.TempDir()
+	mkJDIJob(t, root, "aaaa01_a")
+
+	jobs, _ := job.Discover(root)
+	a := NewApp(root, jobs)
+	count := withFakeBell(t)
+
+	a.refreshJobs()
+	a.refreshJobs()
+	if *count != 0 {
+		t.Errorf("bell rang %d times for a job with no status sidecar, want 0", *count)
+	}
+}

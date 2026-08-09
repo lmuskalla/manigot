@@ -73,6 +73,16 @@ type App struct {
 	// status is a transient one-line message shown in the footer (e.g. after
 	// running mg-job or an agent).
 	status string
+
+	// jdiSeen tracks, per job Name, the last job.JDIState observed for that
+	// job's mg-jdi status sidecar (Decision 7a/TASK-11) — the TUI's own
+	// stop-notification dedup. The very first observation of any given job
+	// (no prior entry) always just seeds this map rather than ringing the
+	// bell, even if that first-seen status is already stopped: a restarted
+	// TUI re-observing an already-stopped job isn't a new event worth
+	// alerting on. Reset (empty) on every TUI restart — in-memory only, no
+	// new event-streaming subsystem or persisted state.
+	jdiSeen map[string]job.JDIState
 }
 
 // NewApp builds the root model from a discovered job list. Settings are
@@ -80,7 +90,7 @@ type App struct {
 // tui-settings.json) is non-fatal — the app starts with default settings and
 // surfaces the error in the footer instead.
 func NewApp(root string, jobs []job.Job) *App {
-	a := &App{root: root, jobs: jobs, state: stateList}
+	a := &App{root: root, jobs: jobs, state: stateList, jdiSeen: map[string]job.JDIState{}}
 	a.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
 	a.refreshRecentCommits()
 	settings, err := config.Load()
@@ -421,6 +431,57 @@ func (a *App) refreshJobs() {
 	if a.cursor < 0 {
 		a.cursor = 0
 	}
+	a.pollJDIBell()
+}
+
+// pollJDIBell is the TUI-side half of the stop notification (Decision
+// 5/7a/TASK-11): a TUI-launched mg-jdi run has no terminal of its own to
+// ring `\a` into (see tui/cmd/jdi's own CLI-path bell), so instead the TUI
+// rings it on its own next poll — this function, called from refreshJobs,
+// which is every "poll tick" this app has (ctrl+r, returning to list, a
+// checkout, etc.; there is no separate timer-driven tick, per the brief's
+// "no new event-streaming subsystem" constraint) — the first time it
+// observes a job's status transition into a stopped:* state it hadn't
+// already notified for.
+//
+// Dedup is in-memory (a.jdiSeen) and keyed by job Name: the first
+// observation of any given job only seeds the map, never rings, even if
+// that first-seen status is already a stopped:* one — a freshly (re)started
+// TUI re-observing a job that was already stopped before it started
+// watching isn't a new event. A later transition away from stopped back to
+// running (a fresh mg-jdi run against the same job) and then stopped again
+// rings a second time, since the intervening JDIRunning observation clears
+// the "already notified for this stop" condition.
+func (a *App) pollJDIBell() {
+	for _, j := range a.jobs {
+		st, ok := job.ReadJDIStatus(a.root, j.Name)
+		if !ok {
+			continue
+		}
+		prev, seen := a.jdiSeen[j.Name]
+		a.jdiSeen[j.Name] = st.State
+		if !seen {
+			continue
+		}
+		if isJDIStopped(st.State) && prev != st.State {
+			ringBell()
+		}
+	}
+}
+
+// isJDIStopped reports whether s is one of the two terminal mg-jdi states.
+func isJDIStopped(s job.JDIState) bool {
+	return s == job.JDIStoppedFinished || s == job.JDIStoppedNeedsHuman
+}
+
+// ringBell writes a bare terminal bell character. A BEL byte reaches the
+// terminal (and triggers whatever bell/notification behavior it's
+// configured for) regardless of Bubble Tea's alt-screen rendering state, so
+// this is safe to call as a direct side effect from within Update rather
+// than needing its own tea.Cmd. A package-level var (not a plain func) so
+// tests can swap it out instead of actually beeping the test runner.
+var ringBell = func() {
+	fmt.Print("\a")
 }
 
 // refresh does refreshJobs, plus reloads the open detail view's files (if
@@ -591,6 +652,31 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, cmd
+	case "J":
+		// Run mg-jdi (TASK-12): a bigger, composite action like "D", not a
+		// single-agent launch, so it's handled here rather than through
+		// agentForKey. Unlike launch.Agent, this starts detached in the
+		// background with no spawned terminal window at all (Decision 7a) —
+		// see launch.Jdi's own doc for why. Same branch guard as every other
+		// mutating action: mg-jdi itself also checks out the job's branch if
+		// needed, but the TUI's own working tree must already be on it before
+		// any of *this* session's file reads (the detail view's tabs, the
+		// stage timeline) can be trusted.
+		if _, blocked := a.branchGuard(); blocked {
+			return a, a.blockedByBranchCmd()
+		}
+		if err := launch.Jdi(a.detail.job.ID, a.root); err != nil {
+			a.detail.setStatus(cmdErrorText(err))
+		} else {
+			// Seed the stop-notification dedup (TASK-11) as "running" right
+			// away rather than waiting for the first poll to discover it —
+			// otherwise a run that finishes before the next refresh would
+			// look like a first-ever observation of an already-stopped job
+			// and never ring.
+			a.jdiSeen[a.detail.job.Name] = job.JDIRunning
+			a.detail.setStatus("→ mg-jdi started in the background — see the log tab or list badge")
+		}
+		return a, nil
 	case "delete", "x":
 		// Permanently delete the job. Bound to both the physical Delete/Entf
 		// key and "x": the forward-delete key's escape sequence (CSI 3~) is
@@ -918,10 +1004,43 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	if j.Branch != "" && !j.OnCurrentBranch {
 		line += "  " + dimStyle.Render("· "+j.Branch)
 	}
+	if badge := jdiStatusBadge(a.root, j); badge != "" {
+		line += "  " + badge
+	}
 	if selected {
 		return selectedStyle.Render("▶ " + line)
 	}
 	return dimStyle.Render("  ") + line
+}
+
+// jdiStatusBadge renders a short "[mg-jdi: ...]" tag for a job's list row
+// when an autonomous run has something to report (Decision 4/4a/TASK-8):
+// running (naming the active agent), or one of the two stop reasons.
+// Renders "" when there's nothing to show — no sidecar status file for this
+// job, or one job.ReadJDIStatus itself degrades away (a missing/unparseable
+// file, or a "running" status stale enough to mean mg-jdi was killed
+// mid-run — see job.ReadJDIStatus's own doc, which is the sole gate here;
+// this function only formats what it returns, on the same
+// derived-from-polling-job-files basis every other list-row element uses).
+func jdiStatusBadge(root string, j job.Job) string {
+	st, ok := job.ReadJDIStatus(root, j.Name)
+	if !ok {
+		return ""
+	}
+	switch st.State {
+	case job.JDIRunning:
+		label := "mg-jdi: running"
+		if st.Agent != "" {
+			label += " @" + st.Agent
+		}
+		return accentStyle.Render("[" + label + "]")
+	case job.JDIStoppedFinished:
+		return statusDoneStyle.Render("[mg-jdi: finished]")
+	case job.JDIStoppedNeedsHuman:
+		return warnStyle.Render("[mg-jdi: needs human]")
+	default:
+		return ""
+	}
 }
 
 // footer is the bottom help/status line.
