@@ -125,18 +125,21 @@ echo ""
 read -rp "  Proceed? [y/N] " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 
-# ── Merge ───────────────────────────────────────────────────────────────────────
+# ── Merge (squash — one commit per job, not the full branch history) ────────────
+JOB_TITLE=$(head -1 "$BRIEF" | sed 's/^# Brief: *//')
+
 echo ""
 echo "→ Switching to $DEFAULT_BRANCH..."
 git -C "$PROJECT_ROOT" checkout "$DEFAULT_BRANCH"
 
-echo "→ Merging $BRANCH..."
-git -C "$PROJECT_ROOT" merge --no-ff "$BRANCH" -m "Merge $BRANCH
+echo "→ Squash-merging $BRANCH..."
+git -C "$PROJECT_ROOT" merge --squash "$BRANCH"
+git -C "$PROJECT_ROOT" commit -m "${JOB_TITLE:-$JOB_NAME}
 
 Job: $JOB_NAME"
 
 echo "→ Deleting branch $BRANCH..."
-git -C "$PROJECT_ROOT" branch -d "$BRANCH"
+git -C "$PROJECT_ROOT" branch -D "$BRANCH"
 
 # ── Archive job directory ────────────────────────────────────────────────────────
 echo "→ Archiving job directory..."
