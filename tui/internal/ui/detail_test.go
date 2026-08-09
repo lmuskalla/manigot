@@ -406,10 +406,16 @@ func TestDetailViewMetaLineShowsBranch(t *testing.T) {
 		byID[j.ID] = j
 	}
 
-	// Off-branch job: branch shown + flagged as other-branch.
+	// Off-branch job: branch shown + flagged as other-branch. The chrome's
+	// off-branch format doesn't repeat the "branch: " label prefix (see
+	// detailView.render's branchMeta) — it reads "<branch> (other branch —
+	// press c to switch)" instead, so this asserts on the branch name alone.
+	// (Before TASK-6's dedup stripping, this also matched the raw frontmatter
+	// line rendered a second time in the body — that was a coincidental
+	// pass, not what this test means to cover.)
 	dOff := newDetailView(byID["off05"], 80, 24)
 	out := dOff.render()
-	if !strings.Contains(out, "branch: feature/off05_o") {
+	if !strings.Contains(out, "feature/off05_o") {
 		t.Errorf("off-branch meta line missing the branch:\n%s", out)
 	}
 	if !strings.Contains(out, "other branch") {
@@ -457,5 +463,165 @@ func TestJobListMarksOffBranchRows(t *testing.T) {
 	curRow := a.renderJobRow(byID["cur06"], cols, false)
 	if strings.Contains(curRow, def) {
 		t.Errorf("current-branch row should not carry a branch tag (Branch == current); got:\n%s", curRow)
+	}
+}
+
+// --- status/hint coexistence (TASK-5) ---------------------------------------
+
+// TestDetailFooterKeepsHintAlongsideSingleLineStatus is a regression test for
+// TASK-4: a single-line status (e.g. "refreshed" after ctrl+r, or an agent
+// launch confirmation) must show alongside the scroll-position/key hint, not
+// replace it.
+func TestDetailFooterKeepsHintAlongsideSingleLineStatus(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0011_g")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: G\n\nstatus: open\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+
+	d := newDetailView(jobs[0], 80, 24)
+	d.setStatus("refreshed")
+
+	footer := d.renderFooter()
+	if !strings.Contains(footer, "refreshed") {
+		t.Errorf("footer missing the status message:\n%s", footer)
+	}
+	if !strings.Contains(footer, "q quit") {
+		t.Errorf("footer lost the key hint after a single-line status was set:\n%s", footer)
+	}
+}
+
+// TestDetailFooterMultiLineStatusStillReplacesHint confirms the deliberate
+// exception TASK-4 carves out: a multi-line status (cmdErrorText's
+// resolution diagnosis) keeps fully replacing the hint, since appending the
+// hint to an already multi-line diagnostic risks overflowing narrow
+// terminals — this is a distinct, already-tested case (see
+// TestDetailBodyHeightShrinksForMultiLineStatus), not the "lost the legend"
+// problem TASK-4 targets.
+func TestDetailFooterMultiLineStatusStillReplacesHint(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0012_h")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: H\n\nstatus: open\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+
+	d := newDetailView(jobs[0], 80, 24)
+	d.setStatus("error: sc-job not found\ntried: a, b\nfix:   set $SAFECODE_JOB_BIN")
+
+	footer := d.renderFooter()
+	if strings.Contains(footer, "q quit") {
+		t.Errorf("multi-line status footer should not have the hint appended:\n%s", footer)
+	}
+}
+
+// --- de-duplicated identity/metadata (TASK-7) -------------------------------
+
+// TestDetailTabsDoNotRepeatTitleOrFrontmatter is the main proof for TASK-6:
+// for each of the four job files (in new-job.sh's exact scaffold shape), the
+// rendered tab body must not repeat the file's own "# <Label>: <title>"
+// heading or its "key: value" frontmatter lines — the chrome's title+meta
+// line already shows all of that — while real body content, including a
+// TASK-N-shaped line inside a real section, still renders.
+func TestDetailTabsDoNotRepeatTitleOrFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0020_dedup")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	files := map[string]string{
+		"brief.md":          "# Brief: Dedup\n\nstatus: open\ntype: feature\nid: ab0020\nbranch: feature/ab0020_dedup\ndate: 2026-01-01\nauthor: Test\n\n## What\n\nZZBRIEFBODY real content here.\n",
+		"tasks.md":          "# Tasks: Dedup\n\nid: ab0020\nstatus: open\nanalyst: Test\ndate: 2026-01-01\n\n## Task breakdown\n\nTASK-1: real work here, colon-shaped like frontmatter but deep in the body.\n",
+		"implementation.md": "# Implementation: Dedup\n\nid: ab0020\nstatus: open\ndeveloper: Test\ndate: 2026-01-01\n\n## Summary\n\nZZIMPLBODY TASK-1 implemented.\n",
+		"verdict.md":        "# Verdict: Dedup\n\nid: ab0020\nstatus: open\nreviewer: Test\ndate: 2026-01-01\n\n## Review\n\nTASK-1: PASS, ZZVERDICTBODY.\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(jobDir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+
+	cases := []struct {
+		tab            int
+		heading        string // the file's own H1 text, must NOT appear
+		frontmatterHit string // a frontmatter value, must NOT appear
+		realContent    string // real body content, MUST appear
+	}{
+		{0, "Brief: Dedup", "author: Test", "ZZBRIEFBODY"},
+		{1, "Tasks: Dedup", "analyst: Test", "TASK-1: real work here"},
+		{2, "Implementation: Dedup", "developer: Test", "ZZIMPLBODY"},
+		{3, "Verdict: Dedup", "reviewer: Test", "ZZVERDICTBODY"},
+	}
+	for _, c := range cases {
+		d := newDetailView(jobs[0], 80, 24)
+		d.cur = c.tab
+		d.render()
+		view := d.tabs[c.tab].viewer.View()
+
+		if strings.Contains(view, c.heading) {
+			t.Errorf("tab %d: rendered body repeats its own heading %q:\n%s", c.tab, c.heading, view)
+		}
+		if strings.Contains(view, c.frontmatterHit) {
+			t.Errorf("tab %d: rendered body repeats frontmatter %q the chrome already shows:\n%s", c.tab, c.frontmatterHit, view)
+		}
+		if !strings.Contains(view, c.realContent) {
+			t.Errorf("tab %d: rendered body missing real content %q:\n%s", c.tab, c.realContent, view)
+		}
+	}
+}
+
+// TestDetailViewReadsOffBranchJobViaGit (existing, off-branch fixture) already
+// asserts "TASK-1" survives inside "## Task breakdown" for the tasks tab —
+// re-confirmed here isn't necessary, just noted: that assertion is the
+// over-strip regression guard for the git-show read path specifically, this
+// test's is for the working-tree read path.
+
+// TestFilePlaceholderHasNoOwnHeading confirms filePlaceholder no longer
+// renders its own "# <label>" heading (TASK-6): the chrome's title line
+// already names the job regardless of which tab/file is showing, so a
+// missing file's placeholder would otherwise be a second (empty-ish) title.
+func TestFilePlaceholderHasNoOwnHeading(t *testing.T) {
+	got := filePlaceholder("implementation.md")
+	if strings.HasPrefix(strings.TrimSpace(got), "#") {
+		t.Errorf("filePlaceholder still renders its own heading: %q", got)
+	}
+	if !strings.Contains(got, "implementation.md") {
+		t.Errorf("filePlaceholder missing the filename: %q", got)
+	}
+}
+
+// TestStripLeadingFrontmatterLeavesNonScaffoldContentAlone confirms a file
+// that doesn't start with an H1, or whose line right after it isn't
+// frontmatter-shaped, is returned unchanged rather than guessed at.
+func TestStripLeadingFrontmatterLeavesNonScaffoldContentAlone(t *testing.T) {
+	cases := []string{
+		"no heading here, just prose\n\nmore prose\n",
+		"# Just a heading\n\nStraight into prose, no frontmatter at all.\n",
+	}
+	for _, in := range cases {
+		if got := stripLeadingFrontmatter(in); got != in {
+			t.Errorf("stripLeadingFrontmatter(%q) = %q, want unchanged", in, got)
+		}
 	}
 }

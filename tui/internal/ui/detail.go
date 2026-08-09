@@ -80,8 +80,13 @@ func newDetailView(j job.Job, width, height int) *detailView {
 
 // jobFileNotWritten is the placeholder markdown shown for a file new-job.sh has
 // not created or an agent has not filled in yet.
-func filePlaceholder(label, filename string) string {
-	return "# " + label + "\n\n_" + filename + " has not been written yet._"
+//
+// No "# <label>" heading of its own: the detail view's own title+meta chrome
+// line already shows the job title regardless of which tab is showing, so a
+// second heading here would just be the same duplication
+// stripLeadingFrontmatter removes from real file content below.
+func filePlaceholder(filename string) string {
+	return "_" + filename + " has not been written yet._"
 }
 
 // loadTabs (re)reads every tab's file from disk. Called on construction and
@@ -110,16 +115,22 @@ func (d *detailView) loadTabs() {
 // uncommitted edits still show; a job discovered on another branch is read
 // via `git show <Branch>:…`, so its four files appear in the tabs even though
 // they don't exist under j.Dir in this working tree. Either way a missing
-// file falls back to the "(label)" placeholder.
+// file falls back to the placeholder.
+//
+// Real content goes through stripLeadingFrontmatter first: every job file's
+// new-job.sh scaffold repeats the title (as its own "# <Label>: <title>" H1)
+// and metadata (as a "key: value" block) that the detail view's chrome
+// title+meta line already shows — see loadTab's caller-facing doc and the
+// helper's own comment for why only the leading block is ever touched.
 func (d *detailView) loadTab(i int) {
 	t := &d.tabs[i]
 	data, ok := d.readFile(t)
 	if ok {
 		t.exists = true
-		t.content = string(data)
+		t.content = stripLeadingFrontmatter(string(data))
 	} else {
 		t.exists = false
-		t.content = filePlaceholder(t.label, filepath.Base(t.path))
+		t.content = filePlaceholder(filepath.Base(t.path))
 	}
 	if i == d.cur {
 		t.viewer.SetContent(t.content)
@@ -127,6 +138,70 @@ func (d *detailView) loadTab(i int) {
 	} else {
 		t.stale = true
 	}
+}
+
+// stripLeadingFrontmatter removes the leading H1 + "key: value" frontmatter
+// block every job file's new-job.sh scaffold begins with, so glamour doesn't
+// render a second title/metadata block duplicating what the detail view's
+// own chrome (title+meta line) already shows (TASK-6 de-dup; app chrome was
+// picked to own identity — see the brief).
+//
+// Only the leading, contiguous run bounded by the first blank line is ever
+// touched: the first line if it's an H1 ("# "), an optional single blank
+// line right after it, then a run of "key: value" lines, stopping at the
+// first blank line found in that run. Real body content past that point is
+// never scanned — a line like "TASK-1: description" inside "## Task
+// breakdown" is well past the block's terminating blank line by the time any
+// real content is reached, so stripping never reaches it even though it is
+// syntactically colon-shaped too.
+//
+// A file that doesn't start with an H1, or whose line right after the H1
+// (and optional blank) isn't itself a "key: value" line, doesn't match the
+// scaffold shape at all and is returned unchanged rather than guessed at.
+func stripLeadingFrontmatter(content string) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || !strings.HasPrefix(lines[0], "# ") {
+		return content
+	}
+	i := 1
+	if i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	start := i
+	for i < len(lines) && strings.TrimSpace(lines[i]) != "" {
+		if !isFrontmatterLine(lines[i]) {
+			// Not the scaffold shape (e.g. the H1 is directly followed by
+			// prose, no frontmatter at all) — leave the whole file alone.
+			return content
+		}
+		i++
+	}
+	if i == start {
+		// H1 with nothing (not even a blank line) after it.
+		return content
+	}
+	// Skip the blank line terminating the frontmatter block, if present.
+	if i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	return strings.Join(lines[i:], "\n")
+}
+
+// isFrontmatterLine reports whether a line matches the "key: value" shape
+// new-job.sh's scaffold frontmatter uses: a bare key with no leading
+// whitespace and no spaces before its colon (e.g. "status: open",
+// "developer:"). Deliberately narrow so it only ever matches inside the
+// leading contiguous block stripLeadingFrontmatter bounds by the first blank
+// line — real prose elsewhere in the document is never passed to this.
+func isFrontmatterLine(line string) bool {
+	if line == "" || line[0] == ' ' || line[0] == '\t' {
+		return false
+	}
+	idx := strings.Index(line, ":")
+	if idx <= 0 {
+		return false
+	}
+	return !strings.ContainsAny(line[:idx], " \t")
 }
 
 // readFile reads one tab's file bytes from the working tree (current-branch
@@ -346,32 +421,117 @@ func (d *detailView) render() string {
 	return b.String()
 }
 
-// renderActionBar draws the action bar: all five agent buttons, always, in
-// agentOrder — launching any of them is no longer gated by the job's stage
-// (see app.go's agentForKey). "stage: <name>" is kept as an informational-only
-// hint of where the job's files say it is in the ideal workflow; it no longer
-// restricts which buttons appear.
-//
-// The "D" mark-done button is appended after a "│" separator and styled
-// differently (statusDoneStyle, not accentStyle) since it is not an agent
-// action — it archives the job via sc-done rather than launching a session.
-func (d *detailView) renderActionBar() string {
-	left := dimStyle.Render("stage: " + string(d.job.Stage()))
+// actionButton is one entry in the action bar: either an agent-launch button
+// or the "D" mark-done button (done == true). Both render in the same
+// "[key] Label" shape — see renderActionBar's doc comment for why that
+// unification matters.
+type actionButton struct {
+	key, label string
+	done       bool
+}
 
-	buttons := make([]string, 0, len(agentOrder))
+// renderActionBar draws the action bar: the job's stage (informational-only —
+// see below), then all six buttons — the five agents in agentOrder, always
+// shown regardless of stage (app.go's agentForKey is not stage-gated either),
+// plus "D" mark-done — in one consistent "[key] Label" format.
+//
+// Before this, the five agent buttons and the "[D] Done" button used visibly
+// different formatting (Done sat behind a "│" separator with extra spacing,
+// in a different style) — inconsistent enough to read as "5 buttons + a
+// separator + a 6th button", part of what made the bar feel like a wall.
+// Done still gets its own colour (statusDoneStyle, the same green used for
+// "done" status elsewhere) to flag that it's categorically different from
+// the five launch actions — it archives the job via sc-done rather than
+// starting a session — but the structural format (brackets, spacing,
+// grouping) is now identical across all six.
+//
+// "stage: <name>" stays purely informational: an at-a-glance hint of where
+// the job's files say it is in the ideal workflow. It no longer restricts
+// which buttons appear (launching any agent is not gated by stage).
+//
+// Narrow-width handling: this is designed against an 80-column baseline, and
+// there isn't room there for six full "[key] Label" buttons — "Product
+// Owner" alone is 18 characters; all six full labels plus stage add up to
+// around 100. Once the full-label line would overflow d.width, every
+// button's *label* — never its key, which must always stay reachable/
+// visible — is truncated to share whatever room remains, using the same "…"
+// convention truncate() (app.go) already applies to job titles. Wrapping to
+// a second line was the brief's other offered option; truncation was chosen
+// instead because a wrapped action bar would add a row the fixed chrome-row
+// budget in bodyHeight doesn't account for (it assumes a single-line action
+// bar) — the same kind of alt-screen-clipping risk
+// TestDetailBodyHeightShrinksForMultiLineStatus guards against for the
+// footer, without that guard existing here.
+func (d *detailView) renderActionBar() string {
+	stage := "stage: " + string(d.job.Stage())
+
+	buttons := make([]actionButton, 0, len(agentOrder)+1)
 	for _, a := range agentOrder {
 		m, ok := agentMeta[a]
 		if !ok {
-			// Unknown agent name — render it literally without a key.
-			buttons = append(buttons, "[?] "+a)
+			// Unknown agent name — render it literally without a bound key.
+			buttons = append(buttons, actionButton{key: "?", label: a})
 			continue
 		}
-		key := accentStyle.Render("[" + m.key + "]")
-		buttons = append(buttons, key+" "+m.display)
+		buttons = append(buttons, actionButton{key: m.key, label: m.display})
+	}
+	buttons = append(buttons, actionButton{key: "D", label: "Done", done: true})
+
+	w := d.width
+	if w == 0 {
+		w = 72
+	}
+	const sep = "  "
+
+	// Fixed cost: stage, every button's "[key] " prefix, and the separators
+	// between all elements — everything but the label text, which is the
+	// only part allowed to shrink.
+	fixed := len(stage)
+	for _, btn := range buttons {
+		fixed += len(sep) + len("["+btn.key+"] ")
+	}
+	labelBudget := w - fixed
+	perLabel := 0
+	if len(buttons) > 0 {
+		perLabel = labelBudget / len(buttons)
 	}
 
-	doneButton := statusDoneStyle.Render("[D]") + " " + statusDoneStyle.Render("Done")
-	return left + "   " + strings.Join(buttons, "    ") + "    " + dimStyle.Render("│") + "  " + doneButton
+	var b strings.Builder
+	b.WriteString(dimStyle.Render(stage))
+	for _, btn := range buttons {
+		label := btn.label
+		if perLabel < len(label) {
+			label = truncateToWidth(label, perLabel)
+		}
+		keyStyle := accentStyle
+		if btn.done {
+			keyStyle = statusDoneStyle
+		}
+		b.WriteString(sep)
+		b.WriteString(keyStyle.Render("[" + btn.key + "]"))
+		if label != "" {
+			b.WriteString(" ")
+			if btn.done {
+				b.WriteString(statusDoneStyle.Render(label))
+			} else {
+				b.WriteString(label)
+			}
+		}
+	}
+	return b.String()
+}
+
+// truncateToWidth is truncate() (app.go) with a floor of 0 instead of
+// truncate's own "n <= 0 leaves s unchanged" behaviour: the action bar's
+// narrow-width handling can legitimately compute a zero or negative label
+// budget (six buttons is a lot to fit at 80 columns), in which case the
+// label should disappear entirely — leaving only the reachable "[key]" — not
+// render at full length as truncate(s, 0) would.
+func truncateToWidth(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return truncate(s, n)
 }
 
 // renderTabs draws [brief] tasks implementation verdict with the active tab
@@ -397,10 +557,18 @@ func (d *detailView) renderTabs(width int) string {
 	return bar
 }
 
+// renderFooter draws the scroll position, key hint, and (when set) the
+// status message — a status must coexist with the hint, not replace it, so a
+// user who just pressed "ctrl+r" or launched an agent still knows what keys
+// exist.
+//
+// The one exception is a multi-line status (cmdErrorText's resolution
+// diagnosis for a failed host-command lookup — see footerLines): that's a
+// distinct, already-tested diagnostic case, not the "lost the legend" problem
+// this coexistence handles, and appending the (fairly long) hint to it risks
+// overflowing narrow terminals on top of an already multi-line block. It
+// keeps replacing the hint entirely, same as before.
 func (d *detailView) renderFooter() string {
-	if d.status != "" {
-		return statusStyle.Render(d.status)
-	}
 	pos := d.current().viewer.Position()
 	hint := "tab/1-4 files · j/k scroll"
 	if d.current().editable {
@@ -414,5 +582,12 @@ func (d *detailView) renderFooter() string {
 		hint += " · c switch branch"
 	}
 	hint += " · agent keys above · D mark done · ctrl+r refresh · esc back · q quit"
+
+	if d.status != "" {
+		if strings.Contains(d.status, "\n") {
+			return statusStyle.Render(d.status)
+		}
+		return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint)) + "  " + statusStyle.Render(d.status)
+	}
 	return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint))
 }

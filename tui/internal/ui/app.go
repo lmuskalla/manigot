@@ -269,28 +269,108 @@ func (a *App) indexOfJob(id string) int {
 
 // --- List view --------------------------------------------------------------
 
-// recentActivityCount is how many commits the list header's read-only
-// "recent activity" strip shows. Fixed at 1 (the brief's own named fallback,
-// "last commit only") rather than the originally-implemented 5: at 5 entries
-// the strip pushed every job row down by up to 5 lines versus the header's
-// pre-existing footprint, which the brief explicitly disallows ("must not
-// ... push down the job rows"). At 1 entry, renderList reclaims the header's
-// existing blank spacer line for the activity line instead of adding a new
-// one, so the strip adds zero net lines versus the header before this
-// feature existed.
-const recentActivityCount = 1
+// recentActivityFloor / recentActivityCeiling bound how many commits the list
+// header's read-only "recent activity" strip can show. The floor (1) is the
+// strip's original, pre-existing footprint (see renderList's header: a
+// non-empty strip reclaims the header's blank spacer line rather than adding
+// a new one, so even the floor costs zero net lines versus the header before
+// this feature existed). The ceiling (5) is fixed at fetch time regardless of
+// how many will actually render — see recentActivityShown for the part of
+// this that scales with available room.
+const (
+	recentActivityFloor   = 1
+	recentActivityCeiling = 5
+)
 
-// refreshRecentCommits re-reads the recent-activity strip from git. Like
-// currentBranch, an error (e.g. a non-repo project) degrades to an empty
+// refreshRecentCommits re-reads the recent-activity strip from git, always
+// fetching up to the ceiling. How many of those cached commits actually get
+// rendered is decided later, at render time, by recentActivityShown — not
+// here. This split matters because refreshRecentCommits runs before the first
+// tea.WindowSizeMsg ever arrives (see NewApp), when a.width/a.height are still
+// zero; sizing the *fetch* against that would size against a stale terminal
+// height on first render. Fetching a fixed ceiling and deciding the display
+// count at render time (once layout is known) avoids that hazard.
+//
+// Like currentBranch, an error (e.g. a non-repo project) degrades to an empty
 // strip rather than surfacing in the status line — this is decorative,
 // optional header content, not an action the user asked for.
 func (a *App) refreshRecentCommits() {
-	commits, err := git.RecentCommits(a.root, recentActivityCount)
+	commits, err := git.RecentCommits(a.root, recentActivityCeiling)
 	if err != nil {
 		a.recentCommits = nil
 		return
 	}
 	a.recentCommits = commits
+}
+
+// recentActivityShown returns how many of a.recentCommits should actually be
+// rendered, given the current terminal height and job count. It scales
+// between recentActivityFloor and recentActivityCeiling based on how much
+// vertical room is spare, per the brief's resolution: a full list keeps the
+// floor's 1-line footprint (never pushing job rows down further than the
+// pre-existing header already did); a sparse list shows more, up to the
+// ceiling.
+//
+// The fixed chrome outside the job rows and the strip itself — title line,
+// column header, divider, blank line before the footer, footer — is 5 rows,
+// mirroring the same kind of budget detailView.bodyHeight documents for the
+// detail view. spare is what's left of the terminal height once that chrome
+// and every job row are accounted for.
+//
+// a.height == 0 (an App that has never received a tea.WindowSizeMsg, e.g.
+// some existing tests) falls back to the floor, the same kind of guard
+// renderList already applies to a.width == 0.
+func (a *App) recentActivityShown() int {
+	if a.height == 0 {
+		return recentActivityFloor
+	}
+	spare := a.height - 5 - len(a.jobs)
+	n := clamp(spare, recentActivityFloor, recentActivityCeiling)
+	if n > len(a.recentCommits) {
+		// Fewer real commits than the computed count — render whatever's
+		// available, same graceful-degrade rule renderRecentActivity already
+		// applied before this task.
+		n = len(a.recentCommits)
+	}
+	return n
+}
+
+// clamp bounds n to [lo, hi].
+func clamp(n, lo, hi int) int {
+	if n < lo {
+		return lo
+	}
+	if n > hi {
+		return hi
+	}
+	return n
+}
+
+// spareHeaderRoom reports how many more header lines TASK-2's secondary fill
+// (renderJobSummary) can add without pushing the job rows down, once the
+// recent-activity strip has claimed its actual rendered footprint.
+//
+// renderList's activity block always uses at least 1 line (either the strip
+// itself, or the blank spacer line it falls back to when there's nothing to
+// show — see renderList), so the strip's real footprint is
+// max(recentActivityShown(), 1), not recentActivityShown() alone (which can
+// be 0 when there are no commits at all). Returns 0 — never negative, never
+// computed — when a.height is unknown (never resized), matching the same
+// "no real layout to measure against" fallback recentActivityShown uses.
+func (a *App) spareHeaderRoom() int {
+	if a.height == 0 {
+		return 0
+	}
+	spare := a.height - 5 - len(a.jobs)
+	stripLines := a.recentActivityShown()
+	if stripLines < 1 {
+		stripLines = 1
+	}
+	room := spare - stripLines
+	if room < 0 {
+		room = 0
+	}
+	return room
 }
 
 // refreshJobs re-reads the job list from disk (job.Discover: one os.ReadDir
@@ -647,14 +727,24 @@ func (a *App) renderList() string {
 		b.WriteString(accentStyle.Render(a.currentBranch))
 	}
 	b.WriteString("\n")
-	// The activity strip takes over the header's existing blank spacer line
-	// rather than adding lines after it, so a non-empty strip doesn't push
-	// the column header (and every job row below it) down any further than
-	// the pre-existing blank-line header already did.
+	// The activity strip's line count is recentActivityShown() — computed from
+	// the actual spare room below the job rows, so it can grow past the
+	// header's original one blank spacer line on a sparse list without ever
+	// pushing the column header (and every job row below it) down further
+	// than that spare room already allowed. A one-line (or empty) strip keeps
+	// exactly the pre-existing footprint: the single line reclaims the
+	// header's blank spacer rather than adding to it.
 	if activity := a.renderRecentActivity(w); activity != "" {
 		b.WriteString(activity)
 	} else {
 		b.WriteString("\n")
+	}
+	// Secondary empty-space fill (TASK-2): only rendered when the strip above
+	// still leaves spare header room after claiming its actual footprint —
+	// see spareHeaderRoom. Adds at most one line, so it can never push the
+	// job rows down either.
+	if summary := a.renderJobSummary(); summary != "" {
+		b.WriteString(summary)
 	}
 
 	// Column header row.
@@ -668,10 +758,17 @@ func (a *App) renderList() string {
 	b.WriteString(dimStyle.Render(strings.Repeat("─", w)))
 	b.WriteString("\n")
 
-	// Rows / empty state.
+	// Rows / empty state. The most prominent text a zero-job user sees must
+	// be the path to creating their first job ("n"), not the path to
+	// quitting — so the key itself is emphasized (accentStyle, the same
+	// treatment the header gives the current branch) and "quit" isn't
+	// mentioned at all here; it's still in the footer hint below like every
+	// other key, just not competing for attention in this dedicated message.
 	if len(a.jobs) == 0 {
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("  No jobs yet. Press q to quit."))
+		b.WriteString(dimStyle.Render("  No jobs yet — press "))
+		b.WriteString(accentStyle.Render("n"))
+		b.WriteString(dimStyle.Render(" to create your first one."))
 		b.WriteString("\n")
 	} else {
 		for i, j := range a.jobs {
@@ -689,18 +786,30 @@ func (a *App) renderList() string {
 }
 
 // renderRecentActivity renders the list header's read-only "recent activity"
-// strip: up to recentActivityCount commits across all local branches, one
+// strip: up to recentActivityShown() commits across all local branches, one
 // compact dimmed line each, most-recent first (see git.RecentCommits for the
 // dedup/attribution rules). Renders nothing — not even a heading — when
 // a.recentCommits is empty (a fresh repo, or refreshRecentCommits degrading a
-// non-repo project's error away), matching the rest of the header's
-// optional-content handling. This is fixed and non-interactive: no
-// scrolling, no drill-down, per the brief's explicit rejection of a git log
-// viewer.
+// non-repo project's error away) or when recentActivityShown() computes zero,
+// matching the rest of the header's optional-content handling. This is fixed
+// and non-interactive: no scrolling, no drill-down, per the brief's explicit
+// rejection of a git log viewer.
+//
+// Deliberately no separate "recent activity" label line even when several
+// commits are shown: recentActivityShown()'s line budget is exactly the
+// commit count (see its doc comment), so a label would either overrun the
+// budget (risking pushing job rows down, the one thing this strip must never
+// do) or eat one commit slot to stay within it. The existing dim styling
+// plus the strip's fixed position directly under the branch line is the
+// grouping cue instead — spacing/color, not a border or a heading, per the
+// brief's "no boxes-within-boxes, no decorative borders" rule.
 func (a *App) renderRecentActivity(w int) string {
-	if len(a.recentCommits) == 0 {
+	n := a.recentActivityShown()
+	if n == 0 {
 		return ""
 	}
+	commits := a.recentCommits[:n]
+
 	const hashW, relW, branchW = 7, 10, 16
 	// Subject gets whatever's left after the fixed-width columns and their
 	// spacing, same truncate() job titles use so a long commit message can't
@@ -710,7 +819,7 @@ func (a *App) renderRecentActivity(w int) string {
 		subjectW = 12
 	}
 	var b strings.Builder
-	for _, c := range a.recentCommits {
+	for _, c := range commits {
 		line := pad(c.ShortHash, hashW) + "  " +
 			pad(truncate(c.Subject, subjectW), subjectW) + "  " +
 			pad(c.RelTime, relW) + "  " +
@@ -719,6 +828,33 @@ func (a *App) renderRecentActivity(w int) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// renderJobSummary renders the header's secondary empty-space fill (TASK-2):
+// a compact "<n> open · <n> done" counts line. It's the fallback for the
+// case the recent-activity strip alone can't fill — a sparse list whose
+// strip is already at its ceiling, or a repo with few/no real commits to
+// show — costs nothing to compute (a.jobs is already fully loaded) and needs
+// no new data source, unlike the brief's other offered option (a per-job
+// summary pane).
+//
+// Only renders when spareHeaderRoom reports room left after the strip's
+// actual footprint, and only for a non-empty list — an empty list gets its
+// own dedicated invitation (TASK-10, renderList's zero-jobs branch), where a
+// "0 open · 0 done" line would just be noise ahead of it.
+func (a *App) renderJobSummary() string {
+	if len(a.jobs) == 0 || a.spareHeaderRoom() < 1 {
+		return ""
+	}
+	var open, done int
+	for _, j := range a.jobs {
+		if j.Status == "done" {
+			done++
+		} else {
+			open++
+		}
+	}
+	return dimStyle.Render(fmt.Sprintf("%d open · %d done", open, done)) + "\n"
 }
 
 // renderJobRow renders one job as a single (possibly highlighted) line.
@@ -750,10 +886,13 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 }
 
 // footer is the bottom help/status line.
+// footer renders the dim key hint and, when a.status is set (e.g. right
+// after "ctrl+r"), the status alongside it rather than replacing it — a
+// status message must never leave the user not knowing what keys exist.
 func (a *App) footer() string {
 	hint := "↑/↓ navigate · enter view · o quick · n new · m main · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
-		return statusStyle.Render(a.status)
+		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
 	}
 	return dimStyle.Render(hint)
 }

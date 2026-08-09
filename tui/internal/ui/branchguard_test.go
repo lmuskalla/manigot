@@ -65,7 +65,7 @@ func TestBranchGuardBlocksDone(t *testing.T) {
 func TestBranchGuardBlocksAgentLaunch(t *testing.T) {
 	a := mkOffBranchApp(t)
 
-	_, cmd := a.updateDetail(keyMsg("d")) // "d" = developer
+	_, cmd := a.updateDetail(keyMsg("v")) // "v" = developer (TASK-8: renamed from "d")
 	if cmd != nil {
 		t.Error("expected no tea.Cmd (agent launch) for an off-branch job")
 	}
