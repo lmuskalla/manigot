@@ -354,9 +354,9 @@ func (d *detailView) bodyWidth() int {
 }
 
 func (d *detailView) bodyHeight() int {
-	// title(1) + tab bar(1) + agents line(1) + stage/done line(1) + blank(1) + body + blank(1) + footer(footerLines)
-	// = (6 + footerLines) chrome rows around the body.
-	h := d.height - 6 - d.footerLines()
+	// title(1) + blank(1) + tab bar(1) + agents line(1) + stage/done line(1) + blank(1) + body + blank(1) + footer(footerLines)
+	// = (7 + footerLines) chrome rows around the body.
+	h := d.height - 7 - d.footerLines()
 	if h < 1 {
 		h = 1
 	}
@@ -401,7 +401,7 @@ func (d *detailView) render() string {
 		}
 		b.WriteString(dimStyle.Render(branchMeta))
 	}
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Tab bar ("docs:" line).
 	b.WriteString(d.renderTabs(w))

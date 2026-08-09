@@ -118,7 +118,14 @@ type checkoutMsg struct {
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		a.width, a.height = msg.Width, msg.Height
+		w, h := msg.Width-2*uiPaddingX, msg.Height-2*uiPaddingY
+		if w < 1 {
+			w = 1
+		}
+		if h < 1 {
+			h = 1
+		}
+		a.width, a.height = w, h
 		if a.detail != nil {
 			a.detail.resize(a.width, a.height)
 		}
@@ -219,18 +226,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-// View renders the active view.
+// View renders the active view, padded out to the terminal edge — see
+// uiPaddingStyle.
 func (a *App) View() string {
+	var content string
 	switch a.state {
 	case stateDetail:
-		return a.detail.render()
+		content = a.detail.render()
 	case stateNewJob:
-		return a.newJob.render()
+		content = a.newJob.render()
 	case stateSettings:
-		return a.settingsView.render()
+		content = a.settingsView.render()
 	default:
-		return a.renderList()
+		content = a.renderList()
 	}
+	return uiPaddingStyle.Render(content)
 }
 
 // selectedJob returns the job under the cursor, or false if the list is empty.
@@ -269,14 +279,11 @@ func (a *App) indexOfJob(id string) int {
 
 // --- List view --------------------------------------------------------------
 
-// recentActivityFloor / recentActivityCeiling bound how many commits the list
-// header's read-only "recent activity" strip can show. The floor (1) is the
-// strip's original, pre-existing footprint (see renderList's header: a
-// non-empty strip reclaims the header's blank spacer line rather than adding
-// a new one, so even the floor costs zero net lines versus the header before
-// this feature existed). The ceiling (5) is fixed at fetch time regardless of
-// how many will actually render — see recentActivityShown for the part of
-// this that scales with available room.
+// recentActivityFloor / recentActivityCeiling bound how many commits the
+// bottom-of-screen "recent activity" strip can show. The floor (1) is the
+// strip's minimum footprint. The ceiling (5) is fixed at fetch time
+// regardless of how many will actually render — see recentActivityShown for
+// the part of this that scales with available room.
 const (
 	recentActivityFloor   = 1
 	recentActivityCeiling = 5
@@ -284,9 +291,9 @@ const (
 
 // dashboardFixedChrome is the number of renderList rows that are always
 // present outside the job rows and the recent-activity strip's own variable
-// footprint: title line, "Recent commits" headline, the blank spacer before
-// the jobs section, "Jobs" headline, column header, divider, blank line
-// before the footer, and the footer itself.
+// footprint: title line, blank spacer beneath it, "jobs" headline, divider,
+// blank line before the footer, the footer itself, the blank spacer before
+// the git log section, and "log" headline.
 const dashboardFixedChrome = 8
 
 // refreshRecentCommits re-reads the recent-activity strip from git, always
@@ -319,11 +326,12 @@ func (a *App) refreshRecentCommits() {
 // ceiling.
 //
 // The fixed chrome outside the job rows and the strip itself — title line,
-// "Recent commits" headline, the blank spacer before the jobs section,
-// "Jobs" headline, column header, divider, blank line before the footer,
-// footer — is 8 rows, mirroring the same kind of budget detailView.bodyHeight
-// documents for the detail view. spare is what's left of the terminal height
-// once that chrome and every job row are accounted for.
+// blank spacer beneath it, "jobs" headline, divider, blank line before the
+// footer, footer, the blank spacer before the git log section, "log"
+// headline — is 8 rows, mirroring the same kind of budget
+// detailView.bodyHeight documents for the detail view. spare is what's left
+// of the terminal height once that chrome and every job row are accounted
+// for.
 //
 // a.height == 0 (an App that has never received a tea.WindowSizeMsg, e.g.
 // some existing tests) falls back to the floor, the same kind of guard
@@ -732,45 +740,10 @@ func (a *App) renderList() string {
 		title += " - on " + a.currentBranch
 	}
 	b.WriteString(titleStyle.Render(title))
-	b.WriteString("\n")
-
-	// Git log section.
-	b.WriteString(headerStyle.Render("Recent commits"))
-	b.WriteString("\n")
-	// The activity strip's line count is recentActivityShown() — computed from
-	// the actual spare room below the job rows, so it can grow past the
-	// header's original one blank spacer line on a sparse list without ever
-	// pushing the column header (and every job row below it) down further
-	// than that spare room already allowed. A one-line (or empty) strip keeps
-	// exactly the pre-existing footprint: the single line reclaims the
-	// header's blank spacer rather than adding to it.
-	if activity := a.renderRecentActivity(w); activity != "" {
-		b.WriteString(activity)
-	} else {
-		b.WriteString("\n")
-	}
-	// Secondary empty-space fill (TASK-2): only rendered when the strip above
-	// still leaves spare header room after claiming its actual footprint —
-	// see spareHeaderRoom. Adds at most one line, so it can never push the
-	// job rows down either.
-	if summary := a.renderJobSummary(); summary != "" {
-		b.WriteString(summary)
-	}
-
-	// Blank spacer between the git log section and the jobs section.
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Jobs section.
-	b.WriteString(headerStyle.Render("Jobs"))
-	b.WriteString("\n")
-
-	// Column header row.
-	header := headerStyle.Render(pad("ID", cols.id)) + "  " +
-		headerStyle.Render(pad("STATUS", cols.status)) + "  " +
-		headerStyle.Render(pad("TYPE", cols.typ)) + "  " +
-		headerStyle.Render(pad("DATE", cols.date)) + "  " +
-		headerStyle.Render("TITLE")
-	b.WriteString(header)
+	b.WriteString(headerStyle.Render("jobs"))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render(strings.Repeat("─", w)))
 	b.WriteString("\n")
@@ -798,6 +771,29 @@ func (a *App) renderList() string {
 	// Footer.
 	b.WriteString("\n")
 	b.WriteString(a.footer())
+
+	// Git log section: kept below the footer, out of the way, since it's
+	// read-only supplementary info rather than something the job list
+	// depends on.
+	b.WriteString("\n\n")
+	b.WriteString(headerStyle.Render("log"))
+	b.WriteString("\n")
+	// The activity strip's line count is recentActivityShown() — computed
+	// from the actual spare room the terminal height leaves once the fixed
+	// chrome and every job row are accounted for, so it can grow past its
+	// one-line floor on a sparse list without ever making the total render
+	// taller than the terminal.
+	if activity := a.renderRecentActivity(w); activity != "" {
+		b.WriteString(activity)
+	} else {
+		b.WriteString("\n")
+	}
+	// Secondary empty-space fill (TASK-2): only rendered when the strip above
+	// still leaves spare room after claiming its actual footprint — see
+	// spareHeaderRoom.
+	if summary := a.renderJobSummary(); summary != "" {
+		b.WriteString(summary)
+	}
 
 	return b.String()
 }
