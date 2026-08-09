@@ -42,7 +42,7 @@ instead of appending after it. Verified this is not just a smaller version of
 the same bug but an actual fix of the "must not push job rows down"
 constraint:
   - Read `renderList` (`tui/internal/ui/app.go:627-689`) and confirmed the
-    header is always exactly one "safecode ... branch" line + one
+    header is always exactly one "manigot ... branch" line + one
     spacer-or-activity line before the column header, in both the
     empty-strip and non-empty-strip cases.
   - Diffed against the pre-TASK-5 baseline (`git show 70d635f:.../app.go`):

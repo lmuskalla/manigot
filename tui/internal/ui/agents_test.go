@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // mkStageJob writes just enough files under a fresh job dir to land the job

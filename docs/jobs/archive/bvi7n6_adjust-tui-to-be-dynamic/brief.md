@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-The TUI currently expects soft links to safecode, new-job, etc. However, first of all, not everybody wants to do the ln -s route. Second of all, if they were, new-job would be a way too generic command. It needs to be safecode-specific. E.g. I'm currently using ~/.zshrc aliases resulting in sc, sc-job, sc-done.
+The TUI currently expects soft links to manigot, new-job, etc. However, first of all, not everybody wants to do the ln -s route. Second of all, if they were, new-job would be a way too generic command. It needs to be manigot-specific. E.g. I'm currently using ~/.zshrc aliases resulting in sc, mg-job, mg-done.
 
 ## Why
 

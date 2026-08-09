@@ -54,7 +54,7 @@ TASK-3: Show the current branch in the list header (additive only, no new
 interaction). Add a `currentBranch string` field to `App`, populate it in
 `NewApp` via `git.CurrentBranch`, and refresh it at every point the job list
 itself is refreshed (`refreshJobs`, the `checkoutMsg` success path, and
-`updateNewJob`'s post-`sc-job` refresh) so it can't go stale relative to the
+`updateNewJob`'s post-`mg-job` refresh) so it can't go stale relative to the
 `· <branch>` tags `renderJobRow` already prints. Render it in `renderList`'s
 header line, next to the existing "jobs in `<root>`" text. A `""` result
 (detached HEAD, or `job.Discover`'s non-repo fallback) should render nothing

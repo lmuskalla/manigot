@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-When you launch the TUI, you can select a job, create one, etc. However, sometimes you just want a quick change done without the whole workflow. Can we add a "Quick Job" option which just launches safecode without a specific agent or job from the TUI?
+When you launch the TUI, you can select a job, create one, etc. However, sometimes you just want a quick change done without the whole workflow. Can we add a "Quick Job" option which just launches manigot without a specific agent or job from the TUI?
 
 ## Why
 

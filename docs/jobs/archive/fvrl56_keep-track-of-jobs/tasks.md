@@ -24,7 +24,7 @@ branch mismatch they refuse and point the user at `c` instead of silently
 operating on the wrong branch's working tree.
 
 **Why this over the brief's other launch option** ("prepend `git checkout &&
-sc --agent …` to the spawned command"):
+mg --agent …` to the spawned command"):
 
 - One branch-switching mechanism, surfaced in the TUI's own status line where
   checkout errors (e.g. uncommitted changes blocking the switch) are actually

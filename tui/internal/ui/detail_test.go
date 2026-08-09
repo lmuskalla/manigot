@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // TestDetailBodyHeightShrinksForMultiLineStatus is a regression test for the
@@ -47,7 +47,7 @@ func TestDetailBodyHeightShrinksForMultiLineStatus(t *testing.T) {
 
 	// Simulate a failed agent-launch resolution, which produces a 3-line
 	// status (see cmdErrorText / resolve.NotFoundError).
-	d.setStatus("error: sc-job not found\ntried: a, b\nfix:   set $SAFECODE_JOB_BIN")
+	d.setStatus("error: mg-job not found\ntried: a, b\nfix:   set $MANIGOT_JOB_BIN")
 
 	multiLineLines := strings.Split(d.render(), "\n")
 	if len(multiLineLines) > height {
@@ -56,7 +56,7 @@ func TestDetailBodyHeightShrinksForMultiLineStatus(t *testing.T) {
 
 	// The fix line must actually be present in the rendered output, not just
 	// in d.status — i.e. it must not have been truncated by the viewport.
-	if !strings.Contains(d.render(), "fix:   set $SAFECODE_JOB_BIN") {
+	if !strings.Contains(d.render(), "fix:   set $MANIGOT_JOB_BIN") {
 		t.Errorf("rendered view is missing the fix line entirely")
 	}
 }
@@ -522,7 +522,7 @@ func TestDetailFooterMultiLineStatusStillReplacesHint(t *testing.T) {
 	}
 
 	d := newDetailView(jobs[0], 80, 24)
-	d.setStatus("error: sc-job not found\ntried: a, b\nfix:   set $SAFECODE_JOB_BIN")
+	d.setStatus("error: mg-job not found\ntried: a, b\nfix:   set $MANIGOT_JOB_BIN")
 
 	footer := d.renderFooter()
 	if strings.Contains(footer, "q quit") {

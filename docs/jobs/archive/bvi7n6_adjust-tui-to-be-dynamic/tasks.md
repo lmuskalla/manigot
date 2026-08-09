@@ -13,15 +13,15 @@ Two separate problems, both rooted in the same assumption:
 
 1. **Hardcoded command names.** The TUI resolves host commands by literal name
    on `$PATH`: `hostcmd.NewJob` does `exec.LookPath("new-job")`, and
-   `launch.shellCommand` builds the literal string `safecode --agent … --job …`.
+   `launch.shellCommand` builds the literal string `manigot --agent … --job …`.
    If a user installed the launchers under any other name — or via shell
-   aliases (`sc`, `sc-job`, `sc-done`) — the TUI cannot find them.
+   aliases (`mg`, `mg-job`, `mg-done`) — the TUI cannot find them.
 2. **`new-job` is too generic a global command name.** A tool that installs a
    binary called `new-job` into `/usr/local/bin` is squatting on a name that
-   says nothing about safecode. Same for `finish-job`.
+   says nothing about manigot. Same for `finish-job`.
 
 **Critical technical constraint the developer must know:** shell aliases
-(`alias sc-job=…` in `~/.zshrc`) are *not* reachable from the TUI. Aliases exist
+(`alias mg-job=…` in `~/.zshrc`) are *not* reachable from the TUI. Aliases exist
 only in interactive shells; `exec.Command` and even `bash -lc` do not expand
 them. So "support the user's aliases" cannot be implemented as alias lookup.
 The dynamic resolution must go through env vars, config, or direct script paths.
@@ -32,10 +32,10 @@ to find the real scripts.
 
 | script | canonical name | short name | legacy name |
 |---|---|---|---|
-| `scripts/run.sh` | `safecode` | *(see Q1)* | — |
-| `scripts/new-job.sh` | `safecode-job` | `sc-job` | `new-job` |
-| `scripts/finish-job.sh` | `safecode-done` | `sc-done` | `finish-job` |
-| `scripts/safecode-tui.sh` | `safecode-tui` | *(see Q1)* | — |
+| `scripts/run.sh` | `manigot` | *(see Q1)* | — |
+| `scripts/new-job.sh` | `manigot-job` | `mg-job` | `new-job` |
+| `scripts/finish-job.sh` | `manigot-done` | `mg-done` | `finish-job` |
+| `scripts/manigot-tui.sh` | `manigot-tui` | *(see Q1)* | — |
 
 Both the canonical and the short name are first-class: `make install` creates
 both, and the resolver accepts both. Legacy names stay in the resolver's
@@ -43,11 +43,11 @@ lookup order only, so existing installs keep working.
 
 ## Open questions
 
-- **Q1 — short names for the other two commands.** `sc` for `safecode` and
-  `sc-tui` for `safecode-tui` would be symmetrical, and the brief mentions
-  `sc` as an existing personal alias — but you only specified `sc-job` and
-  `sc-done`. `sc` is a short, collision-prone name to claim in `/usr/local/bin`.
-  **Not guessing.** Tasks below install `sc-job`/`sc-done` only; adding `sc`
+- **Q1 — short names for the other two commands.** `mg` for `manigot` and
+  `mg-tui` for `manigot-tui` would be symmetrical, and the brief mentions
+  `mg` as an existing personal alias — but you only specified `mg-job` and
+  `mg-done`. `mg` is a short, collision-prone name to claim in `/usr/local/bin`.
+  **Not guessing.** Tasks below install `mg-job`/`mg-done` only; adding `mg`
   later is a one-line change to TASK-10.
 - **Q2 — back-compat.** Do `new-job` / `finish-job` need a deprecation warning
   when invoked under the legacy name, or is silent acceptance enough? Tasks
@@ -92,7 +92,7 @@ Rebuilding section.
 
 ### Main work
 
-TASK-1: Add a `resolve` package to the TUI that locates a safecode host command
+TASK-1: Add a `resolve` package to the TUI that locates a manigot host command
 via an ordered strategy — explicit env override → canonical name on `$PATH` →
 short name on `$PATH` → legacy name on `$PATH` → repo-relative script
 fallback — and returns an absolute path plus a description of how it was found.
@@ -102,22 +102,22 @@ fallback — and returns an absolute path plus a description of how it was found
      path logic that is easy to unit test.
 
 TASK-2: Define the env var contract for overrides and document it in the
-package doc comment: `SAFECODE_BIN`, `SAFECODE_JOB_BIN`, `SAFECODE_DONE_BIN`,
-plus `SAFECODE_HOME` for the repo-relative fallback.
+package doc comment: `manigot_BIN`, `manigot_JOB_BIN`, `manigot_DONE_BIN`,
+plus `manigot_HOME` for the repo-relative fallback.
      files: tui/internal/resolve/resolve.go
      depends: TASK-1
      risk: low — naming/documentation only, but it is a public contract, so
      changing it later is a breaking change for users.
 
-TASK-3: Make `scripts/safecode-tui.sh` export `SAFECODE_HOME` (it already
-computes `ROOT`) so the TUI can fall back to `$SAFECODE_HOME/scripts/*.sh` when
+TASK-3: Make `scripts/manigot-tui.sh` export `manigot_HOME` (it already
+computes `ROOT`) so the TUI can fall back to `$manigot_HOME/scripts/*.sh` when
 nothing is on `$PATH`.
-     files: scripts/safecode-tui.sh
+     files: scripts/manigot-tui.sh
      depends: TASK-2
      risk: low — one exported variable in an existing wrapper.
 
 TASK-4: Add a secondary fallback in the TUI that derives the repo root from
-`os.Executable()` so a directly-invoked `bin/safecode-tui` (no wrapper script)
+`os.Executable()` so a directly-invoked `bin/manigot-tui` (no wrapper script)
 still finds `scripts/`.
      files: tui/internal/resolve/resolve.go, tui/main.go
      depends: TASK-3
@@ -131,8 +131,8 @@ TASK-5: Rewrite `hostcmd.NewJob` to call the resolved absolute path instead of
      risk: low — single call site, existing test already covers the
      not-found path and needs updating to the new error text.
 
-TASK-6: Rewrite `launch.shellCommand` to embed the resolved absolute safecode
-path (still shell-quoted) rather than the bare word `safecode`.
+TASK-6: Rewrite `launch.shellCommand` to embed the resolved absolute manigot
+path (still shell-quoted) rather than the bare word `manigot`.
      files: tui/internal/launch/launch.go, tui/internal/launch/launch_test.go
      depends: TASK-1
      risk: medium — the string is interpolated into `osascript` and
@@ -145,7 +145,7 @@ cannot be resolved, listing the strategies tried and the env var to set.
      risk: low — user-facing text only.
 
 TASK-8: Populate the resolver's candidate lists with the settled names —
-`safecode-job` / `sc-job` / `new-job` and `safecode-done` / `sc-done` /
+`manigot-job` / `mg-job` / `new-job` and `manigot-done` / `mg-done` /
 `finish-job` — in that priority order.
      files: tui/internal/resolve/resolve.go
      depends: TASK-1
@@ -153,16 +153,16 @@ TASK-8: Populate the resolver's candidate lists with the settled names —
      installation; the legacy fallback must be explicit and tested.
 
 TASK-9: Update the usage headers and self-referencing usage/error strings
-inside the scripts (`new-job "…"` → `safecode-job "…"`, `finish-job <id>` →
-`safecode-done <id>`), including `new-job.sh:15` and `finish-job.sh:14`.
+inside the scripts (`new-job "…"` → `manigot-job "…"`, `finish-job <id>` →
+`manigot-done <id>`), including `new-job.sh:15` and `finish-job.sh:14`.
      files: scripts/new-job.sh, scripts/finish-job.sh
      depends: TASK-8
      risk: low — comments and usage strings only; the script *filenames* stay
      as they are, only the installed command names change.
 
 TASK-10: Add `make install` / `make uninstall` targets that symlink both the
-canonical and short names (`safecode-job` + `sc-job`, `safecode-done` +
-`sc-done`, `safecode`, `safecode-tui`) under a configurable `PREFIX`, and make
+canonical and short names (`manigot-job` + `mg-job`, `manigot-done` +
+`mg-done`, `manigot`, `manigot-tui`) under a configurable `PREFIX`, and make
 `make tui` print the new install hint.
      files: Makefile
      depends: TASK-8, Q3
@@ -200,10 +200,10 @@ fallback) using a temp dir on `$PATH`.
 ## Explicitly out of scope
 
 - Windows support (already excluded for the TUI generally).
-- Converting `safecode` into a subcommand dispatcher, unless Q1 is answered
+- Converting `manigot` into a subcommand dispatcher, unless Q1 is answered
   that way — in which case this task list needs revising, not extending.
 - Any change to how the container itself is launched or authenticated.
-- A config file (`~/.config/safecode/config.toml`). Env vars cover the stated
+- A config file (`~/.config/manigot/config.toml`). Env vars cover the stated
   need; a config file is a bigger surface for no described benefit.
 
 ## Suggested order
@@ -214,5 +214,5 @@ inside the container, and 0A requires a `make rebuild` before the next session.
 Then TASK-1 → 2 → 3 → 4 → 5 → 6 → 7, the rename block 8 → 9, the install and
 docs block 10 → 11 → 12 → 13, and TASK-14 last.
 
-Q1 (whether to also install `sc` and `sc-tui`) only affects TASK-10 and
+Q1 (whether to also install `mg` and `mg-tui`) only affects TASK-10 and
 TASK-11, so it does not block the start of the work.

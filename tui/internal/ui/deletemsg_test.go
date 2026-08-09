@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // TestDeleteMsgSuccessReturnsToList verifies that a clean (err == nil)
@@ -116,8 +116,8 @@ func TestDeleteMsgErrorSurfacesAndReturnsToList(t *testing.T) {
 func TestDeleteCmdResolutionFailureSurfacesNotFoundError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
-	t.Setenv("SAFECODE_DELETE_BIN", "")
-	t.Setenv("SAFECODE_HOME", "")
+	t.Setenv("MANIGOT_DELETE_BIN", "")
+	t.Setenv("MANIGOT_HOME", "")
 
 	root := t.TempDir()
 	jobDir := filepath.Join(root, "docs", "jobs", "ab0004_w")
@@ -131,7 +131,7 @@ func TestDeleteCmdResolutionFailureSurfacesNotFoundError(t *testing.T) {
 
 	_, err := a.deleteCmd()
 	if err == nil {
-		t.Fatal("expected a resolution error when sc-delete cannot be found")
+		t.Fatal("expected a resolution error when mg-delete cannot be found")
 	}
 	if got := cmdErrorText(err); got == "error: "+err.Error() {
 		t.Errorf("expected the NotFoundError diagnosis branch of cmdErrorText, got the plain one: %q", got)
@@ -140,7 +140,7 @@ func TestDeleteCmdResolutionFailureSurfacesNotFoundError(t *testing.T) {
 
 // TestDeleteKeyDispatchesDeleteCmd confirms the "delete" key in the detail
 // view routes to deleteCmd (via updateDetail) rather than falling through to
-// the agent-key dispatch or being ignored — a real sc-delete is unlikely to
+// the agent-key dispatch or being ignored — a real mg-delete is unlikely to
 // be resolvable in the test environment, so this only checks that *a* cmd was
 // produced (or, in the resolvable case, that a status was set), not the
 // specific outcome; TestDeleteCmdResolutionFailureSurfacesNotFoundError and
@@ -158,8 +158,8 @@ func TestDeleteKeyDispatchesDeleteCmd(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("PATH", dir)
-			t.Setenv("SAFECODE_DELETE_BIN", "")
-			t.Setenv("SAFECODE_HOME", "")
+			t.Setenv("MANIGOT_DELETE_BIN", "")
+			t.Setenv("MANIGOT_HOME", "")
 
 			root := t.TempDir()
 			jobDir := filepath.Join(root, "docs", "jobs", "ab0005_v")
@@ -174,7 +174,7 @@ func TestDeleteKeyDispatchesDeleteCmd(t *testing.T) {
 
 			_, cmd := a.updateDetail(key)
 			if cmd != nil {
-				t.Errorf("expected no follow-up cmd when sc-delete cannot be resolved, got one")
+				t.Errorf("expected no follow-up cmd when mg-delete cannot be resolved, got one")
 			}
 			if a.detail.status == "" {
 				t.Error("expected a status message reporting the resolution failure")

@@ -28,16 +28,16 @@ func isolate(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
-	t.Setenv("SAFECODE_HOME", "")
+	t.Setenv("MANIGOT_HOME", "")
 	t.Setenv("TEST_BIN_OVERRIDE", "")
 	return dir
 }
 
 func testSpec() Spec {
 	return Spec{
-		Label:  "safecode-test",
+		Label:  "manigot-test",
 		EnvVar: "TEST_BIN_OVERRIDE",
-		Names:  []string{"safecode-test", "sc-test", "legacy-test"},
+		Names:  []string{"manigot-test", "sc-test", "legacy-test"},
 		Script: "scripts/test.sh",
 	}
 }
@@ -78,7 +78,7 @@ func TestResolveEnvOverrideWithBareName(t *testing.T) {
 // $PATH — otherwise a typo in the env var is invisible.
 func TestResolveEnvOverrideBrokenDoesNotFallThrough(t *testing.T) {
 	dir := isolate(t)
-	writeExec(t, dir, "safecode-test") // would resolve if we fell through
+	writeExec(t, dir, "manigot-test") // would resolve if we fell through
 	t.Setenv("TEST_BIN_OVERRIDE", filepath.Join(dir, "does-not-exist"))
 
 	_, err := Resolve(testSpec())
@@ -105,7 +105,7 @@ func TestResolveEnvOverrideIgnoresNonExecutable(t *testing.T) {
 
 func TestResolveNameOnPath(t *testing.T) {
 	dir := isolate(t)
-	want := writeExec(t, dir, "safecode-test")
+	want := writeExec(t, dir, "manigot-test")
 
 	got, err := Resolve(testSpec())
 	if err != nil {
@@ -114,16 +114,16 @@ func TestResolveNameOnPath(t *testing.T) {
 	if got.Path != want {
 		t.Errorf("Path = %q, want %q", got.Path, want)
 	}
-	if got.How != "safecode-test on $PATH" {
+	if got.How != "manigot-test on $PATH" {
 		t.Errorf("How = %q", got.How)
 	}
 }
 
-func TestResolveScriptFallbackViaSafecodeHome(t *testing.T) {
+func TestResolveScriptFallbackViamanigotHome(t *testing.T) {
 	isolate(t)
 	home := t.TempDir()
 	want := writeExec(t, filepath.Join(home, "scripts"), "test.sh")
-	t.Setenv("SAFECODE_HOME", home)
+	t.Setenv("MANIGOT_HOME", home)
 
 	got, err := Resolve(testSpec())
 	if err != nil {
@@ -149,7 +149,7 @@ func TestResolveNotFound(t *testing.T) {
 		t.Errorf("error should say 'not found'; got: %v", err)
 	}
 	// Every strategy must be reported, so the user can see what was checked.
-	for _, want := range []string{"TEST_BIN_OVERRIDE", "safecode-test", "sc-test", "legacy-test", "SAFECODE_HOME"} {
+	for _, want := range []string{"TEST_BIN_OVERRIDE", "manigot-test", "sc-test", "legacy-test", "MANIGOT_HOME"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should mention %q; got: %v", want, err)
 		}
@@ -191,7 +191,7 @@ func TestExecutableRootsOutsideCheckout(t *testing.T) {
 
 func TestSeedHomeRespectsExistingValue(t *testing.T) {
 	isolate(t)
-	t.Setenv("SAFECODE_HOME", "/somewhere/explicit")
+	t.Setenv("MANIGOT_HOME", "/somewhere/explicit")
 	if got := SeedHome(); got != "/somewhere/explicit" {
 		t.Errorf("SeedHome() = %q, want the pre-set value", got)
 	}
@@ -210,7 +210,7 @@ func TestHome(t *testing.T) {
 		t.Errorf("Home() = %q, want empty when nothing is known", got)
 	}
 	root := makeCheckout(t)
-	t.Setenv("SAFECODE_HOME", root)
+	t.Setenv("MANIGOT_HOME", root)
 	if got := Home(); got != root {
 		t.Errorf("Home() = %q, want %q", got, root)
 	}
@@ -233,7 +233,7 @@ func TestResolutionOrderEndToEnd(t *testing.T) {
 	legacy := writeExec(t, bin, spec.Names[2])
 	script := writeExec(t, filepath.Join(home, filepath.Dir(spec.Script)), filepath.Base(spec.Script))
 
-	t.Setenv("SAFECODE_HOME", home)
+	t.Setenv("MANIGOT_HOME", home)
 	t.Setenv(spec.EnvVar, override)
 
 	stages := []struct {
@@ -247,7 +247,7 @@ func TestResolutionOrderEndToEnd(t *testing.T) {
 		{"canonical name", canonical, spec.Names[0] + " on $PATH", func() { os.Remove(canonical) }},
 		{"short name", short, spec.Names[1] + " on $PATH", func() { os.Remove(short) }},
 		{"legacy name", legacy, spec.Names[2] + " on $PATH", func() { os.Remove(legacy) }},
-		{"script in $SAFECODE_HOME", script, script, func() { os.Remove(script) }},
+		{"script in $MANIGOT_HOME", script, script, func() { os.Remove(script) }},
 	}
 
 	for _, stage := range stages {
@@ -278,7 +278,7 @@ func TestResolveIgnoresDirectories(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, "scripts", "test.sh"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SAFECODE_HOME", home)
+	t.Setenv("MANIGOT_HOME", home)
 
 	if _, err := Resolve(testSpec()); err == nil {
 		t.Fatal("expected an error when the script path is a directory")

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // TestEditorDoneMsgSuccess verifies the footer confirmation and that the tab

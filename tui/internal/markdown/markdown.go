@@ -1,4 +1,4 @@
-// Package markdown renders safecode job markdown files to terminal-styled text
+// Package markdown renders manigot job markdown files to terminal-styled text
 // and provides a scrollable Viewer over the rendered output.
 //
 // It wraps Charm's Glamour (the same family as the Bubble Tea stack chosen in

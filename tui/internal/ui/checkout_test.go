@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // keyMsg builds a single-rune key press, e.g. keyMsg("b"), for driving

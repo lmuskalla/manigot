@@ -9,8 +9,8 @@ date: 2026-08-08
 
 ## Summary
 
-safecode is now vendor-agnostic: the same image ships both Claude Code and
-OpenCode, and `safecode --tool claude-code|opencode` picks which one runs.
+manigot is now vendor-agnostic: the same image ships both Claude Code and
+OpenCode, and `manigot --tool claude-code|opencode` picks which one runs.
 Claude Code stays the default and its path is unchanged — subscription auth via
 `CLAUDE_CODE_OAUTH_TOKEN`, onboarding bypass, `docs/` at `/workspace/.claude`.
 OpenCode gets its own auth (one of several provider API keys), its own global
@@ -47,11 +47,11 @@ and `tools:` frontmatter keys with a small awk pass (name comes from the
 filename in OpenCode, and its `tools` schema is a map, not a comma list, so
 copying them verbatim would misconfigure the agents). Bodies stay identical.
 
-TASK-4: `scripts/entrypoint.sh` — reads `SAFECODE_TOOL` and branches: the
+TASK-4: `scripts/entrypoint.sh` — reads `manigot_TOOL` and branches: the
 `~/.claude.json` onboarding bypass and the `CLAUDE_*` requirement now only apply
 to `claude-code`; for `opencode` it verifies at least one provider key is
 present and `exec`s `opencode` instead of `claude`. Git config handling is
-shared and unchanged. `scripts/run.sh` — passes `-e SAFECODE_TOOL` and shapes
+shared and unchanged. `scripts/run.sh` — passes `-e manigot_TOOL` and shapes
 the initial job prompt per tool (positional for Claude Code, `--prompt` for
 OpenCode); `--agent` is spelled the same for both.
 
@@ -76,7 +76,7 @@ usage examples, and a comparison table of the per-tool differences.
 
 TASK-8: `docs/CLAUDE.md` — Stack/Architecture/Commands rewritten as
 vendor-agnostic: both CLIs in the image, `--tool`, dual agent bake locations,
-per-tool mount targets, `SAFECODE_TOOL` branching, OpenCode `.env` variables.
+per-tool mount targets, `manigot_TOOL` branching, OpenCode `.env` variables.
 
 TASK-9: `project-template/docs/CLAUDE.md` — tool-neutral header note explaining
 that the file is loaded by whichever CLI is selected, where `docs/` is mounted
@@ -114,12 +114,12 @@ a `git add -A` from inside a session would otherwise commit a duplicate copy of
   looks for it. Worth verifying in a real session, since the context mount is
   nested inside the `docs/` mount and relies on the container runtime ordering
   mounts parent-first (both Docker and Podman sort by target depth).
-- **The image was not built.** No Docker daemon is available inside safecode, so
+- **The image was not built.** No Docker daemon is available inside manigot, so
   `npm install -g opencode-ai` and the agent-transform `RUN` step in the
   Dockerfile are unverified in a real build. The awk transform itself was run
   against all six `agents/*.md` files on the host and produces valid frontmatter
   (`description` only) with byte-identical bodies. Run `make rebuild` and one
-  `safecode --tool opencode` session before merging.
+  `manigot --tool opencode` session before merging.
 - **The provider key allowlist is duplicated** in `scripts/run.sh` and
   `scripts/entrypoint.sh` (host-side vs container-side check). Both carry a
   comment to keep them in sync; if the list grows, consider passing the names

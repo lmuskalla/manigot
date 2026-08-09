@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/manigot/tui/internal/resolve"
 )
 
 // ToolClaudeCode and ToolOpenCode are the values Settings.Tool holds and the
@@ -43,7 +43,7 @@ func (s Settings) ToolValue() string {
 }
 
 // Dir returns the directory the settings file lives in: config/ inside the
-// safecode checkout the running binary belongs to (see resolve.Home). It is
+// manigot checkout the running binary belongs to (see resolve.Home). It is
 // "" if that checkout could not be located.
 func Dir() string {
 	home := resolve.Home()
@@ -89,7 +89,7 @@ func Load() (Settings, error) {
 func Save(s Settings) error {
 	dir := Dir()
 	if dir == "" {
-		return fmt.Errorf("cannot determine the safecode checkout to save settings into (set $%s)", resolve.EnvHome)
+		return fmt.Errorf("cannot determine the manigot checkout to save settings into (set $%s)", resolve.EnvHome)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

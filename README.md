@@ -1,4 +1,4 @@
-# safecode
+# manigot
 
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
@@ -11,20 +11,20 @@ provider key you give it) — pick per session with `--tool`.
 
 ## Where everything lives
 
-### The safecode repo
+### The manigot repo
 
 ```
-safecode/
+manigot/
   Dockerfile              ← build once, rebuild on Claude Code / OpenCode updates
   Makefile                ← build / rebuild / install / make tui
   scripts/                ← launcher and utility scripts
-    run.sh                ← container launcher      → 'sc'
-    new-job.sh            ← job generator           → 'sc-job'
-    finish-job.sh         ← job archiver            → 'sc-done'
-    delete-job.sh         ← job deleter             → 'sc-delete'
-    tui.sh                ← TUI launcher            → 'sc-tui'
+    run.sh                ← container launcher      → 'mg'
+    new-job.sh            ← job generator           → 'mg-job'
+    finish-job.sh         ← job archiver            → 'mg-done'
+    delete-job.sh         ← job deleter             → 'mg-delete'
+    tui.sh                ← TUI launcher            → 'mg-tui'
     entrypoint.sh         ← runs inside the container before the agent CLI starts
-  tui/                    ← host-side TUI source (Go); `make tui` builds bin/safecode-tui
+  tui/                    ← host-side TUI source (Go); `make tui` builds bin/manigot-tui
   bin/                    ← built binaries (gitignored)
   .env                    ← your credentials (gitignored, never committed)
   .gitignore
@@ -87,7 +87,7 @@ d=json.load(sys.stdin)
 print(json.dumps(d.get('oauthAccount'), indent=2))"
 
 # 2. Add credentials to .env
-cat > safecode/.env << EOF
+cat > manigot/.env << EOF
 CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 CLAUDE_ACCOUNT_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 CLAUDE_EMAIL=your@email.com
@@ -95,7 +95,7 @@ CLAUDE_ORG_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 EOF
 
 # 3. Build the image
-cd safecode/
+cd manigot/
 make build
 
 # 4. Put the launchers on your PATH
@@ -110,7 +110,7 @@ authenticates from environment variables, so add at least one provider key to
 the same `.env`:
 
 ```bash
-cat >> safecode/.env << EOF
+cat >> manigot/.env << EOF
 # any one of these is enough
 ANTHROPIC_API_KEY=sk-ant-...
 # OPENAI_API_KEY=sk-...
@@ -142,11 +142,11 @@ allowed, because there it is the normal way to authenticate.
 
 | command | does |
 |---|---|
-| `sc` | start a session in the current project |
-| `sc-job` | create a job directory + branch (off `main`) |
-| `sc-done` | archive a finished job |
-| `sc-delete` | permanently delete a job (directory + branch, no merge) |
-| `sc-tui` | the terminal UI (needs `make tui` first) |
+| `mg` | start a session in the current project |
+| `mg-job` | create a job directory + branch (off `main`) |
+| `mg-done` | archive a finished job |
+| `mg-delete` | permanently delete a job (directory + branch, no merge) |
+| `mg-tui` | the terminal UI (needs `make tui` first) |
 
 They are symlinks back into the repo, so `git pull` updates them. `make
 uninstall` removes them again.
@@ -157,11 +157,11 @@ If you would rather not write to `/usr/local/bin`, define shell aliases instead:
 
 ```bash
 # ~/.zshrc or ~/.bashrc
-alias sc='~/code/safecode/scripts/run.sh'
-alias sc-job='~/code/safecode/scripts/new-job.sh'
-alias sc-done='~/code/safecode/scripts/finish-job.sh'
-alias sc-delete='~/code/safecode/scripts/delete-job.sh'
-alias sc-tui='~/code/safecode/scripts/tui.sh'
+alias mg='~/code/manigot/scripts/run.sh'
+alias mg-job='~/code/manigot/scripts/new-job.sh'
+alias mg-done='~/code/manigot/scripts/finish-job.sh'
+alias mg-delete='~/code/manigot/scripts/delete-job.sh'
+alias m,g-tui='~/code/manigot/scripts/tui.sh'
 ```
 
 One catch: aliases only exist inside your interactive shell, so the TUI cannot
@@ -169,16 +169,16 @@ see them — it has to find the real scripts itself. Point it at them with env
 vars, which override discovery completely:
 
 ```bash
-export SAFECODE_HOME="$HOME/code/safecode"   # covers all of the below at once
-export SAFECODE_BIN=…                        # or one at a time: the launcher
-export SAFECODE_JOB_BIN=…                    #   job creation
-export SAFECODE_DONE_BIN=…                   #   job completion
-export SAFECODE_DELETE_BIN=…                 #   job deletion
+export manigot_HOME="$HOME/code/manigot"   # covers all of the below at once
+export manigot_BIN=…                        # or one at a time: the launcher
+export manigot_JOB_BIN=…                    #   job creation
+export manigot_DONE_BIN=…                   #   job completion
+export manigot_DELETE_BIN=…                 #   job deletion
 ```
 
 Each `*_BIN` takes either a path or a bare command name to look up on `PATH`. A
 value that cannot be resolved is reported as an error rather than silently
-ignored, so a typo is visible. `SAFECODE_HOME` is set automatically when you
+ignored, so a typo is visible. `manigot_HOME` is set automatically when you
 start the TUI through `scripts/tui.sh`, so in that case there is
 nothing to configure.
 
@@ -188,7 +188,7 @@ nothing to configure.
 
 ```bash
 # Copy the template into your project
-cp -r safecode/project-template/docs/ your-project/docs/
+cp -r manigot/project-template/docs/ your-project/docs/
 
 # Fill in your project context
 $EDITOR your-project/docs/AGENTS.md
@@ -197,7 +197,7 @@ $EDITOR your-project/docs/AGENTS.md
 That's it. The global agents are already in the image — nothing else to copy.
 
 `docs/AGENTS.md` is the one project context file, and it works for both tools:
-safecode mounts it read-only at whatever path the selected CLI reads context
+manigot mounts it read-only at whatever path the selected CLI reads context
 from (`/workspace/AGENTS.md` for OpenCode, `/workspace/.claude/CLAUDE.md` for
 Claude Code). Projects that still have a `docs/CLAUDE.md` keep working — it is
 used as a fallback when `docs/AGENTS.md` is absent.
@@ -207,22 +207,22 @@ used as a fallback when `docs/AGENTS.md` is absent.
 ## Usage
 
 ```bash
-# Start a safecode session (run from anywhere inside your project)
+# Start a manigot session (run from anywhere inside your project)
 cd your-project/
-sc                        # Claude Code (default)
-sc --tool opencode        # OpenCode
+mg                        # Claude Code (default)
+mg --tool opencode        # OpenCode
 
 # Start straight in an agent, or on a job
-sc --agent analyst
-sc --tool opencode --job a3f9k2
+mg --agent analyst
+mg --tool opencode --job a3f9k2
 
 # Create a new job
-sc-job "add image gallery block"
-sc-job "fix tenant isolation on media uploads" --type fix
-sc-job "upgrade dependencies" --type chore
+mg-job "add image gallery block"
+mg-job "fix tenant isolation on media uploads" --type fix
+mg-job "upgrade dependencies" --type chore
 
 # Archive a finished job
-sc-done a3f9k2
+mg-done a3f9k2
 ```
 
 ---
@@ -284,7 +284,7 @@ named with a 6-character random ID and a slugified title. A git branch is
 created automatically with the same ID.
 
 ```bash
-sc-job "add image gallery block"
+mg-job "add image gallery block"
 # creates: docs/jobs/a3f9k2_add-image-gallery-block/
 #   brief.md    ← you fill in: what and why
 #   tasks.md    ← @analyst fills in: atomic task breakdown
@@ -296,7 +296,7 @@ sc-job "add image gallery block"
 **Typical flow for a feature:**
 
 ```
-1.  sc-job "feature name"               → creates dir + branch
+1.  mg-job "feature name"               → creates dir + branch
 2.  Fill in brief.md
 3.  @product-owner                      → SHIP / REVISIT / REJECT
 4.  @analyst                            → writes tasks.md
@@ -319,10 +319,10 @@ Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug`.
 
 ## TUI
 
-safecode ships an optional terminal UI for browsing jobs and launching agents
+manigot ships an optional terminal UI for browsing jobs and launching agents
 without remembering command syntax. It is **host-side**: it runs on your
-machine, reads a project's `docs/jobs/`, and shells out to the `sc`
-and `sc-job` commands. It does **not** run in the container and needs no
+machine, reads a project's `docs/jobs/`, and shells out to the `mg`
+and `mg-job` commands. It does **not** run in the container and needs no
 credentials itself. It finds those commands dynamically — see
 [Installing without symlinks](#installing-without-symlinks) if they are not on
 your `PATH`.
@@ -337,7 +337,7 @@ brief, launching an agent, or marking it done — those three actions refuse
 
 ### Supported platforms
 
-macOS and Linux. Firing an agent opens `sc --tool <tool> --agent <name> --job
+macOS and Linux. Firing an agent opens `mg --tool <tool> --agent <name> --job
 <id>` in a new terminal (`<tool>` from the settings screen — see below),
 picked in this order:
 
@@ -346,7 +346,7 @@ picked in this order:
 3. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
    `konsole`, or `xterm`, whichever is found first on `PATH`
 
-The list view's `o` shortcut (see Keybindings) opens a bare `sc --tool <tool>`
+The list view's `o` shortcut (see Keybindings) opens a bare `mg --tool <tool>`
 instead — same spawn paths, but with no agent and no job, for a quick ad-hoc
 session that isn't tied to a specific job's workflow.
 
@@ -355,15 +355,15 @@ Windows is not supported in this version.
 ### Build & install
 
 ```bash
-cd safecode/
-make tui        # builds bin/safecode-tui
-make install    # puts sc-tui (and the other launchers) on your PATH
+cd manigot/
+make tui        # builds bin/manigot-tui
+make install    # puts mg-tui (and the other launchers) on your PATH
 ```
 
-`make tui` builds a single static binary at `bin/safecode-tui` (requires
+`make tui` builds a single static binary at `bin/manigot-tui` (requires
 Go 1.23+ and network access the first time, to fetch the Charm modules).
 `make install` symlinks `scripts/tui.sh` onto your `PATH` alongside
-`sc` and `sc-job`; that wrapper also tells the binary where this
+`mg` and `mg-job`; that wrapper also tells the binary where this
 checkout is, so the TUI can find the scripts even when nothing else is
 installed.
 
@@ -371,7 +371,7 @@ installed.
 
 ```bash
 cd your-project/
-sc-tui                # from anywhere inside a project that has a docs/
+mg-tui                # from anywhere inside a project that has a docs/
 ```
 
 ### Keybindings
@@ -382,8 +382,8 @@ List view:
 |---|---|
 | `↑`/`↓` or `k`/`j` | move selection |
 | `enter` | open the job's detail view |
-| `o` | launch a quick safecode session (no agent, no job) |
-| `n` | create a new job (runs the host `sc-job`) |
+| `o` | launch a quick manigot session (no agent, no job) |
+| `n` | create a new job (runs the host `mg-job`) |
 | `s` | open settings (editor, agent tool) |
 | `ctrl+r` | refresh — re-read job files from disk |
 | `q` | quit |
@@ -396,8 +396,8 @@ Detail view:
 | `j`/`k`, `pgup`/`pgdn`, `g`/`G` | scroll |
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict are agent-written) |
-| `D` | mark the job done (runs the host `sc-done`, in the foreground so its confirmation prompts work) |
-| `x` / `del` | permanently delete the job (runs the host `sc-delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
+| `D` | mark the job done (runs the host `mg-done`, in the foreground so its confirmation prompts work) |
+| `x` / `del` | permanently delete the job (runs the host `mg-delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`x`/agent keys work on a job that isn't on the current branch |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
@@ -417,11 +417,11 @@ Press `s` from the job list to open the settings screen:
   Leave blank to fall back to `$VISUAL`/`$EDITOR`/`nano`/`vi`.
 - **Tool** — `claude-code` or `opencode`, cycled with `←`/`→`. Selects which
   agent CLI firing an agent from the action bar launches (adds `--tool` to
-  the `sc --agent ... --job ...` command the same way `sc --tool opencode`
+  the `mg --agent ... --job ...` command the same way `mg --tool opencode`
   would on the command line).
 
 `tab` moves between fields, `enter` saves, `esc` discards. Settings persist to
-`config/tui-settings.json` in the safecode checkout (gitignored — it's a
+`config/tui-settings.json` in the manigot checkout (gitignored — it's a
 local preference, not shared) and apply immediately; a missing file just
 means nothing has been saved yet, and every setting falls back to its default
 above.
@@ -444,17 +444,17 @@ straight to `@developer`) isn't blocked by the TUI.
 | review | `implementation.md` written, `verdict.md` not yet |
 | finished | `verdict.md` written and its `## Overall` verdict is APPROVED |
 
-A file counts as "written" once it has real content beyond its `sc-job`
+A file counts as "written" once it has real content beyond its `mg-job`
 scaffold (template comments, empty headings, and frontmatter don't count). A
 verdict that's written but not approved (REJECTED, NEEDS WORK, or anything
 else) bounces the stage back to implement rather than resolving to review or
 finished — the job needs more work before it goes through review again.
 
-Press `D` from the detail view at any point to run the host `sc-done`
+Press `D` from the detail view at any point to run the host `mg-done`
 (`scripts/finish-job.sh`) and mark the job done — it squash-merges the job
 branch into the default branch, archives the job directory under
 `docs/jobs/archive/`, and sets `status: done`. This runs in the foreground
-(suspending the TUI, like `e`) because `sc-done` asks for interactive
+(suspending the TUI, like `e`) because `mg-done` asks for interactive
 confirmation along the way; per its own behavior, it warns rather than blocks
 on a missing or unapproved verdict, so this is available from any stage too.
 
@@ -465,7 +465,7 @@ on a missing or unapproved verdict, so this is available from any stage too.
 When Claude Code or OpenCode releases an update worth taking:
 
 ```bash
-cd safecode/
+cd manigot/
 make rebuild
 ```
 

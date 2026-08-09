@@ -35,11 +35,11 @@ silently falling through, which is the right call and is tested
 (`TestResolveEnvOverrideBrokenDoesNotFallThrough`).
 
 TASK-2: PASS
-notes: `EnvSafecode`/`EnvJob`/`EnvDone`/`EnvHome` constants + package doc
+notes: `Envmanigot`/`EnvJob`/`EnvDone`/`EnvHome` constants + package doc
 contract, matches tasks.md naming exactly.
 
 TASK-3: PASS
-notes: `scripts/safecode-tui.sh` exports `SAFECODE_HOME="${SAFECODE_HOME:-$ROOT}"`,
+notes: `scripts/manigot-tui.sh` exports `manigot_HOME="${manigot_HOME:-$ROOT}"`,
 respects a pre-set value as required.
 
 TASK-4: PASS
@@ -99,12 +99,12 @@ resolves, and prove each `Script` path exists in the repo.
 TASK-9: PASS
 notes: `scripts/new-job.sh`/`finish-job.sh` usage headers and error strings
 renamed; filenames untouched as required. Bonus: the one stale `new-job`
-mention in `safecode-tui.sh`'s comment was also fixed, which is in scope (same
+mention in `manigot-tui.sh`'s comment was also fixed, which is in scope (same
 kind of change, same file family) and disclosed in implementation.md.
 
 TASK-10: PASS
 notes: `Makefile` `install`/`uninstall` verified manually — creates
-`safecode`, `safecode-tui`, `safecode-job`, `safecode-done`, `sc-job`, `sc-done`
+`manigot`, `manigot-tui`, `manigot-job`, `manigot-done`, `mg-job`, `mg-done`
 symlinks under `PREFIX/bin`, `uninstall` removes only symlinks it manages.
 Neither target is a prerequisite of another. `make tui` hint updated.
 
@@ -122,7 +122,7 @@ references — leaving both alone is the right call, and it's disclosed rather
 than silently skipped.
 
 TASK-13: PASS
-notes: `docs/TASKS.md` — `new-job` → `safecode-job` in the workflow line and the
+notes: `docs/TASKS.md` — `new-job` → `manigot-job` in the workflow line and the
 TUI shortcut item; the `make install` housekeeping item correctly ticked with
 the job ID.
 

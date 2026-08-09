@@ -19,7 +19,7 @@ Two independent asks in the brief:
    "analyze", even though a user may have written `brief.md` and `tasks.md`
    by hand and just wants a developer pass.
 2. **There is no "mark done" action in the TUI at all.** `scripts/finish-job.sh`
-   (installed as `sc-done`) already does the real work — merges the job
+   (installed as `mg-done`) already does the real work — merges the job
    branch (squash) into the default branch, archives the job directory, sets
    `status: done` — and per commit d40b674 it no longer hard-blocks on an
    unapproved verdict, only warns and asks to continue. But the TUI has never
@@ -91,10 +91,10 @@ agents.
 
 ### Feature B — set a job to done from the TUI
 
-TASK-5: Add a host-command wrapper that resolves and builds the `sc-done`
+TASK-5: Add a host-command wrapper that resolves and builds the `mg-done`
 (scripts/finish-job.sh) invocation for a given job, following the same
 `resolve.Done()` + cwd/`$PWD`-env pattern `hostcmd.NewJob` already uses for
-`sc-job`. Pass the job by its directory name (not an ID prefix) for an exact,
+`mg-job`. Pass the job by its directory name (not an ID prefix) for an exact,
 unambiguous match.
      files: tui/internal/hostcmd/hostcmd.go
      depends: none
@@ -139,7 +139,7 @@ TASK-9: Add tests for the new done flow: `hostcmd`'s command construction
 (cwd/env, and that a resolution failure surfaces `resolve.NotFoundError` the
 same way `NewJob`'s does), and the `App`-level key handling for both a clean
 and a non-zero return (mirroring `editordone_test.go`'s
-`TestEditorDoneMsgSuccess`/`Error` pattern). Use the `SAFECODE_DONE_BIN` env
+`TestEditorDoneMsgSuccess`/`Error` pattern). Use the `manigot_DONE_BIN` env
 override so no test invokes the real `finish-job.sh` against a real git repo.
      files: tui/internal/hostcmd/hostcmd_test.go, a new
      tui/internal/ui/donemsg_test.go (or added to an existing app-level test

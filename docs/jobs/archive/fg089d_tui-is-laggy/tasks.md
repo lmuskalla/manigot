@@ -76,7 +76,7 @@ TASK-5: Confirm the root cause of "a window appears and it immediately closes
 again" when opening an agent. `launch.buildCmd` (tui/internal/launch/launch.go)
 has five spawn paths (tmux new-window, macOS Terminal.app via osascript,
 gnome-terminal, x-terminal-emulator, konsole, xterm) and none of them keep the
-window/pane open after the inner `cd ... && sc --agent ... --job ...` command
+window/pane open after the inner `cd ... && mg --agent ... --job ...` command
 exits — success or failure. tmux in particular closes ("destroys") a new
 window as soon as its command exits unless `remain-on-exit` is set, which
 matches the brief's "window" terminology. Any fast failure (e.g. `docker` not

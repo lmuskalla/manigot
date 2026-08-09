@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
-# sc-done "go61h7"
-# sc-done "go61h7_add-backup-package"
+# mg-done "go61h7"
+# mg-done "go61h7_add-backup-package"
 #
-# Installed as `sc-done`. See `make install`.
+# Installed as `mg-done`. See `make install`.
 
 # ── Configuration ───────────────────────────────────────────────────────────────
 JOBS_DIR="docs/jobs"
@@ -13,7 +13,7 @@ ARCHIVE_DIR="docs/jobs/archive"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
-    echo "Usage: sc-done <job-id-or-slug>"
+    echo "Usage: mg-done <job-id-or-slug>"
     exit 1
 fi
 

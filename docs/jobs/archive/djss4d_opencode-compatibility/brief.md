@@ -13,7 +13,7 @@ Make this tool vendor-agnostic. It can run with claude code or opencode.
 
 ## Priority 1: OpenCode support
 
-Make safecode work with OpenCode as an alternative to Claude Code.
+Make manigot work with OpenCode as an alternative to Claude Code.
 
 - [ ] Add `--tool` flag to `run.sh` (values: `claude-code` (default), `opencode`)
 - [ ] Install OpenCode binary alongside Claude Code in Dockerfile

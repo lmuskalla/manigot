@@ -30,7 +30,7 @@ notes: `exec claude "$@"` → `exec claude --dangerously-skip-permissions "$@"`
 in the `else` (claude-code) branch only. Flag placed *before* `"$@"`, which is
 correct: run.sh builds `"$@"` as `(--agent <name>) (<positional job prompt>)`
 for claude-code (PROMPT_ARGS is positional, not `--prompt`), so composition is
-clean for plain `sc`, `sc --agent --job`, and TUI launches. The opencode
+clean for plain `mg`, `mg --agent --job`, and TUI launches. The opencode
 branch (`exec opencode "$@"`) is genuinely untouched. Non-root user (`claude`,
 UID 1000) avoids the binary's `refuseBypassUnderRoot` guard.
 
@@ -101,5 +101,5 @@ interactive sessions), and is cleanly committed per task. Nothing here blocks
 merge.
 
 Recommended pre-merge host check (the only thing TASK-5 couldn't do from inside
-the container): run `make rebuild`, then `sc` and a TUI agent launch, and
+the container): run `make rebuild`, then `mg` and a TUI agent launch, and
 confirm no folder-trust or permission prompt appears.

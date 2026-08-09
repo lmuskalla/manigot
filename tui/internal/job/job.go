@@ -1,4 +1,4 @@
-// Package job reads safecode job data from the filesystem.
+// Package job reads manigot job data from the filesystem.
 //
 // A job lives at <project-root>/docs/jobs/<id>_<slug>/ and contains four
 // markdown files: brief.md, tasks.md, implementation.md and verdict.md. This
@@ -23,7 +23,7 @@ import (
 	"strings"
 )
 
-// Job is one safecode job directory under docs/jobs/.
+// Job is one manigot job directory under docs/jobs/.
 type Job struct {
 	// Name is the directory name, e.g. "irw320_tui". It is the machine
 	// identity of the job.

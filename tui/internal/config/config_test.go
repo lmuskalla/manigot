@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// checkout builds a minimal fake safecode checkout (just the one file
-// resolve.looksLikeCheckout keys off) and points $SAFECODE_HOME at it, so
+// checkout builds a minimal fake manigot checkout (just the one file
+// resolve.looksLikeCheckout keys off) and points $MANIGOT_HOME at it, so
 // Dir/Load/Save are exercised without depending on where `go test` happens to
 // run from.
 func checkout(t *testing.T) string {
@@ -19,7 +19,7 @@ func checkout(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "scripts", "run.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SAFECODE_HOME", dir)
+	t.Setenv("MANIGOT_HOME", dir)
 	return dir
 }
 
@@ -35,8 +35,8 @@ func TestLoadMissingFileReturnsZeroValue(t *testing.T) {
 }
 
 func TestLoadUnresolvableHomeReturnsZeroValue(t *testing.T) {
-	t.Setenv("SAFECODE_HOME", "")
-	t.Setenv("PATH", t.TempDir()) // hide any real safecode checkout on $PATH
+	t.Setenv("MANIGOT_HOME", "")
+	t.Setenv("PATH", t.TempDir()) // hide any real manigot checkout on $PATH
 	s, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -68,7 +68,7 @@ func TestSaveThenLoadRoundTrips(t *testing.T) {
 }
 
 func TestSaveUnresolvableHomeErrors(t *testing.T) {
-	t.Setenv("SAFECODE_HOME", "")
+	t.Setenv("MANIGOT_HOME", "")
 	t.Setenv("PATH", t.TempDir())
 	if err := Save(Settings{Editor: "vim"}); err == nil {
 		t.Fatal("expected an error when no checkout can be located")

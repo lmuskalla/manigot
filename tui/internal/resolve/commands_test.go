@@ -6,7 +6,7 @@ import (
 )
 
 // The settled naming decision, spelled out so a rename cannot happen by
-// accident: sc/sc-job/sc-done/sc-delete are each the sole candidate name —
+// accident: sc/mg-job/mg-done/mg-delete are each the sole candidate name —
 // no short alias, no legacy fallback.
 func TestCommandSpecs(t *testing.T) {
 	cases := []struct {
@@ -16,10 +16,10 @@ func TestCommandSpecs(t *testing.T) {
 		names  []string
 		script string
 	}{
-		{Safecode(), "sc", "SAFECODE_BIN", []string{"sc"}, "scripts/run.sh"},
-		{Job(), "sc-job", "SAFECODE_JOB_BIN", []string{"sc-job"}, "scripts/new-job.sh"},
-		{Done(), "sc-done", "SAFECODE_DONE_BIN", []string{"sc-done"}, "scripts/finish-job.sh"},
-		{Delete(), "sc-delete", "SAFECODE_DELETE_BIN", []string{"sc-delete"}, "scripts/delete-job.sh"},
+		{Manigot(), "mg", "MANIGOT_BIN", []string{"mg"}, "scripts/run.sh"},
+		{Job(), "mg-job", "MANIGOT_JOB_BIN", []string{"mg-job"}, "scripts/new-job.sh"},
+		{Done(), "mg-done", "MANIGOT_DONE_BIN", []string{"mg-done"}, "scripts/finish-job.sh"},
+		{Delete(), "mg-delete", "MANIGOT_DELETE_BIN", []string{"mg-delete"}, "scripts/delete-job.sh"},
 	}
 	for _, c := range cases {
 		if c.spec.Label != c.label {
@@ -47,7 +47,7 @@ func TestCommandSpecs(t *testing.T) {
 func TestCommandSpecsAreCopies(t *testing.T) {
 	a := Job()
 	a.Names = append(a.Names[:1:1], "mutated")
-	if got := Job().Names; len(got) != 1 || got[0] != "sc-job" {
+	if got := Job().Names; len(got) != 1 || got[0] != "mg-job" {
 		t.Errorf("Job() candidate list was mutated: Names = %v", got)
 	}
 }
@@ -60,11 +60,11 @@ func TestSpecScriptsResolveFromCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !looksLikeCheckout(repo) {
-		t.Skipf("%s is not a safecode checkout", repo)
+		t.Skipf("%s is not a manigot checkout", repo)
 	}
-	for _, spec := range []Spec{Safecode(), Job(), Done(), Delete()} {
+	for _, spec := range []Spec{Manigot(), Job(), Done(), Delete()} {
 		isolate(t)
-		t.Setenv("SAFECODE_HOME", repo)
+		t.Setenv("MANIGOT_HOME", repo)
 
 		got, err := Resolve(spec)
 		if err != nil {

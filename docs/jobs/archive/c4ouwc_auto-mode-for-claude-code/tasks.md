@@ -28,7 +28,7 @@ TASK-2: Extend the `~/.claude.json` heredoc written in the claude-code
 branch of `scripts/entrypoint.sh` to also pre-accept the folder-trust
 dialog for `/workspace` (the container's fixed `WORKDIR`), so the "do you
 trust the files in this folder?" prompt never appears on first start,
-regardless of launch path (plain `sc`, `sc --agent`, `sc --job`,
+regardless of launch path (plain `mg`, `mg --agent`, `mg --job`,
 TUI-launched agent).
 - files: `scripts/entrypoint.sh`
 - depends: TASK-1
@@ -39,10 +39,10 @@ TUI-launched agent).
 
 TASK-3: Add the confirmed permission-bypass flag to the final `exec claude
 "$@"` invocation in `scripts/entrypoint.sh`, so every Claude Code session
-started through safecode — interactive `sc`, `sc --agent`, job-prompted
+started through manigot — interactive `mg`, `mg --agent`, job-prompted
 runs, and TUI-triggered agent windows — begins already in full auto mode
 instead of requiring a manual mode switch. Scoped to the existing
-`claude-code` branch of the `SAFECODE_TOOL` conditional only; the
+`claude-code` branch of the `manigot_TOOL` conditional only; the
 `opencode` branch and its `exec opencode "$@"` call are untouched — the
 brief is explicit this is a Claude-Code-only request.
 - files: `scripts/entrypoint.sh`
@@ -69,8 +69,8 @@ project's own rule to keep this file accurate.
 - depends: TASK-2, TASK-3 (doc should describe what was actually built)
 - risk: low — documentation only, no behavior change.
 
-TASK-5: Manually verify, across all three launch paths (`sc` with no
-flags, `sc --agent <agent> --job <id>`, and a TUI-triggered agent launch),
+TASK-5: Manually verify, across all three launch paths (`mg` with no
+flags, `mg --agent <agent> --job <id>`, and a TUI-triggered agent launch),
 that no folder-trust or per-tool permission prompts appear, and that
 unrelated safeguards still work as before (git identity from
 `GIT_AUTHOR_NAME_CFG`/`GIT_AUTHOR_EMAIL_CFG`, `docs/` mount, job-prompt

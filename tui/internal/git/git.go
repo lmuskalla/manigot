@@ -1,4 +1,4 @@
-// Package git is a thin exec-backed wrapper over the git commands the safecode
+// Package git is a thin exec-backed wrapper over the git commands the manigot
 // TUI needs for cross-branch, git-backed job discovery (see the
 // "keep-track-of-jobs" brief). It is the only place in the TUI that shells out
 // to git, so the job/launch/ui packages ask about branches and per-branch file

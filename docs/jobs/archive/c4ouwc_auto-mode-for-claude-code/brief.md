@@ -13,7 +13,7 @@ When launching sc (either an agent via TUI, agent via cli or just generally via 
 
 ## Why
 
-Right now you have to confirm the safety of the dir every time which makes no sense in the context of safecode, we already specifically launch an isolated environment. Then you always have to switch to auto mode to let the agent do its thing.
+Right now you have to confirm the safety of the dir every time which makes no sense in the context of manigot, we already specifically launch an isolated environment. Then you always have to switch to auto mode to let the agent do its thing.
 
 ## Out of scope
 

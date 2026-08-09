@@ -9,12 +9,12 @@ date: 2026-08-09
 
 ## Summary
 
-Added a "Quick Job" launch path to the TUI so a user can start a bare safecode
+Added a "Quick Job" launch path to the TUI so a user can start a bare manigot
 session against the current project with no agent and no job, straight from the
 list view. This is a TUI-only feature — `scripts/run.sh` already treats
 `--agent` and `--job` as optional, so no container-side or scripting changes
 were needed. Pressing `o` in the list view spawns a detached new terminal
-running `sc --tool <tool>` (same spawn paths as an agent launch), and reports
+running `mg --tool <tool>` (same spawn paths as an agent launch), and reports
 the outcome in the footer status line, mirroring how agent launches are
 reported.
 
@@ -28,7 +28,7 @@ TASK-1 — Add `launch.Quick` (bare-session launcher):
   `launchDetached`. Added `Quick(projectRoot, tool string) (string, error)`
   which resolves, builds a `--agent`/`--job`-less inner string via the new
   `quickShellCommand`, and delegates to the same `launchDetached`. Added
-  `quickShellCommand(safecodePath, projectRoot, tool string) string` — the
+  `quickShellCommand(manigotPath, projectRoot, tool string) string` — the
   `--agent`/`--job`-less counterpart to `shellCommand`, reusing `shellQuote`
   and `holdOnFailure` verbatim and defaulting empty `tool` to
   `config.ToolClaudeCode` exactly like `shellCommand`. `shellCommand` itself is
@@ -50,7 +50,7 @@ TASK-2 — Wire list-view key `o` to `launch.Quick`:
 TASK-3 — Document the new keybinding:
 - `README.md`: added an `o` row to the "Keybindings → List view" table and
   added one sentence under "Supported platforms" noting that the `o` shortcut
-  opens a bare `sc --tool <tool>` (same spawn paths, no agent/job). Left
+  opens a bare `mg --tool <tool>` (same spawn paths, no agent/job). Left
   `AGENTS.md`/`docs/AGENTS.md` alone, as neither enumerates TUI keys.
 
 TASK-4 — Verification (no code changes): from `tui/`, `go build ./...` (and a
@@ -65,13 +65,13 @@ including the five new `launch` tests and the untouched
   exiting non-zero because there's no display server) is not surfaced back to
   the TUI after `Quick` has already returned success — this is the existing,
   documented limitation of the detached-spawn design (see `Agent`'s doc
-  comment). `holdOnFailure` still covers fast failures of the inner `sc`
+  comment). `holdOnFailure` still covers fast failures of the inner `mg`
   command itself.
 - The list-view footer hint now reads `enter view` instead of `enter open`
   (reworded so the two tokens `enter view` / `o quick` aren't both "open").
   This is a docs/hint-string change only; no behavior change.
 - A pre-existing working-tree edit that populated the repo-root `AGENTS.md`
-  (from empty to the safecode project documentation) was present at job start
+  (from empty to the manigot project documentation) was present at job start
   and got bundled into the TASK-1 commit via `git add -A`. It is legitimate
   project documentation and unrelated to this feature's logic; flagged here
   for transparency.

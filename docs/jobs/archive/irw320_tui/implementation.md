@@ -9,11 +9,11 @@ date: 2026-08-08
 
 ## Summary
 
-Added an optional, host-side terminal UI for safecode (`safecode-tui`), built in
+Added an optional, host-side terminal UI for manigot (`manigot-tui`), built in
 Go with the Charm stack (Bubble Tea + Lipgloss + Glamour). It browses a
 project's jobs under `docs/processes/`, renders their markdown files, surfaces
 the right agents for each job's workflow stage, fires agents in a new terminal,
-and creates new jobs — all by shelling out to the existing `safecode` /
+and creates new jobs — all by shelling out to the existing `manigot` /
 `new-job` commands. It runs on the user's machine, never inside the container,
 and needs no credentials.
 
@@ -29,7 +29,7 @@ Ink, and resolved the three open scope questions (macOS+Linux target; `finish-jo
 deferred; single-binary + symlink distribution).
 
 TASK-2 — `tui/` (new): scaffolded the Go module (`tui/go.mod`, `go.sum`,
-`main.go`). Module path `codeberg.org/lmuskalla/safecode/tui`. Minimal but real
+`main.go`). Module path `codeberg.org/lmuskalla/manigot/tui`. Minimal but real
 Bubble Tea entry point; slimmed in TASK-4 to launch the App.
 
 TASK-3 — `tui/internal/job/` (new): `FindProjectRoot` (mirrors the bash
@@ -58,7 +58,7 @@ empty headings / frontmatter), derived the job stage (analyze/develop/review),
 and rendered a stage→agents action bar with stable trigger keys.
 
 TASK-8 — `tui/internal/launch/` (new): spawns
-`cd <root> && safecode --agent <name> --job <id>` in a new terminal, choosing
+`cd <root> && manigot --agent <name> --job <id>` in a new terminal, choosing
 tmux new-window → macOS Terminal.app → Linux emulator (gnome-terminal /
 x-terminal-emulator / konsole / xterm). Arguments are single-quoted with the
 standard `'\''` escape (injection-tested). Wired the agent keys into the detail
@@ -74,9 +74,9 @@ auto-refresh on returning to the list) re-reads job files edited out-of-band by
 agents and clamps the cursor if a job was archived. Status (open/done) already
 shown in list + detail from TASK-4/6.
 
-TASK-11 — `Makefile`, `scripts/safecode-tui.sh` (new), `.gitignore`: `make tui`
-builds a static `bin/safecode-tui`; the launcher script mirrors the
-`scripts/*.sh` symlink-to-PATH install pattern used by `safecode` / `new-job`.
+TASK-11 — `Makefile`, `scripts/manigot-tui.sh` (new), `.gitignore`: `make tui`
+builds a static `bin/manigot-tui`; the launcher script mirrors the
+`scripts/*.sh` symlink-to-PATH install pattern used by `manigot` / `new-job`.
 
 TASK-12 — `README.md`: documented the TUI (what it is, host-side nature,
 supported platforms + spawn order, build/install, run, keybindings, and the

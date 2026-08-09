@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // --- current-branch header line (TASK-3) ------------------------------------
 
 // TestRenderListShowsCurrentBranch verifies the list header names the branch
-// currently checked out, in the "safecode - <project> - on <branch>" title.
+// currently checked out, in the "manigot - <project> - on <branch>" title.
 func TestRenderListShowsCurrentBranch(t *testing.T) {
 	dir, def := gitInitRepo(t)
 	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
@@ -206,7 +206,7 @@ func TestRenderListZeroHeightDoesNotPanic(t *testing.T) {
 	if got == "" {
 		t.Fatal("renderList returned nothing for a zero-height App")
 	}
-	if !strings.Contains(got, "safecode") {
+	if !strings.Contains(got, "manigot") {
 		t.Errorf("renderList output missing expected header text:\n%s", got)
 	}
 }

@@ -8,9 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lmuskalla/safecode/tui/internal/git"
-	"github.com/lmuskalla/safecode/tui/internal/job"
-	"github.com/lmuskalla/safecode/tui/internal/markdown"
+	"github.com/lmuskalla/manigot/tui/internal/git"
+	"github.com/lmuskalla/manigot/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/markdown"
 )
 
 // The four markdown files every job directory holds, in the order the detail
@@ -502,7 +502,7 @@ type actionButton struct {
 // come. It no longer restricts which buttons appear (launching any agent is
 // not gated by stage). Done keeps its own colour (statusDoneStyle, the same
 // green used for "done" status elsewhere) to flag that it's categorically
-// different from the five launch actions — it archives the job via sc-done
+// different from the five launch actions — it archives the job via mg-done
 // rather than starting a session.
 //
 // Narrow-width handling: this is designed against an 80-column baseline, and

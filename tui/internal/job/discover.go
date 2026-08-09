@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/lmuskalla/safecode/tui/internal/git"
+	"github.com/lmuskalla/manigot/tui/internal/git"
 )
 
 // JobsRelDir is where live jobs live, relative to the project root.

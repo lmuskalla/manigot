@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-IMAGE_NAME="safecode"
+IMAGE_NAME="manigot"
 CLAUDE_DIR_NAME="docs"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ case "$TOOL" in
         ;;
 esac
 
-# ── Load .env from safecode dir ─────────────────────────────────────────────────
+# ── Load .env from manigot dir ─────────────────────────────────────────────────
 # Follow symlinks to the real script location — this is installed as a
 # PATH symlink (make install), and `dirname "${BASH_SOURCE[0]}"` alone would
 # resolve to the symlink's directory (e.g. /usr/local/bin), not the checkout.
@@ -42,8 +42,8 @@ resolve_script_dir() {
     cd -P "$(dirname "$src")" && pwd
 }
 SCRIPT_DIR="$(resolve_script_dir)"
-SAFECODE_ROOT="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="$SAFECODE_ROOT/.env"
+MANIGOT_ROOT="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="$MANIGOT_ROOT/.env"
 
 if [[ -f "$ENV_FILE" ]]; then
     set -a
@@ -71,7 +71,7 @@ PROJECT_ROOT="$(find_project_root)"
 
 if [[ -z "$PROJECT_ROOT" ]]; then
     echo "Error: could not find a '$CLAUDE_DIR_NAME/' directory in this or any parent directory."
-    echo "Add a docs/ directory to your project root — see the safecode README."
+    echo "Add a docs/ directory to your project root — see the manigot README."
     exit 1
 fi
 
@@ -177,7 +177,7 @@ if [[ "$TOOL" == "claude-code" ]]; then
     # would override the mounted OAuth credentials and bill per token.
     if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
         echo "Error: ANTHROPIC_API_KEY is set — this overrides your subscription and bills per token."
-        echo "Remove it from your environment before running sc with --tool claude-code."
+        echo "Remove it from your environment before running mg with --tool claude-code."
         exit 1
     fi
 else
@@ -212,7 +212,7 @@ fi
 
 # ── Info ────────────────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════╗"
-echo "║           safecode                   ║"
+echo "║           manigot                   ║"
 echo "╠══════════════════════════════════════╣"
 echo "║  Project : $(basename "$PROJECT_ROOT")"
 echo "║  Root    : $PROJECT_ROOT"
@@ -226,7 +226,7 @@ echo ""
 
 # ── Run ─────────────────────────────────────────────────────────────────────────
 docker run -it --rm \
-    --name "safecode-$(basename "$PROJECT_ROOT")-$$" \
+    --name "manigot-$(basename "$PROJECT_ROOT")-$$" \
     -v "$PROJECT_ROOT:/workspace:z" \
     -v "$PROJECT_DOCS_DIR:$DOCS_MOUNT_TARGET:z" \
     "${CONTEXT_MOUNT[@]+"${CONTEXT_MOUNT[@]}"}" \
@@ -238,7 +238,7 @@ docker run -it --rm \
     -e CLAUDE_ORG_UUID="${CLAUDE_ORG_UUID:-}" \
     -e GIT_AUTHOR_NAME_CFG="${GIT_AUTHOR_NAME:-}" \
     -e GIT_AUTHOR_EMAIL_CFG="${GIT_AUTHOR_EMAIL:-}" \
-    -e SAFECODE_TOOL="$TOOL" \
+    -e MANIGOT_TOOL="$TOOL" \
     --network=bridge \
     --memory=2g \
     --security-opt=no-new-privileges \

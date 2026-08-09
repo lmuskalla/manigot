@@ -56,7 +56,7 @@ computed *at fetch time* would size against a stale/zero terminal height on
 first render. Avoid this by decoupling fetch from display:
   - Keep `refreshRecentCommits` fetching a fixed ceiling
     (`git.RecentCommits(a.root, 5)`) every time it's called (same call sites
-    as today: `NewApp`, `refreshJobs`, `updateNewJob`'s post-`sc-job`
+    as today: `NewApp`, `refreshJobs`, `updateNewJob`'s post-`mg-job`
     refresh) — one git call, cached in `a.recentCommits` same as now, just
     holding up to 5 entries instead of always 1.
   - Compute *how many of those cached commits to actually render* inside

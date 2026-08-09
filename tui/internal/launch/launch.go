@@ -1,4 +1,4 @@
-// Package launch spawns safecode agent sessions in a new terminal window or
+// Package launch spawns manigot agent sessions in a new terminal window or
 // pane so the TUI can keep running while the agent works.
 //
 // Spawn order (per the TASK-1 scope decision — macOS + Linux, no Windows v1):
@@ -8,10 +8,10 @@
 //  3. A Linux terminal emulator, tried in order: gnome-terminal,
 //     x-terminal-emulator (Debian), konsole, xterm.
 //
-// The command opened is always `<safecode> --agent <agent> --job <jobID>` run
+// The command opened is always `<manigot> --agent <agent> --job <jobID>` run
 // from the project root, matching the invocation contract in scripts/run.sh.
-// <safecode> is an absolute path located by the resolve package, not the bare
-// word "safecode", so an install under a different name still works.
+// <manigot> is an absolute path located by the resolve package, not the bare
+// word "manigot", so an install under a different name still works.
 package launch
 
 import (
@@ -22,11 +22,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/lmuskalla/safecode/tui/internal/config"
-	"github.com/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/manigot/tui/internal/config"
+	"github.com/lmuskalla/manigot/tui/internal/resolve"
 )
 
-// Agent opens a new terminal that runs safecode with `--tool <tool> --agent
+// Agent opens a new terminal that runs manigot with `--tool <tool> --agent
 // <agent> --job <jobID>` in projectRoot. tool is one of config.ToolClaudeCode
 // or config.ToolOpenCode; an empty value defaults to config.ToolClaudeCode,
 // matching scripts/run.sh's own default. It returns a short human description
@@ -52,7 +52,7 @@ import (
 // --agent` command failing fast); a launcher-binary-itself failure is a
 // narrower, rarer case left uncovered rather than risk reintroducing UI lag.
 func Agent(agent, jobID, projectRoot, tool string) (string, error) {
-	found, err := resolve.Resolve(resolve.Safecode())
+	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
@@ -60,7 +60,7 @@ func Agent(agent, jobID, projectRoot, tool string) (string, error) {
 	return launchDetached(inner)
 }
 
-// Quick opens a new terminal that runs safecode with just `--tool <tool>` (no
+// Quick opens a new terminal that runs manigot with just `--tool <tool>` (no
 // --agent, no --job) in projectRoot — a bare session for an ad-hoc change that
 // doesn't belong to any specific job/agent workflow. tool is one of
 // config.ToolClaudeCode or config.ToolOpenCode; an empty value defaults to
@@ -72,7 +72,7 @@ func Agent(agent, jobID, projectRoot, tool string) (string, error) {
 // no agent flag and no job prompt — no container-side changes were needed to
 // support this.
 func Quick(projectRoot, tool string) (string, error) {
-	found, err := resolve.Resolve(resolve.Safecode())
+	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
@@ -109,10 +109,10 @@ func launchDetached(inner string) (string, error) {
 
 // shellCommand builds the shell string executed inside the new terminal:
 //
-//	cd '<projectRoot>' && '<safecode>' --tool '<tool>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
+//	cd '<projectRoot>' && '<manigot>' --tool '<tool>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
 //
-// cd-ing first matters because safecode finds the project root from $PWD (see
-// scripts/run.sh find_project_root). safecodePath is the absolute path from the
+// cd-ing first matters because manigot finds the project root from $PWD (see
+// scripts/run.sh find_project_root). manigotPath is the absolute path from the
 // resolve package; it is quoted like every other value, so a checkout in a
 // directory with spaces survives both osascript and `bash -lc`. Arguments are
 // single-quoted and embedded single quotes are escaped, so no value can break
@@ -130,19 +130,19 @@ func launchDetached(inner string) (string, error) {
 // window flashes and disappears before its output can be read — this is the
 // brief's "a window appears and it immediately closes again". The result is
 // wrapped in holdOnFailure (TASK-6) so a non-zero exit pauses instead.
-func shellCommand(safecodePath, agent, jobID, projectRoot, tool string) string {
+func shellCommand(manigotPath, agent, jobID, projectRoot, tool string) string {
 	if tool == "" {
 		tool = config.ToolClaudeCode
 	}
 	inner := fmt.Sprintf("cd %s && %s --tool %s --agent %s --job %s",
-		shellQuote(projectRoot), shellQuote(safecodePath), shellQuote(tool), shellQuote(agent), shellQuote(jobID))
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(tool), shellQuote(agent), shellQuote(jobID))
 	return holdOnFailure(inner)
 }
 
-// quickShellCommand builds the shell string for a bare safecode session (no
+// quickShellCommand builds the shell string for a bare manigot session (no
 // --agent, no --job), executed inside the new terminal:
 //
-//	cd '<projectRoot>' && '<safecode>' --tool '<tool>'; ec=$?; ...
+//	cd '<projectRoot>' && '<manigot>' --tool '<tool>'; ec=$?; ...
 //
 // It is the --agent/--job-less counterpart to shellCommand: same cd-first,
 // shellQuote-everything, holdOnFailure-wrap behavior (so a fast failure of the
@@ -151,12 +151,12 @@ func shellCommand(safecodePath, agent, jobID, projectRoot, tool string) string {
 // reason shellCommand does. It is deliberately a separate function rather than
 // a generalization of shellCommand so the latter's exact-format tests stay
 // unchanged.
-func quickShellCommand(safecodePath, projectRoot, tool string) string {
+func quickShellCommand(manigotPath, projectRoot, tool string) string {
 	if tool == "" {
 		tool = config.ToolClaudeCode
 	}
 	inner := fmt.Sprintf("cd %s && %s --tool %s",
-		shellQuote(projectRoot), shellQuote(safecodePath), shellQuote(tool))
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(tool))
 	return holdOnFailure(inner)
 }
 
@@ -172,7 +172,7 @@ func quickShellCommand(safecodePath, projectRoot, tool string) string {
 // the fix uniform across all five spawn paths in buildCmd and lets it be
 // exercised by ordinary string-based tests.
 func holdOnFailure(cmd string) string {
-	return cmd + `; ec=$?; if [ "$ec" -ne 0 ]; then echo; echo "--- safecode: exited with status $ec ---"; printf 'press enter to close... '; read -r _ignored; fi; exit "$ec"`
+	return cmd + `; ec=$?; if [ "$ec" -ne 0 ]; then echo; echo "--- manigot: exited with status $ec ---"; printf 'press enter to close... '; read -r _ignored; fi; exit "$ec"`
 }
 
 // shellQuote wraps s in single quotes, escaping any embedded single quote via
@@ -186,7 +186,7 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 	// 1. Inside tmux (works on every OS that has tmux).
 	if os.Getenv("TMUX") != "" {
 		if _, err := exec.LookPath("tmux"); err == nil {
-			return exec.Command("tmux", "new-window", "-n", "safecode", inner), "tmux window", nil
+			return exec.Command("tmux", "new-window", "-n", "manigot", inner), "tmux window", nil
 		}
 	}
 

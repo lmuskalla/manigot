@@ -7,21 +7,21 @@ date: 2026-08-08
 
 ## Summary
 
-The TUI no longer assumes how safecode was installed. A new `tui/internal/resolve`
+The TUI no longer assumes how manigot was installed. A new `tui/internal/resolve`
 package locates each host command through an ordered strategy — env override →
 canonical name on `$PATH` → short name → legacy name → the script inside a
 checkout — and the two places that previously hardcoded a name (`hostcmd.NewJob`
 and `launch.shellCommand`) now execute the resolved absolute path.
 
-Alongside that, the commands got safecode-specific names: `new-job` →
-`safecode-job` (`sc-job`) and `finish-job` → `safecode-done` (`sc-done`), with
+Alongside that, the commands got manigot-specific names: `new-job` →
+`manigot-job` (`mg-job`) and `finish-job` → `manigot-done` (`mg-done`), with
 the old names kept in the resolver's lookup order so existing installations keep
 working without migration. `make install` / `make uninstall` create and remove
 the symlinks, and the docs explain the alias + env-var route for users who don't
 want anything in `/usr/local/bin`.
 
 Prerequisite work: the container image now has `make` and Go, so the TUI can be
-built and tested from inside safecode at all.
+built and tested from inside manigot at all.
 
 All work verified with `gofmt -l`, `go vet ./...`, `go test ./...` (all packages
 pass), `make tui`, and `make install`/`make uninstall` against a throwaway
@@ -55,23 +55,23 @@ var is visible. Helpers: `resolveOverride` (path vs. bare name), `repoRoots`,
 `isExecutableFile` (rejects directories, follows symlinks), `absOrSame`.
 
 TASK-2: `tui/internal/resolve/resolve.go` — the public contract:
-`SAFECODE_BIN`, `SAFECODE_JOB_BIN`, `SAFECODE_DONE_BIN`, `SAFECODE_HOME` as
-exported constants (`EnvSafecode`, `EnvJob`, `EnvDone`, `EnvHome`) so no caller
+`manigot_BIN`, `manigot_JOB_BIN`, `manigot_DONE_BIN`, `manigot_HOME` as
+exported constants (`Envmanigot`, `EnvJob`, `EnvDone`, `EnvHome`) so no caller
 or message spells them out by hand, documented in the package doc together with
 the reason aliases cannot be supported directly.
 
-TASK-3: `scripts/safecode-tui.sh` — exports `SAFECODE_HOME` from the `ROOT` it
+TASK-3: `scripts/manigot-tui.sh` — exports `manigot_HOME` from the `ROOT` it
 already computes (respecting a value the user set themselves), so the
 wrapper-script install needs no configuration for the script fallback to work.
 
 TASK-4: `tui/internal/resolve/resolve.go`, `tui/main.go` — `executableRoots()`
 derives candidate checkouts from `os.Executable()`, considering the binary's own
-directory and its parent (covers `bin/safecode-tui`) for both the literal and
+directory and its parent (covers `bin/manigot-tui`) for both the literal and
 the `EvalSymlinks`-resolved path. Every candidate is validated by
 `looksLikeCheckout()`, which keys off `scripts/run.sh`; that is also what rejects
 the `go run` temp build directory instead of inventing a bogus root. `main.go`
 calls the new `resolve.SeedHome()` at startup so spawned scripts inherit
-`$SAFECODE_HOME`.
+`$manigot_HOME`.
 
 TASK-5: `tui/internal/hostcmd/hostcmd.go`, `hostcmd_test.go` — `NewJob` resolves
 `resolve.Job()` and runs the returned absolute path, keeping `cmd.Dir` *and* the
@@ -82,7 +82,7 @@ asserts the stub is invoked by absolute path, in the project root, with `$PWD`
 set, and that `--type` is omitted when the type is empty.
 
 TASK-6: `tui/internal/launch/launch.go`, `launch_test.go` — `Agent` resolves
-`resolve.Safecode()`; `shellCommand` takes the path as a parameter and quotes it
+`resolve.manigot()`; `shellCommand` takes the path as a parameter and quotes it
 with the existing `shellQuote`, so the string stays safe inside `osascript` and
 `bash -lc` even for a checkout in a directory with spaces. Passing the path in
 also keeps the format test environment-independent.
@@ -95,22 +95,22 @@ stay one-liners. Wired into both the new-job form and the agent-launch status.
 Covered by `tui/internal/ui/cmderror_test.go` (new).
 
 TASK-8: `tui/internal/resolve/commands.go`, `commands_test.go` (new) — the
-settled names: `safecode-job` / `sc-job` / `new-job` and `safecode-done` /
-`sc-done` / `finish-job`, plus a `Done()` spec so the whole command surface is
+settled names: `manigot-job` / `mg-job` / `new-job` and `manigot-done` /
+`mg-done` / `finish-job`, plus a `Done()` spec so the whole command surface is
 covered. Tests pin the exact lists, prove the canonical name wins when several
 are installed side by side, prove a pre-rename install (legacy name only) still
 resolves silently, and check each spec's `Script` path exists in the repo.
 
 TASK-9: `scripts/new-job.sh`, `scripts/finish-job.sh` (and the one stale mention
-in `scripts/safecode-tui.sh`) — usage headers and argument-error messages now say
-`safecode-job` / `safecode-done`, noting the short alias and that the legacy name
+in `scripts/manigot-tui.sh`) — usage headers and argument-error messages now say
+`manigot-job` / `manigot-done`, noting the short alias and that the legacy name
 still works. Script *filenames* unchanged.
 
-TASK-10: `Makefile` — `make install` symlinks all four launchers plus `sc-job` /
-`sc-done` into `$(PREFIX)/bin` (default `/usr/local`), from a single `LINKS`
+TASK-10: `Makefile` — `make install` symlinks all four launchers plus `mg-job` /
+`mg-done` into `$(PREFIX)/bin` (default `/usr/local`), from a single `LINKS`
 list; `make uninstall` removes them but only when they are symlinks. Symlinks
 rather than copies so `git pull` updates the installed commands. Warns when
-`BINDIR` is not on `PATH` and when `bin/safecode-tui` has not been built. Neither
+`BINDIR` is not on `PATH` and when `bin/manigot-tui` has not been built. Neither
 target is a prerequisite of anything else, since `install` is the only thing here
 that writes outside the repo. `make tui` and the TUI wrapper now point at
 `make install`.
@@ -118,17 +118,17 @@ that writes outside the repo. `make tui` and the TUI wrapper now point at
 TASK-11: `README.md` — repo tree shows the installed name for each script
 (including `finish-job.sh`, which was missing entirely); the install step is
 `make install` with a `PREFIX` example; a new "The installed commands" table and
-an "Installing without symlinks" section (aliases + `SAFECODE_*` overrides, and
+an "Installing without symlinks" section (aliases + `manigot_*` overrides, and
 why aliases alone cannot work for the TUI). Usage, job-workflow, TUI and
 keybinding sections use the new names. The shared install docs were moved below
 the OpenCode subsection, since the launchers are not Claude Code specific.
 
-TASK-12: `docs/AGENTS.md` — new command names, the `safecode-tui` wrapper and
-`SAFECODE_HOME`, the `resolve` package and its lookup order (with the rule that
+TASK-12: `docs/AGENTS.md` — new command names, the `manigot-tui` wrapper and
+`manigot_HOME`, the `resolve` package and its lookup order (with the rule that
 nothing in the TUI may hardcode a command name), and the new `make install` /
 `make tui` targets.
 
-TASK-13: `docs/TASKS.md` — `new-job` → `safecode-job` in the workflow note and
+TASK-13: `docs/TASKS.md` — `new-job` → `manigot-job` in the workflow note and
 the TUI shortcut item; ticked off the "Add `make install` target" housekeeping
 item that TASK-10 delivered.
 
@@ -164,13 +164,13 @@ Verified with `gofmt -l .`, `go build ./...`, `go vet ./...`, `go test ./...`
 
 ## Known issues / follow-ups
 
-- **Q1 stayed as decided in the handover.** Only `sc-job` and `sc-done` are
-  installed; no bare `sc`, no `sc-tui`. Adding them is one line in the
-  Makefile's `LINKS` list. The README's alias example uses `sc` and `sc-tui`
+- **Q1 stayed as decided in the handover.** Only `mg-job` and `mg-done` are
+  installed; no bare `mg`, no `mg-tui`. Adding them is one line in the
+  Makefile's `LINKS` list. The README's alias example uses `mg` and `mg-tui`
   as *aliases*, which is exactly the case the env-var overrides exist for.
 - **`resolve.Done()` has no caller yet.** The TUI has no finish-job action
   (`docs/TASKS.md` still lists "New job shortcut" and friends). The spec and its
-  `SAFECODE_DONE_BIN` contract are in place for when that action is added.
+  `manigot_DONE_BIN` contract are in place for when that action is added.
 - **`docs/CLAUDE.md` is a 0-byte file** although TASK-12 lists it. Nothing to
   sync into it. Either delete it or fill it in — `docs/AGENTS.md` is the real
   context file and `run.sh` mounts that. Not touched here.

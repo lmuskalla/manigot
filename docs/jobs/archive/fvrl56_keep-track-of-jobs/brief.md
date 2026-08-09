@@ -41,7 +41,7 @@ cheaper fix.
   in-flight jobs across branches, it fails its core job the moment more than
   one piece of work is open at a time.
 - Radically keeping the user oriented — without making them hop branches by
-  hand — is the whole point of having a TUI over the raw `sc` scripts.
+  hand — is the whole point of having a TUI over the raw `mg` scripts.
 
 ## Out of scope
 
@@ -63,7 +63,7 @@ cheaper fix.
 
 The moment discovery is cross-branch, the user can select a job that lives on
 branch B while currently on branch A. Launching an agent today
-(`tui/internal/launch/launch.go`) does `cd <root> && sc --agent … --job <id>`
+(`tui/internal/launch/launch.go`) does `cd <root> && mg --agent … --job <id>`
 with **no branch switch** — so it would run the agent against the wrong branch's
 working tree. This feature must pair cross-branch discovery with a clear
 answer for "act on a job not on the current branch": either check out the job's

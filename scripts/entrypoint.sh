@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Which agent CLI to start — set by run.sh from its --tool flag.
-TOOL="${SAFECODE_TOOL:-claude-code}"
+TOOL="${MANIGOT_TOOL:-claude-code}"
 
 if [[ "$TOOL" == "claude-code" ]]; then
     # Write ~/.claude.json to bypass the onboarding wizard.
@@ -15,7 +15,7 @@ if [[ "$TOOL" == "claude-code" ]]; then
             echo "Error: CLAUDE_ACCOUNT_UUID, CLAUDE_EMAIL, and CLAUDE_ORG_UUID must be set."
             echo "Extract them from your host with:"
             echo "  cat ~/.claude.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('oauthAccount'), indent=2))\""
-            echo "Then add them to your safecode/.env file."
+            echo "Then add them to your manigot/.env file."
             exit 1
         fi
 
@@ -71,7 +71,7 @@ else
 
     if [[ "$HAVE_KEY" -eq 0 ]]; then
         echo "Error: no provider API key found for OpenCode."
-        echo "Set at least one of these in your safecode/.env file:"
+        echo "Set at least one of these in your manigot/.env file:"
         printf '  %s\n' "${OPENCODE_KEY_VARS[@]}"
         exit 1
     fi
@@ -98,8 +98,8 @@ fi
 # whatever values we have available.
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
-GIT_NAME="${GIT_AUTHOR_NAME_CFG:-${CLAUDE_EMAIL:-safecode}}"
-GIT_EMAIL="${GIT_AUTHOR_EMAIL_CFG:-${CLAUDE_EMAIL:-safecode@localhost}}"
+GIT_NAME="${GIT_AUTHOR_NAME_CFG:-${CLAUDE_EMAIL:-manigot}}"
+GIT_EMAIL="${GIT_AUTHOR_EMAIL_CFG:-${CLAUDE_EMAIL:-manigot@localhost}}"
 
 git config --global user.name  "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"
@@ -111,7 +111,7 @@ if [[ "$TOOL" == "opencode" ]]; then
 else
     # --dangerously-skip-permissions starts every Claude Code session in full
     # auto mode (no per-tool-call confirmation). Safe in this context because
-    # safecode launches an isolated, ephemeral container specifically for this
+    # manigot launches an isolated, ephemeral container specifically for this
     # purpose; the brief explicitly wants Claude Code to start in auto mode.
     # Placed before "$@" so it composes with the passthrough (--agent <name>
     # and/or the positional job prompt). The opencode branch is intentionally

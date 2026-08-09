@@ -25,7 +25,7 @@ the always-shows-all-five action-bar rendering.
 
 **Feature B — mark a job done from the TUI (TASK-5 → 9):** added
 `hostcmd.DoneCommand`, mirroring `NewJob`'s resolve + cwd/`$PWD` pattern for
-`sc-done` (`scripts/finish-job.sh`), keyed on the job's exact directory name.
+`mg-done` (`scripts/finish-job.sh`), keyed on the job's exact directory name.
 Wired a new capital-`D` key in the detail view that runs it via
 `tea.ExecProcess` (the same foreground suspend/resume `e` edit already uses),
 since `finish-job.sh`'s `read -rp` confirmations need a real terminal. Per Q2

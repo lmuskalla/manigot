@@ -9,7 +9,7 @@ date: 2026-08-09
 
 ## Summary
 
-Claude Code sessions launched through safecode now start in full auto mode
+Claude Code sessions launched through manigot now start in full auto mode
 with no first-run prompts. Two mechanisms were added, both scoped to the
 existing `claude-code` branch of `scripts/entrypoint.sh`:
 
@@ -44,7 +44,7 @@ also set. That finding drove a one-line addition to TASK-2's heredoc.
   `bypassPermissionsModeAccepted: true` is set — literal message: *"Permission
   mode downgraded to default — bypass requires accepting the disclaimer
   interactively first"*. So `--dangerously-skip-permissions` alone would NOT
-  achieve the brief's goal in interactive `sc` sessions; the JSON key is also
+  achieve the brief's goal in interactive `mg` sessions; the JSON key is also
   required. This is the exact risk TASK-1 was chartered to catch.
 
 **TASK-2 — `scripts/entrypoint.sh`.** Extended the `~/.claude.json` heredoc
@@ -77,14 +77,14 @@ inside the container:
   `refuseBypassUnderRoot` guard only blocks root/sudo, so the flag is accepted.
 - Empirical: `claude --dangerously-skip-permissions --print "…"` runs with no
   permission/trust prompt and exit 0; the same flag combined with
-  `--agent <name>` + a positional prompt (mirroring `sc --agent --job`) is
+  `--agent <name>` + a positional prompt (mirroring `mg --agent --job`) is
   accepted by the arg parser without rejection.
 - Confirmed via `tui/internal/launch/launch.go` that all three launch paths
-  (plain `sc`, `sc --agent --job`, TUI) route through `scripts/run.sh` →
+  (plain `mg`, `mg --agent --job`, TUI) route through `scripts/run.sh` →
   `docker run` → `entrypoint.sh` → `exec claude …`, so the single edit covers
   all of them.
 - **Not verifiable from this context:** the live interactive TTY behaviour
-  (watching a real `sc`/TUI session to confirm zero on-screen prompts).
+  (watching a real `mg`/TUI session to confirm zero on-screen prompts).
   That is inherently a human-at-the-host check and should be confirmed by the
   reviewer. The mechanism (correct keys + correct flag) is verified against
   the binary's own logic.

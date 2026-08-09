@@ -17,7 +17,7 @@ code immediately without re-reading the whole repo.
 Apply the Dockerfile change in section 2, then:
 
 ```bash
-cd safecode/
+cd manigot/
 make rebuild       # or: make build — the apt layer changes, so it re-runs either way
 ```
 
@@ -110,7 +110,7 @@ separate chore job.
 
 | # | Question | Answer |
 |---|---|---|
-| Q1 | short names | install `safecode-job`/`sc-job` and `safecode-done`/`sc-done` only — **no** bare `sc`, no `sc-tui` |
+| Q1 | short names | install `manigot-job`/`mg-job` and `manigot-done`/`mg-done` only — **no** bare `mg`, no `mg-tui` |
 | Q2 | legacy names | resolver accepts `new-job`/`finish-job` silently, no deprecation warning |
 | Q3 | install mechanism | `make install` / `make uninstall` are in scope (TASK-10) |
 | Q4 | Go module cache | **open** — see above |
@@ -119,10 +119,10 @@ Naming table (from `tasks.md`, unchanged):
 
 | script | canonical | short | legacy |
 |---|---|---|---|
-| `scripts/run.sh` | `safecode` | — | — |
-| `scripts/new-job.sh` | `safecode-job` | `sc-job` | `new-job` |
-| `scripts/finish-job.sh` | `safecode-done` | `sc-done` | `finish-job` |
-| `scripts/safecode-tui.sh` | `safecode-tui` | — | — |
+| `scripts/run.sh` | `manigot` | — | — |
+| `scripts/new-job.sh` | `manigot-job` | `mg-job` | `new-job` |
+| `scripts/finish-job.sh` | `manigot-done` | `mg-done` | `finish-job` |
+| `scripts/manigot-tui.sh` | `manigot-tui` | — | — |
 
 Script *filenames* do not change — only the installed command names.
 
@@ -151,8 +151,8 @@ Commit format: `[bvi7n6] TASK-N: short description`.
   resolves the project root from `$PWD`, and `exec.Cmd` does not update `PWD`
   on its own. **Keep both when switching to the resolved absolute path.**
 - `tui/internal/launch/launch.go:57-60` — `shellCommand` returns
-  `cd <root> && safecode --agent <a> --job <j>` with the literal word
-  `safecode`. `shellQuote` (line 64) is the existing `'…'\''…'` quoter; reuse it
+  `cd <root> && manigot --agent <a> --job <j>` with the literal word
+  `manigot`. `shellQuote` (line 64) is the existing `'…'\''…'` quoter; reuse it
   for the resolved path so paths with spaces survive `osascript` and `bash -lc`.
 
 ### Tests that will need updating
@@ -160,11 +160,11 @@ Commit format: `[bvi7n6] TASK-N: short description`.
 - `tui/internal/hostcmd/hostcmd_test.go` — `TestNewJobMissingOnPath` skips if
   `new-job` is on PATH and asserts the error contains `"not found"`. TASK-5/7
   change the error text; keep a `"not found"` substring or update the assertion.
-  It must now also be immune to `safecode-job`/`sc-job` being installed, and to
-  `SAFECODE_JOB_BIN` being set — clear the env vars in the test.
+  It must now also be immune to `manigot-job`/`mg-job` being installed, and to
+  `manigot_JOB_BIN` being set — clear the env vars in the test.
 - `tui/internal/launch/launch_test.go:10` — `TestShellCommandFormat` asserts the
-  exact string `cd '/home/me/proj' && safecode --agent 'developer' --job 'irw320'`.
-  TASK-6 breaks this. Best fix: make `shellCommand` take the resolved safecode
+  exact string `cd '/home/me/proj' && manigot --agent 'developer' --job 'irw320'`.
+  TASK-6 breaks this. Best fix: make `shellCommand` take the resolved manigot
   path as a parameter, so the test can pass a fixed value instead of depending
   on the environment.
 - Other tests in that file (`TestShellQuote*`, `TestBuildCmdSmoke`) are
@@ -180,8 +180,8 @@ Commit format: `[bvi7n6] TASK-N: short description`.
 
 ### Scripts
 
-- `scripts/safecode-tui.sh:17-19` already computes `SCRIPT_DIR` and `ROOT`.
-  TASK-3 is literally adding `export SAFECODE_HOME="$ROOT"` before the final
+- `scripts/manigot-tui.sh:17-19` already computes `SCRIPT_DIR` and `ROOT`.
+  TASK-3 is literally adding `export manigot_HOME="$ROOT"` before the final
   `exec "$BIN" "$@"`. The usage comment at line 9 also mentions `new-job` and
   needs the rename.
 - `scripts/new-job.sh` — usage comments lines 5-7, usage string line 15.
@@ -202,7 +202,7 @@ Commit format: `[bvi7n6] TASK-N: short description`.
   (0 bytes)** despite being listed in TASK-12 — nothing to sync there; say so in
   `implementation.md` rather than inventing content.
 - `project-template/docs/AGENTS.md` — grep finds **no** `new-job`/`finish-job`
-  occurrences (only `safecode` at lines 5-7). Likely nothing to change; confirm
+  occurrences (only `manigot` at lines 5-7). Likely nothing to change; confirm
   and note it.
 - `docs/TASKS.md` — line 4 and line 34 (TASK-13). Also note line 70,
   "Add `make install` target that sets up symlinks automatically", which TASK-10

@@ -1,10 +1,10 @@
-// Package resolve locates the safecode host commands that the TUI shells out
-// to (sc, sc-job, sc-done, sc-delete).
+// Package resolve locates the manigot host commands that the TUI shells out
+// to (sc, mg-job, mg-done, mg-delete).
 //
 // The TUI must not assume a particular installation method. Users may symlink
 // the launchers into /usr/local/bin under their canonical names, or not
 // install them on $PATH at all and run everything out of a checkout. Shell
-// aliases (alias sc-job=…) are deliberately *not* a supported discovery
+// aliases (alias mg-job=…) are deliberately *not* a supported discovery
 // mechanism: aliases only exist inside interactive shells, so neither
 // exec.Command nor `bash -lc` can expand them. The env var overrides below are
 // the escape hatch for those users.
@@ -14,7 +14,7 @@
 //  1. the command's explicit env var override (an absolute path, or a command
 //     name to look up on $PATH),
 //  2. the canonical command name on $PATH,
-//  3. the implementing script inside a safecode checkout.
+//  3. the implementing script inside a manigot checkout.
 //
 // The first hit wins, and Resolve reports both the absolute path it found and a
 // short description of how it got there, so the UI can explain itself.
@@ -24,23 +24,23 @@
 // These five names are a public, user-facing contract. Renaming one is a
 // breaking change for anyone who has put it in their shell profile.
 //
-//	SAFECODE_BIN         path to (or name of) the safecode launcher
+//	MANIGOT_BIN         path to (or name of) the manigot launcher
 //	                     — scripts/run.sh
-//	SAFECODE_JOB_BIN     path to (or name of) the job-creation command
+//	MANIGOT_JOB_BIN     path to (or name of) the job-creation command
 //	                     — scripts/new-job.sh
-//	SAFECODE_DONE_BIN    path to (or name of) the job-completion command
+//	MANIGOT_DONE_BIN    path to (or name of) the job-completion command
 //	                     — scripts/finish-job.sh
-//	SAFECODE_DELETE_BIN  path to (or name of) the job-deletion command
+//	MANIGOT_DELETE_BIN  path to (or name of) the job-deletion command
 //	                     — scripts/delete-job.sh
-//	SAFECODE_HOME        path to a safecode checkout, used for the script
-//	                     fallback ($SAFECODE_HOME/scripts/<name>.sh)
+//	MANIGOT_HOME        path to a manigot checkout, used for the script
+//	                     fallback ($MANIGOT_HOME/scripts/<name>.sh)
 //
 // The four *_BIN variables take either an absolute or relative path (anything
 // containing a path separator) or a bare command name that is looked up on
 // $PATH. A value that cannot be resolved is an error: the resolver does not
 // silently ignore a misspelled override.
 //
-// SAFECODE_HOME is exported by scripts/tui.sh, so the wrapper-script
+// MANIGOT_HOME is exported by scripts/tui.sh, so the wrapper-script
 // install needs no configuration at all; setting it by hand is only necessary
 // when running the binary directly from an unusual location.
 package resolve
@@ -57,20 +57,20 @@ import (
 // the full contract; these constants are the single source of truth for the
 // names, so callers and messages never spell them out by hand.
 const (
-	// EnvSafecode overrides the safecode launcher (scripts/run.sh).
-	EnvSafecode = "SAFECODE_BIN"
+	// EnvManigot overrides the manigot launcher (scripts/run.sh).
+	EnvManigot = "MANIGOT_BIN"
 
 	// EnvJob overrides the job-creation command (scripts/new-job.sh).
-	EnvJob = "SAFECODE_JOB_BIN"
+	EnvJob = "MANIGOT_JOB_BIN"
 
 	// EnvDone overrides the job-completion command (scripts/finish-job.sh).
-	EnvDone = "SAFECODE_DONE_BIN"
+	EnvDone = "MANIGOT_DONE_BIN"
 
 	// EnvDelete overrides the job-deletion command (scripts/delete-job.sh).
-	EnvDelete = "SAFECODE_DELETE_BIN"
+	EnvDelete = "MANIGOT_DELETE_BIN"
 
-	// EnvHome points at a safecode checkout, enabling the script fallback.
-	EnvHome = "SAFECODE_HOME"
+	// EnvHome points at a manigot checkout, enabling the script fallback.
+	EnvHome = "MANIGOT_HOME"
 )
 
 // Spec describes one host command and every way it may be found.
@@ -89,7 +89,7 @@ type Spec struct {
 	// future rename can add a transitional alias without changing callers.
 	Names []string
 
-	// Script is the path of the implementing script relative to a safecode
+	// Script is the path of the implementing script relative to a manigot
 	// checkout (e.g. "scripts/new-job.sh"). Empty disables the fallback.
 	Script string
 }
@@ -100,7 +100,7 @@ type Result struct {
 	Path string
 
 	// How is a short human description of which strategy matched, e.g.
-	// "$SAFECODE_JOB_BIN" or "sc-job on $PATH".
+	// "$MANIGOT_JOB_BIN" or "mg-job on $PATH".
 	How string
 }
 
@@ -129,7 +129,7 @@ func (e *NotFoundError) TriedList() string {
 // Hint is a one-line suggestion for fixing the failure: install the launchers,
 // or point the relevant env var at the executable.
 func (e *NotFoundError) Hint() string {
-	install := "install the safecode launchers with `make install` in your checkout"
+	install := "install the manigot launchers with `make install` in your checkout"
 	if e.Spec.EnvVar == "" {
 		return install
 	}
@@ -137,7 +137,7 @@ func (e *NotFoundError) Hint() string {
 	if example == "" {
 		example = e.Spec.Label
 	}
-	return fmt.Sprintf("%s, or set $%s=/path/to/safecode/%s (or $%s=/path/to/safecode)",
+	return fmt.Sprintf("%s, or set $%s=/path/to/manigot/%s (or $%s=/path/to/manigot)",
 		install, e.Spec.EnvVar, example, EnvHome)
 }
 
@@ -166,7 +166,7 @@ func Resolve(s Spec) (Result, error) {
 		tried = append(tried, name+" on $PATH")
 	}
 
-	// 3. The script inside a safecode checkout.
+	// 3. The script inside a manigot checkout.
 	if s.Script != "" {
 		roots := repoRoots()
 		for _, root := range roots {
@@ -201,9 +201,9 @@ func resolveOverride(raw string) (string, error) {
 	return absOrSame(path), nil
 }
 
-// repoRoots lists the safecode checkouts to look for scripts in, most
+// repoRoots lists the manigot checkouts to look for scripts in, most
 // trustworthy first: what the user (or the wrapper script) declared via
-// $SAFECODE_HOME, then whatever the running binary's own location implies.
+// $MANIGOT_HOME, then whatever the running binary's own location implies.
 func repoRoots() []string {
 	var roots []string
 	seen := map[string]bool{}
@@ -224,9 +224,9 @@ func repoRoots() []string {
 	return roots
 }
 
-// executableRoots derives candidate safecode checkouts from the location of the
-// running binary, so a directly-invoked bin/safecode-tui still finds scripts/
-// without the wrapper script's $SAFECODE_HOME.
+// executableRoots derives candidate manigot checkouts from the location of the
+// running binary, so a directly-invoked bin/manigot-tui still finds scripts/
+// without the wrapper script's $MANIGOT_HOME.
 //
 // Two shapes are considered, for both the literal path and the symlink-resolved
 // one (an install is typically a symlink from /usr/local/bin into a checkout):
@@ -234,7 +234,7 @@ func repoRoots() []string {
 //
 // Under `go run` the binary lives in a temporary build directory, which is not
 // a checkout — looksLikeCheckout rejects it, so that case falls through to
-// $SAFECODE_HOME or $PATH rather than producing a bogus root.
+// $MANIGOT_HOME or $PATH rather than producing a bogus root.
 func executableRoots() []string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -259,7 +259,7 @@ func executableRoots() []string {
 	return roots
 }
 
-// looksLikeCheckout reports whether dir is plausibly a safecode checkout. It
+// looksLikeCheckout reports whether dir is plausibly a manigot checkout. It
 // keys off scripts/run.sh, the one file that has always been there, so that a
 // coincidental directory layout (or a `go run` temp dir) is not mistaken for
 // one.
@@ -271,8 +271,8 @@ func looksLikeCheckout(dir string) bool {
 	return err == nil && !info.IsDir()
 }
 
-// Home returns the safecode checkout the TUI considers itself to belong to, or
-// "" if it cannot tell. Callers use it to seed $SAFECODE_HOME for child
+// Home returns the manigot checkout the TUI considers itself to belong to, or
+// "" if it cannot tell. Callers use it to seed $MANIGOT_HOME for child
 // processes; see SeedHome.
 func Home() string {
 	roots := repoRoots()
@@ -282,10 +282,10 @@ func Home() string {
 	return roots[0]
 }
 
-// SeedHome sets $SAFECODE_HOME for this process (and therefore for every child
+// SeedHome sets $MANIGOT_HOME for this process (and therefore for every child
 // it spawns) when it is not already set and a checkout could be derived from
 // the binary's own location. Call it once at startup: it means a directly
-// invoked bin/safecode-tui passes the same context to the scripts it runs as
+// invoked bin/manigot-tui passes the same context to the scripts it runs as
 // the wrapper script would. It returns the value in effect, or "".
 func SeedHome() string {
 	if home := strings.TrimSpace(os.Getenv(EnvHome)); home != "" {

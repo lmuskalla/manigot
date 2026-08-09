@@ -14,8 +14,8 @@ func isolate(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
-	t.Setenv("SAFECODE_JOB_BIN", "")
-	t.Setenv("SAFECODE_HOME", "")
+	t.Setenv("MANIGOT_JOB_BIN", "")
+	t.Setenv("MANIGOT_HOME", "")
 	return dir
 }
 
@@ -47,7 +47,7 @@ func TestNewJobRunsResolvedCommand(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SAFECODE_JOB_BIN", stub)
+	t.Setenv("MANIGOT_JOB_BIN", stub)
 
 	got, err := NewJob("my title", "fix", root)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestNewJobRunsResolvedCommand(t *testing.T) {
 
 func TestDoneCommandUnresolvable(t *testing.T) {
 	isolate(t)
-	t.Setenv("SAFECODE_DONE_BIN", "")
+	t.Setenv("MANIGOT_DONE_BIN", "")
 
 	_, err := DoneCommand("ab0001_x", t.TempDir())
 	if err == nil {
@@ -96,7 +96,7 @@ func TestDoneCommandUnresolvable(t *testing.T) {
 // this test runs it itself rather than exercising it through the TUI.
 func TestDoneCommandBuildsResolvedCommand(t *testing.T) {
 	isolate(t)
-	t.Setenv("SAFECODE_DONE_BIN", "")
+	t.Setenv("MANIGOT_DONE_BIN", "")
 	root := t.TempDir()
 	out := filepath.Join(root, "args.txt")
 
@@ -107,7 +107,7 @@ func TestDoneCommandBuildsResolvedCommand(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SAFECODE_DONE_BIN", stub)
+	t.Setenv("MANIGOT_DONE_BIN", stub)
 
 	cmd, err := DoneCommand("ab0001_x", root)
 	if err != nil {
@@ -136,7 +136,7 @@ func TestDoneCommandBuildsResolvedCommand(t *testing.T) {
 
 func TestDeleteCommandUnresolvable(t *testing.T) {
 	isolate(t)
-	t.Setenv("SAFECODE_DELETE_BIN", "")
+	t.Setenv("MANIGOT_DELETE_BIN", "")
 
 	_, err := DeleteCommand("ab0001_x", t.TempDir())
 	if err == nil {
@@ -152,7 +152,7 @@ func TestDeleteCommandUnresolvable(t *testing.T) {
 // it through the TUI.
 func TestDeleteCommandBuildsResolvedCommand(t *testing.T) {
 	isolate(t)
-	t.Setenv("SAFECODE_DELETE_BIN", "")
+	t.Setenv("MANIGOT_DELETE_BIN", "")
 	root := t.TempDir()
 	out := filepath.Join(root, "args.txt")
 
@@ -163,7 +163,7 @@ func TestDeleteCommandBuildsResolvedCommand(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SAFECODE_DELETE_BIN", stub)
+	t.Setenv("MANIGOT_DELETE_BIN", stub)
 
 	cmd, err := DeleteCommand("ab0001_x", root)
 	if err != nil {
@@ -201,7 +201,7 @@ func TestNewJobOmitsEmptyType(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SAFECODE_JOB_BIN", stub)
+	t.Setenv("MANIGOT_JOB_BIN", stub)
 
 	if _, err := NewJob("t", "", root); err != nil {
 		t.Fatalf("NewJob: %v", err)

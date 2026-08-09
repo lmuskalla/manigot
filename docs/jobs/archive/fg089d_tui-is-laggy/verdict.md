@@ -139,7 +139,7 @@ the four job docs. No unrelated refactors, no drive-by changes. Clean.
 None — no new external input handling, no new attacksurface. Shell-quoting
 of `holdOnFailure`'s wrapper string is fixed/static (no user-controlled
 interpolation added beyond what `shellQuote` already handled for
-`safecodePath`/`agent`/`jobID`).
+`manigotPath`/`agent`/`jobID`).
 
 ## Overall
 

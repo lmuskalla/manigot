@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
-# sc-delete "go61h7"
-# sc-delete "go61h7_add-backup-package"
+# mg-delete "go61h7"
+# mg-delete "go61h7_add-backup-package"
 #
-# Installed as `sc-delete`. See `make install`.
+# Installed as `mg-delete`. See `make install`.
 #
 # Permanently deletes a job: its directory under docs/jobs/ and, when the job
-# has a branch, the branch itself (git branch -D — no merge, unlike sc-done).
+# has a branch, the branch itself (git branch -D — no merge, unlike mg-done).
 # This is destructive and cannot be undone; the confirmation prompt is the
 # only safety net.
 
@@ -17,7 +17,7 @@ JOBS_DIR="docs/jobs"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
-    echo "Usage: sc-delete <job-id-or-slug>"
+    echo "Usage: mg-delete <job-id-or-slug>"
     exit 1
 fi
 

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
-# sc-job "add image gallery block"
-# sc-job "fix tenant isolation on media uploads" --type fix
-# sc-job "upgrade dependencies" --type chore
+# mg-job "add image gallery block"
+# mg-job "fix tenant isolation on media uploads" --type fix
+# mg-job "upgrade dependencies" --type chore
 #
-# Installed as `sc-job`. See `make install`.
+# Installed as `mg-job`. See `make install`.
 
 # ── Configuration ───────────────────────────────────────────────────────────────
 JOBS_DIR="docs/jobs"
@@ -14,7 +14,7 @@ DEFAULT_TYPE="feature"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
-    echo "Usage: sc-job \"title of job\" [--type feature|fix|chore]"
+    echo "Usage: mg-job \"title of job\" [--type feature|fix|chore]"
     exit 1
 fi
 
@@ -202,6 +202,6 @@ echo ""
 echo "  Next steps:"
 echo "  1. Edit brief.md:"
 echo "     $JOB_DIR/brief.md"
-echo "  2. Run @product-owner or @analyst inside safecode"
+echo "  2. Run @product-owner or @analyst inside manigot"
 echo "  3. Implement on this branch"
 echo "  4. Merge when verdict is APPROVED"

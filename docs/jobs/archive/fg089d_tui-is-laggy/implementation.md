@@ -23,7 +23,7 @@ Both symptoms in the brief were root-caused and fixed:
 2. **Agent-launch window flashing closed.** None of `launch.buildCmd`'s five
    spawn paths (tmux new-window, Terminal.app, gnome-terminal,
    x-terminal-emulator, konsole, xterm) kept the window/pane open after the
-   inner `sc --agent ... --job ...` command exited, so a fast failure was
+   inner `mg --agent ... --job ...` command exited, so a fast failure was
    invisible. Fixed by wrapping the inner shell command (TASK-6) so a
    non-zero exit prints the status and waits for Enter before the shell
    exits; a clean exit is left alone since a normal agent session just runs
@@ -85,12 +85,12 @@ files: tui/internal/launch/launch.go
 TASK-8: Verification pass.
 - `go test ./...` (run from `tui/`) passes, including the new tests added
   for TASK-2/3/6.
-- Built `bin/safecode-tui` via `make tui` and drove it over a real pty
+- Built `bin/manigot-tui` via `make tui` and drove it over a real pty
   (Python's `pty` module) with keystroke timing: Enter (open a job) and
   Escape (back to list) both round-tripped in ~15ms, quit in <1ms — no
   multi-second stalls or dropped keys, matching the diagnosis and fix.
 - Verified `holdOnFailure`'s shell logic directly under `bash -c`: a
-  non-zero exit prints `--- safecode: exited with status N ---` and blocks
+  non-zero exit prints `--- manigot: exited with status N ---` and blocks
   on `read` (window stays open); a zero exit runs straight through with no
   extra output (window behavior unchanged for the common case).
 - Could not exercise the real GUI-terminal/tmux spawn paths themselves

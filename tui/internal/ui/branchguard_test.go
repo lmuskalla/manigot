@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // mkOffBranchApp builds an App whose only detail-view job lives on a branch
@@ -38,7 +38,7 @@ func mkOffBranchApp(t *testing.T) *App {
 // in the title+meta line, not a second message down at the footer — see
 // detailView.blockedByBranch), branchFlash set so that hint blinks, and a
 // non-nil cmd — now always the branchFlashDoneMsg timer from
-// blockedByBranchCmd, never the actual editor/sc-done/sc-delete/agent-launch
+// blockedByBranchCmd, never the actual editor/mg-done/mg-delete/agent-launch
 // action, since the blocked branch returns before ever calling those.
 func assertBlocked(t *testing.T, a *App, cmd tea.Cmd) {
 	t.Helper()

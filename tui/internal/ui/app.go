@@ -1,4 +1,4 @@
-// Package ui holds the Bubble Tea models that make up the safecode TUI.
+// Package ui holds the Bubble Tea models that make up the manigot TUI.
 //
 // App is the root model; it owns the discovered job list and routes between the
 // list view (list.go), the job detail view (detail.go) and overlays for actions.
@@ -12,13 +12,13 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lmuskalla/safecode/tui/internal/config"
-	"github.com/lmuskalla/safecode/tui/internal/editor"
-	"github.com/lmuskalla/safecode/tui/internal/git"
-	"github.com/lmuskalla/safecode/tui/internal/hostcmd"
-	"github.com/lmuskalla/safecode/tui/internal/job"
-	"github.com/lmuskalla/safecode/tui/internal/launch"
-	"github.com/lmuskalla/safecode/tui/internal/resolve"
+	"github.com/lmuskalla/manigot/tui/internal/config"
+	"github.com/lmuskalla/manigot/tui/internal/editor"
+	"github.com/lmuskalla/manigot/tui/internal/git"
+	"github.com/lmuskalla/manigot/tui/internal/hostcmd"
+	"github.com/lmuskalla/manigot/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/launch"
+	"github.com/lmuskalla/manigot/tui/internal/resolve"
 )
 
 // appState selects which view is active. More states (detail, form) are added
@@ -28,7 +28,7 @@ type appState int
 const (
 	stateList appState = iota
 	stateDetail
-	stateNewJob   // "n" from the list — create a job via the host sc-job command
+	stateNewJob   // "n" from the list — create a job via the host mg-job command
 	stateSettings // "s" from the list — edit the persisted TUI settings
 )
 
@@ -71,7 +71,7 @@ type App struct {
 	settingsView *settingsView
 
 	// status is a transient one-line message shown in the footer (e.g. after
-	// running sc-job or an agent).
+	// running mg-job or an agent).
 	status string
 }
 
@@ -461,7 +461,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.state = stateDetail
 		}
 	case "n":
-		// Create a new job via the host sc-job command.
+		// Create a new job via the host mg-job command.
 		a.newJob = newNewJobView(a.width, a.height)
 		a.state = stateNewJob
 	case "s":
@@ -469,7 +469,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.settingsView = newSettingsView(a.settings, a.width, a.height)
 		a.state = stateSettings
 	case "o":
-		// Launch a bare safecode session (no agent, no job) in a detached
+		// Launch a bare manigot session (no agent, no job) in a detached
 		// new terminal — a quick ad-hoc change that doesn't belong to any
 		// specific job's workflow. Mirrors updateDetail's agent-launch
 		// reporting so the two launch paths feel consistent in the footer.
@@ -663,7 +663,7 @@ func (a *App) editCmd() (tea.Cmd, error) {
 	}), nil
 }
 
-// doneCmd resolves the sc-done invocation for the open job and returns the
+// doneCmd resolves the mg-done invocation for the open job and returns the
 // tea.Cmd that runs it. Like editCmd, this goes through tea.ExecProcess —
 // finish-job.sh's several read -rp confirmations need a real interactive
 // terminal, unlike launch.Agent's detached new-window spawn used for agents.
@@ -679,7 +679,7 @@ func (a *App) doneCmd() (tea.Cmd, error) {
 	}), nil
 }
 
-// deleteCmd resolves the sc-delete invocation for the open job and returns
+// deleteCmd resolves the mg-delete invocation for the open job and returns
 // the tea.Cmd that runs it. Like doneCmd, this goes through tea.ExecProcess
 // — delete-job.sh's read -rp confirmation needs a real interactive terminal.
 // An error here means the command itself could not be resolved (see
@@ -795,8 +795,8 @@ func (a *App) renderList() string {
 
 	var b strings.Builder
 
-	// Title line: "safecode - <project> - on <branch>".
-	title := "safecode - " + shortRoot(a.root)
+	// Title line: "manigot - <project> - on <branch>".
+	title := "manigot - " + shortRoot(a.root)
 	if a.currentBranch != "" {
 		title += " - on " + a.currentBranch
 	}
@@ -949,7 +949,7 @@ func cmdErrorText(err error) string {
 	}
 	var nf *resolve.NotFoundError
 	if errors.As(err, &nf) {
-		return "error: " + nf.Spec.Label + " not found — the safecode launchers are not installed under a name the TUI knows\n" +
+		return "error: " + nf.Spec.Label + " not found — the manigot launchers are not installed under a name the TUI knows\n" +
 			"tried: " + nf.TriedList() + "\n" +
 			"fix:   " + nf.Hint()
 	}

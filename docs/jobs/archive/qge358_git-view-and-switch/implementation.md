@@ -39,7 +39,7 @@ non-repo directory.
 TASK-3: Added `App.currentBranch string` in `tui/internal/ui/app.go`,
 populated in `NewApp` and re-populated in every place the job list itself
 refreshes (`refreshJobs`, `checkoutMsg`'s success path via `refreshJobs`, and
-`updateNewJob`'s post-`sc-job` refresh) so it can't go stale relative to
+`updateNewJob`'s post-`mg-job` refresh) so it can't go stale relative to
 `renderJobRow`'s existing `· <branch>` tags. Rendered in `renderList`'s
 header line next to "jobs in `<root>`"; renders nothing when empty (detached
 HEAD or a non-repo project).

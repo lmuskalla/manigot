@@ -10,8 +10,8 @@ date: 2026-08-08
 ## Scope note
 
 The TUI is **host-side**: it runs on the user's machine, NOT inside the
-safecode container. It reads a project's job directories and shells out to
-the existing host PATH commands — `safecode`, `new-job`, and `finish-job`
+manigot container. It reads a project's job directories and shells out to
+the existing host PATH commands — `manigot`, `new-job`, and `finish-job`
 (see discrepancy #3). It does not run in Docker and needs no credentials
 itself.
 
@@ -24,10 +24,10 @@ the author before locking scope:
    macOS + Linux? tmux required? Windows? This drives both the stack choice
    (TASK-1) and most of the implementation complexity.
 2. **Surface `finish-job` too?** Should the TUI also offer merge/archive, or
-   only `safecode` and `new-job`? `finish-job.sh` exists but is undocumented
+   only `manigot` and `new-job`? `finish-job.sh` exists but is undocumented
    in the README. Recommend including it in a later phase.
 3. **Distribution model:** prebuilt binary, run-from-source script, or the
-   existing symlink-to-PATH pattern used by `safecode`/`new-job`?
+   existing symlink-to-PATH pattern used by `manigot`/`new-job`?
 
 ## Conventions (now consistent across repo)
 
@@ -68,7 +68,7 @@ Still open (follow-up chore, out of scope for this job):
   found. Identical helper in all three scripts (`run.sh:46`, `new-job.sh:37`,
   `finish-job.sh:21`). Reuse this algorithm; do not invent a new one.
 - **Agent invocation contract (confirmed real — `run.sh:16-17,125-137`):**
-  `safecode --agent <name> --job <id>` starts the chosen tool on that job,
+  `manigot --agent <name> --job <id>` starts the chosen tool on that job,
   injecting the "read brief.md first" prompt. The TUI only needs to spawn this
   in a new terminal. Valid agent names: `analyst`, `developer`, `reviewer`,
   `security`, `product-owner`, `designer`.
@@ -145,7 +145,7 @@ TASK-8: Fire an agent in a new terminal window/pane.
      risk: high — cross-platform terminal spawning is genuinely fiddly and
             platform-dependent; the platform scope (Open Question #1) directly
             drives effort. On action, spawn
-            `safecode --agent <name> --job <id>` in a new terminal (e.g. tmux
+            `manigot --agent <name> --job <id>` in a new terminal (e.g. tmux
             split, macOS osascript/Terminal, linux `x-terminal-emulator`).
 
 TASK-9: new-job shortcut.
@@ -168,7 +168,7 @@ TASK-11: Install / launcher wiring + Makefile target.
             install steps
      depends: TASK-2
      risk: low. Provide a Makefile target and a PATH-symlink install path
-            mirroring how `safecode` / `new-job` / `finish-job` are installed,
+            mirroring how `manigot` / `new-job` / `finish-job` are installed,
             so the TUI is invocable as a host command. Decide distribution per
             Open Question #3.
 

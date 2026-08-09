@@ -1,11 +1,11 @@
 .PHONY: build rebuild run tui install uninstall help
 
-IMAGE  := safecode
+IMAGE  := manigot
 SCRIPT := ./scripts/run.sh
 
 # ── Build ───────────────────────────────────────────────────────────────────────
 
-build: ## Build the safecode image (skip if already built)
+build: ## Build the manigot image (skip if already built)
 	docker build -t $(IMAGE) .
 
 rebuild: ## Force rebuild with no cache (use after Claude Code updates)
@@ -13,14 +13,14 @@ rebuild: ## Force rebuild with no cache (use after Claude Code updates)
 
 # ── Run ─────────────────────────────────────────────────────────────────────────
 
-run: ## Start safecode in the current project (requires claude/ dir in project root)
+run: ## Start manigot in the current project (requires claude/ dir in project root)
 	$(SCRIPT)
 
 # ── TUI ─────────────────────────────────────────────────────────────────────────
 # The TUI is a host-side binary (not part of the container image). Build it with
 # `make tui`, then `make install` to put the launchers on your PATH — see README.
 
-TUI_BIN    := bin/safecode-tui
+TUI_BIN    := bin/manigot-tui
 TUI_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 tui: ## Build the host-side TUI binary into bin/
@@ -45,13 +45,13 @@ BINDIR  := $(PREFIX)/bin
 
 # <installed name>:<script>.
 LINKS := \
-	sc:run.sh \
-	sc-tui:tui.sh \
-	sc-job:new-job.sh \
-	sc-done:finish-job.sh \
-	sc-delete:delete-job.sh
+	mg:run.sh \
+	mg-tui:tui.sh \
+	mg-job:new-job.sh \
+	mg-done:finish-job.sh \
+	mg-delete:delete-job.sh
 
-install: ## Symlink the safecode launchers into PREFIX/bin (default /usr/local)
+install: ## Symlink the manigot launchers into PREFIX/bin (default /usr/local)
 	@mkdir -p "$(BINDIR)"
 	@for pair in $(LINKS); do \
 		name="$${pair%%:*}"; script="$${pair#*:}"; \
@@ -61,7 +61,7 @@ install: ## Symlink the safecode launchers into PREFIX/bin (default /usr/local)
 	@echo "Installed into $(BINDIR)."
 	@case ":$$PATH:" in *":$(BINDIR):"*) ;; \
 		*) echo "Warning: $(BINDIR) is not on your PATH." ;; esac
-	@test -x "$(TUI_BIN)" || echo "Note: run 'make tui' to build the TUI binary sc-tui needs."
+	@test -x "$(TUI_BIN)" || echo "Note: run 'make tui' to build the TUI binary mg-tui needs."
 
 uninstall: ## Remove the symlinks created by `make install`
 	@for pair in $(LINKS); do \
@@ -70,7 +70,7 @@ uninstall: ## Remove the symlinks created by `make install`
 			rm -f "$(BINDIR)/$$name" && echo "  removed $(BINDIR)/$$name"; \
 		fi; \
 	done
-	@echo "Removed safecode symlinks from $(BINDIR)."
+	@echo "Removed manigot symlinks from $(BINDIR)."
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 

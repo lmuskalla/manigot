@@ -1,4 +1,4 @@
-# safecode — Universal Claude Code environment
+# manigot — Universal Claude Code environment
 # Covers: PHP/Laravel, JS/TS/Svelte, Python, WordPress
 # node:22-trixie-slim = Debian 13 (Trixie) — ships PHP 8.4 natively, no third-party repo needed
 FROM node:22-trixie-slim
@@ -45,7 +45,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 # Claude Code
 RUN npm install -g @anthropic-ai/claude-code
 
-# OpenCode — alternative agent CLI, selected at runtime with `sc --tool opencode`.
+# OpenCode — alternative agent CLI, selected at runtime with `mg --tool opencode`.
 # The npm package pulls the matching prebuilt binary via optional platform deps.
 RUN npm install -g opencode-ai
 

@@ -73,7 +73,7 @@ now includes "D mark done". README's keybindings table was updated to match.
 TASK-9: PASS
 notes: `hostcmd_test.go` adds `TestDoneCommandUnresolvable` (surfaces a "not
 found" error, mirroring `TestNewJobUnresolvable`) and
-`TestDoneCommandBuildsResolvedCommand` (stub binary via `SAFECODE_DONE_BIN`,
+`TestDoneCommandBuildsResolvedCommand` (stub binary via `manigot_DONE_BIN`,
 verifies absolute-path invocation, cwd, `$PWD`, and the exact job-name arg —
 no real repo touched). `donemsg_test.go` adds the `App`-level clean/declined/
 error cases plus `TestDoneCmdResolutionFailureSurfacesNotFoundError`. All new
@@ -90,7 +90,7 @@ irreversible steps, and the TUI only ever invokes the resolved host script
 (`resolve.Done()`), never re-implements the git operations itself. No new
 attack surface (no shell interpolation of user input — `exec.Command` is used
 with argv, not a shell string; `jobName` passed as `job.Name`, not free user
-text). `SAFECODE_DONE_BIN` test isolation correctly prevents any test run
+text). `manigot_DONE_BIN` test isolation correctly prevents any test run
 from touching a real repo.
 
 ## Overall

@@ -12,14 +12,14 @@ date: 2026-08-09
 The TUI's list view lets you open a job's detail view (`enter`), create a new
 job (`n`), and edit settings (`s`) — but every actual *session launch* today is
 tied to a specific job **and** a specific agent: `launch.Agent` always builds
-`cd <root> && sc --tool <tool> --agent <agent> --job <jobID>` (see
+`cd <root> && mg --tool <tool> --agent <agent> --job <jobID>` (see
 `tui/internal/launch/launch.go:shellCommand`). There is no way from the TUI to
-just start a plain safecode session against the current project with no agent
+just start a plain manigot session against the current project with no agent
 and no job, for a quick ad-hoc change.
 
 The good news: the container launcher **already supports this**. In
 `scripts/run.sh`, both `--agent` and `--job` are optional (AGENT/JOB default to
-`""`, `AGENT_FLAG` and `PROMPT_ARGS` stay empty, and the bare `sc --tool <tool>`
+`""`, `AGENT_FLAG` and `PROMPT_ARGS` stay empty, and the bare `mg --tool <tool>`
 runs claude/opencode with no agent flag and no job prompt). So this job is a
 **TUI-only** feature — no `scripts/`, `Dockerfile`, or container-side changes
 are needed. We just need a new launch path that omits `--agent`/`--job`, and a
@@ -75,11 +75,11 @@ key in the list view to trigger it.
 ### TASK-1 — Add `launch.Quick` (bare-session launcher)
 
 **What.** Add a new exported `Quick(projectRoot, tool string) (string, error)`
-to `tui/internal/launch/launch.go` that opens a new terminal running `sc --tool
+to `tui/internal/launch/launch.go` that opens a new terminal running `mg --tool
 <tool>` (no `--agent`, no `--job`) from `projectRoot`, and returns the same
 short "where it opened" description (`launch.Agent` does today).
 
-**How.** `Agent`'s body is: resolve `resolve.Safecode()` → build the inner shell
+**How.** `Agent`'s body is: resolve `resolve.manigot()` → build the inner shell
 string → `buildCmd(inner)` → discard stdio → `cmd.Start()` → reap goroutine →
 return desc. Only the "build the inner shell string" step differs for a bare
 session. Recommended factoring to avoid duplicating ~15 lines of spawn/reap
@@ -91,8 +91,8 @@ logic:
 - `Agent` becomes: resolve → `inner := shellCommand(...)` → `launchDetached(inner)`.
 - `Quick` becomes: resolve → `inner := quickShellCommand(...)` →
   `launchDetached(inner)`.
-- Add `quickShellCommand(safecodePath, projectRoot, tool string) string` that
-  builds `cd '<root>' && '<safecode>' --tool '<tool>'` (single-quoted via the
+- Add `quickShellCommand(manigotPath, projectRoot, tool string) string` that
+  builds `cd '<root>' && '<manigot>' --tool '<tool>'` (single-quoted via the
   existing `shellQuote`, empty `tool` defaulting to `config.ToolClaudeCode`
   exactly like `shellCommand` does) and wraps it with the existing
   `holdOnFailure`. Reuse `shellQuote`/`holdOnFailure` verbatim — do **not**
@@ -105,16 +105,16 @@ the bare-session builder is a separate function rather than a generalization.
 **Tests** (`launch_test.go`, following the established string-level pattern —
 there is no App-level spawn test for `Agent` either, deliberately):
 
-- `TestQuickShellCommandFormat`: `quickShellCommand("/usr/local/bin/safecode",
+- `TestQuickShellCommandFormat`: `quickShellCommand("/usr/local/bin/manigot",
   "/home/me/proj", "claude-code")` has prefix `cd '/home/me/proj' &&
-  '/usr/local/bin/safecode' --tool 'claude-code'` and equals
+  '/usr/local/bin/manigot' --tool 'claude-code'` and equals
   `holdOnFailure(<that prefix>)`.
 - `TestQuickShellCommandOmitsAgentAndJob`: the result contains neither
   `--agent` nor `--job`.
 - `TestQuickShellCommandDefaultsEmptyTool`: empty `tool` → contains
   `--tool 'claude-code'` (mirror of `TestShellCommandDefaultsEmptyTool`).
 - `TestQuickShellCommandPassesOpencodeTool`: `opencode` → `--tool 'opencode'`.
-- `TestQuickShellCommandQuotesPathWithSpaces`: a safecode path/root with spaces
+- `TestQuickShellCommandQuotesPathWithSpaces`: a manigot path/root with spaces
   stays single-quoted (mirror of the agent equivalent).
 
 **Files likely affected:**
@@ -163,11 +163,11 @@ model fields, no state machine, no rendering of job rows.
 **What.** Update the README's "Keybindings → List view" table
 (`README.md`, ~lines 365-372) with a row for the new key, e.g.:
 
-`| \`o\` | launch a quick safecode session (no agent, no job) |`
+`| \`o\` | launch a quick manigot session (no agent, no job) |`
 
 Also check the "Supported platforms" intro (~line 328): it currently says firing
-an agent opens `sc --tool <tool> --agent <name> --job <id>`. Add one sentence
-noting that the quick-session shortcut opens a bare `sc --tool <tool>` instead.
+an agent opens `mg --tool <tool> --agent <name> --job <id>`. Add one sentence
+noting that the quick-session shortcut opens a bare `mg --tool <tool>` instead.
 Leave `AGENTS.md` / `docs/AGENTS.md` alone — neither enumerates TUI keys.
 
 **Files likely affected:**
@@ -193,7 +193,7 @@ untouched `TestShellCommandFormat` family).
 
 - `scripts/run.sh` needs **no** changes — `--agent` and `--job` are already
   optional. Do not edit it; that would be out of scope.
-- Reuse `shellQuote`, `holdOnFailure`, `resolve.Resolve(resolve.Safecode())`,
+- Reuse `shellQuote`, `holdOnFailure`, `resolve.Resolve(resolve.manigot())`,
   `buildCmd`, and `config.ToolClaudeCode` exactly as `Agent` does. The only
   genuinely new logic is the inner command string with no `--agent`/`--job`.
 - Keep the bare-session builder a **separate** function from `shellCommand`

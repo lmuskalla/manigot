@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
 // TestDoneMsgSuccessReturnsToList verifies that a clean (err == nil) doneMsg
@@ -116,8 +116,8 @@ func TestDoneMsgErrorSurfacesAndReturnsToList(t *testing.T) {
 func TestDoneCmdResolutionFailureSurfacesNotFoundError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
-	t.Setenv("SAFECODE_DONE_BIN", "")
-	t.Setenv("SAFECODE_HOME", "")
+	t.Setenv("MANIGOT_DONE_BIN", "")
+	t.Setenv("MANIGOT_HOME", "")
 
 	root := t.TempDir()
 	jobDir := filepath.Join(root, "docs", "jobs", "ab0004_w")
@@ -131,7 +131,7 @@ func TestDoneCmdResolutionFailureSurfacesNotFoundError(t *testing.T) {
 
 	_, err := a.doneCmd()
 	if err == nil {
-		t.Fatal("expected a resolution error when sc-done cannot be found")
+		t.Fatal("expected a resolution error when mg-done cannot be found")
 	}
 	if got := cmdErrorText(err); got == "error: "+err.Error() {
 		t.Errorf("expected the NotFoundError diagnosis branch of cmdErrorText, got the plain one: %q", got)

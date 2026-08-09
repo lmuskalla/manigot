@@ -1,21 +1,21 @@
 package resolve
 
-// This file holds the Spec for each safecode host command the TUI shells out
+// This file holds the Spec for each manigot host command the TUI shells out
 // to. They are functions rather than package-level variables so a caller cannot
 // mutate the shared candidate list by accident.
 //
-// sc/sc-job/sc-done/sc-delete/sc-tui are the only supported install names.
-// Earlier naming (safecode, safecode-job, safecode-done, and the standalone
+// mg/mg-job/mg-done/mg-delete/mg-tui are the only supported install names.
+// Earlier naming (manigot, manigot-job, manigot-done, and the standalone
 // new-job / finish-job commands) is not carried forward as a legacy fallback
 // — a stale install must be re-run through `make install` rather than
 // resolved around.
 
-// Safecode describes the safecode launcher itself (scripts/run.sh).
-func Safecode() Spec {
+// Manigot describes the manigot launcher itself (scripts/run.sh).
+func Manigot() Spec {
 	return Spec{
-		Label:  "sc",
-		EnvVar: EnvSafecode,
-		Names:  []string{"sc"},
+		Label:  "mg",
+		EnvVar: EnvManigot,
+		Names:  []string{"mg"},
 		Script: "scripts/run.sh",
 	}
 }
@@ -23,9 +23,9 @@ func Safecode() Spec {
 // Job describes the command that scaffolds a new job (scripts/new-job.sh).
 func Job() Spec {
 	return Spec{
-		Label:  "sc-job",
+		Label:  "mg-job",
 		EnvVar: EnvJob,
-		Names:  []string{"sc-job"},
+		Names:  []string{"mg-job"},
 		Script: "scripts/new-job.sh",
 	}
 }
@@ -34,9 +34,9 @@ func Job() Spec {
 // by hostcmd.DoneCommand for the job detail view's "mark done" (capital D) key.
 func Done() Spec {
 	return Spec{
-		Label:  "sc-done",
+		Label:  "mg-done",
 		EnvVar: EnvDone,
-		Names:  []string{"sc-done"},
+		Names:  []string{"mg-done"},
 		Script: "scripts/finish-job.sh",
 	}
 }
@@ -46,9 +46,9 @@ func Done() Spec {
 // view's "delete" (del) key.
 func Delete() Spec {
 	return Spec{
-		Label:  "sc-delete",
+		Label:  "mg-delete",
 		EnvVar: EnvDelete,
-		Names:  []string{"sc-delete"},
+		Names:  []string{"mg-delete"},
 		Script: "scripts/delete-job.sh",
 	}
 }

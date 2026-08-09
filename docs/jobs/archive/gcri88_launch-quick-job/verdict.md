@@ -9,7 +9,7 @@ date: 2026-08-09
 
 TASK-1: PASS
 notes: `tui/internal/launch/launch.go` — `Quick(projectRoot, tool string)
-(string, error)` (lines 74-81) and `quickShellCommand(safecodePath,
+(string, error)` (lines 74-81) and `quickShellCommand(manigotPath,
 projectRoot, tool string) string` (lines 154-161) added exactly as specified.
 Empty `tool` defaults to `config.ToolClaudeCode`; `shellQuote` and
 `holdOnFailure` are reused verbatim (not duplicated); the builder is a
@@ -25,7 +25,7 @@ so `Agent`'s behavior is preserved. All five required tests are present in
 `TestQuickShellCommandQuotesPathWithSpaces`) and follow the established
 string-level pattern. They pass.
 - Observation (non-blocking): the TASK-1 commit `f52db24` also added 98 lines
-  to the repo-root `AGENTS.md` (it went from empty to the safecode project
+  to the repo-root `AGENTS.md` (it went from empty to the manigot project
   documentation). This is unrelated to the feature. The developer disclosed it
   in `implementation.md` ("Known issues / follow-ups") — it was a pre-existing
   working-tree edit swept in by `git add -A`. The content is legitimate project
@@ -47,7 +47,7 @@ wording is consistent with the `→ <agent> in <desc>` style.
 TASK-3: PASS
 notes: `README.md` — a new `o` row was added to the "Keybindings → List view"
 table (line 373) and one sentence was added under "Supported platforms"
-(lines 337-339) noting the `o` shortcut opens a bare `sc --tool <tool>`.
+(lines 337-339) noting the `o` shortcut opens a bare `mg --tool <tool>`.
 `AGENTS.md` / `docs/AGENTS.md` were correctly left alone (neither enumerates
 TUI keys).
 

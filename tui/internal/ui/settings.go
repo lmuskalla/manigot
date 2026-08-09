@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lmuskalla/safecode/tui/internal/config"
+	"github.com/lmuskalla/manigot/tui/internal/config"
 )
 
 // toolOptions mirrors the --tool values accepted by scripts/run.sh.

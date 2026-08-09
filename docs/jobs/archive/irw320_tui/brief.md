@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-Safecode should get an optional TUI.
+manigot should get an optional TUI.
 
 A terminal UI for managing jobs and running agents without remembering command syntax.
 
@@ -20,7 +20,7 @@ A terminal UI for managing jobs and running agents without remembering command s
   - open job → show "Run Product Owner", "Run Analyst"
   - tasks written → show "Run Developer"
   - result written → show "Run Reviewer", "Run Security"
-- [ ] Firing an agent opens `safecode --agent <name> --job <id>` in a new terminal window or pane
+- [ ] Firing an agent opens `manigot --agent <name> --job <id>` in a new terminal window or pane
 - [ ] Job status tracking: parse status field from brief.md, update display accordingly
 - [ ] New job shortcut: trigger `new-job` from within the TUI
 - [ ] Update README
@@ -53,12 +53,12 @@ new terminals cross-platform):
 |---|---|---|---|
 | Host runtime needed | none — single static binary | Python + deps | Node + npm tree |
 | Markdown rendering | Glamour (same family) | rich-textual | manual |
-| Distribution fit | one binary, mirrors `safecode`/`new-job` symlink pattern | venv/pyinstaller | npm or bundle |
+| Distribution fit | one binary, mirrors `manigot`/`new-job` symlink pattern | venv/pyinstaller | npm or bundle |
 | New host dependency | no | yes (Python) | yes (Node) |
 
-Go is the right call because the safecode host tooling is currently
+Go is the right call because the manigot host tooling is currently
 bash + Docker with **no Python or Node requirement**. Bubble Tea ships a
-self-contained binary that drops into PATH the same way `safecode` and
+self-contained binary that drops into PATH the same way `manigot` and
 `new-job` already do, Glamour handles the fiddly markdown rendering
 out-of-the-box, and the brief author specifically flagged Bubble Tea. Verified
 `go get` of bubbletea/lipgloss/glamour against the public proxy.
@@ -71,7 +71,7 @@ out-of-the-box, and the brief author specifically flagged Bubble Tea. Verified
    via `osascript`, then a generic Linux launcher (`x-terminal-emulator` /
    `gnome-terminal`).
 2. **`finish-job`: out of scope for this job.** Per tasks.md, surface it in a
-   later phase. The TUI wires up `safecode` and `new-job` only.
+   later phase. The TUI wires up `manigot` and `new-job` only.
 3. **Distribution: single static binary** via `go build`, installed with the
    same symlink-to-PATH pattern as the other launchers. New `make tui` target
    builds it.
