@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lmuskalla/safecode/tui/internal/job"
-	"github.com/lmuskalla/safecode/tui/internal/markdown"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/safecode/tui/internal/markdown"
 )
 
 // The four markdown files every job directory holds, in the order the detail
@@ -37,11 +37,15 @@ type fileTab struct {
 	path     string
 	exists   bool
 	editable bool
+	content  string // raw markdown (or the placeholder) as last read from disk
 	viewer   *markdown.Viewer
 
-	// stale marks a viewer whose Resize was deferred because the tab wasn't
-	// active when the body size last changed (TASK-3). It is cleared the next
-	// time the tab becomes active and gets resized in render().
+	// stale marks a viewer that is out of date with content and/or the
+	// current body size, because the tab wasn't active when that changed —
+	// either a resize (syncViewerSize, TASK-3) or a (re)load (loadTab, see
+	// the "selecting/leaving a job is laggy" fix below). It is cleared the
+	// next time the tab becomes active and is caught up in render() via
+	// ensureCurrentSized.
 	stale bool
 }
 
@@ -79,25 +83,43 @@ func filePlaceholder(label, filename string) string {
 	return "# " + label + "\n\n_" + filename + " has not been written yet._"
 }
 
-// loadTabs (re)reads every tab's file from disk and rebuilds its viewer. Called
-// on construction and on refresh (TASK-10): agents edit files outside the TUI,
-// so the detail view must re-read to pick up their changes.
+// loadTabs (re)reads every tab's file from disk. Called on construction and
+// on refresh (TASK-10): agents edit files outside the TUI, so the detail view
+// must re-read to pick up their changes.
+//
+// Only the active tab's viewer is actually re-rendered here; the other three
+// are cheap disk reads whose markdown render is deferred until they become
+// active (see loadTab, ensureCurrentSized). Previously this eagerly rendered
+// all four tabs' markdown — non-trivial cost (glamour.Render is not free) —
+// on every job open and every return to the list, which is what made
+// selecting a job and pressing esc/backspace to leave one feel laggy even
+// after TASK-3 fixed the same problem for resize-triggered re-renders.
 func (d *detailView) loadTabs() {
 	for i := range d.tabs {
 		d.loadTab(i)
 	}
 }
 
+// loadTab re-reads one tab's file from disk into t.content. If the tab is
+// currently active, its viewer is rebuilt immediately; otherwise the viewer
+// is left alone and the tab is marked stale so ensureCurrentSized catches it
+// up lazily once it actually becomes active.
 func (d *detailView) loadTab(i int) {
 	t := &d.tabs[i]
 	data, err := os.ReadFile(t.path)
 	if err != nil {
 		t.exists = false
-		t.viewer.SetContent(filePlaceholder(t.label, filepath.Base(t.path)))
-		return
+		t.content = filePlaceholder(t.label, filepath.Base(t.path))
+	} else {
+		t.exists = true
+		t.content = string(data)
 	}
-	t.exists = true
-	t.viewer.SetContent(string(data))
+	if i == d.cur {
+		t.viewer.SetContent(t.content)
+		t.stale = false
+	} else {
+		t.stale = true
+	}
 }
 
 // reload re-reads all four files (used by App.refresh).
@@ -151,16 +173,24 @@ func (d *detailView) syncViewerSize() {
 	}
 }
 
-// ensureCurrentSized resizes the active tab's viewer if a size change was
-// deferred while a different tab was showing (see syncViewerSize). Called
-// from render() so a tab is always correctly wrapped by the time it is
-// actually drawn.
+// ensureCurrentSized brings the active tab's viewer up to date if it was left
+// stale — by a resize that happened while a different tab was showing (see
+// syncViewerSize), or by a (re)load that only updated t.content because the
+// tab wasn't active at the time (see loadTab). Called from render() so a tab
+// is always correctly rendered by the time it is actually drawn.
+//
+// This always goes through SetSize+SetContent rather than the guarded
+// Resize: Resize is a no-op when the width/height haven't changed, which is
+// exactly the common case here (content changed, size didn't) — using it
+// would leave a content-stale tab showing its old rendered text.
 func (d *detailView) ensureCurrentSized() {
 	t := &d.tabs[d.cur]
-	if t.stale {
-		t.viewer.Resize(d.bodyWidth(), d.bodyHeight())
-		t.stale = false
+	if !t.stale {
+		return
 	}
+	t.viewer.SetSize(d.bodyWidth(), d.bodyHeight())
+	t.viewer.SetContent(t.content)
+	t.stale = false
 }
 
 // update handles detail-view keys: file switching and scrolling.

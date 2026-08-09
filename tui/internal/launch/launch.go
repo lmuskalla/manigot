@@ -22,13 +22,16 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/lmuskalla/safecode/tui/internal/config"
 	"github.com/lmuskalla/safecode/tui/internal/resolve"
 )
 
-// Agent opens a new terminal that runs safecode with `--agent <agent> --job
-// <jobID>` in projectRoot. It returns a short human description of where it
-// opened (e.g. "tmux window", "Terminal.app", "gnome-terminal") so the caller
-// can surface it in a status line.
+// Agent opens a new terminal that runs safecode with `--tool <tool> --agent
+// <agent> --job <jobID>` in projectRoot. tool is one of config.ToolClaudeCode
+// or config.ToolOpenCode; an empty value defaults to config.ToolClaudeCode,
+// matching scripts/run.sh's own default. It returns a short human description
+// of where it opened (e.g. "tmux window", "Terminal.app", "gnome-terminal")
+// so the caller can surface it in a status line.
 //
 // The launcher process is detached: its stdio is discarded so it cannot
 // corrupt the TUI's alt screen, and it is reaped asynchronously.
@@ -48,12 +51,12 @@ import (
 // already covers the failure mode the brief actually reports (the inner `sc
 // --agent` command failing fast); a launcher-binary-itself failure is a
 // narrower, rarer case left uncovered rather than risk reintroducing UI lag.
-func Agent(agent, jobID, projectRoot string) (string, error) {
+func Agent(agent, jobID, projectRoot, tool string) (string, error) {
 	found, err := resolve.Resolve(resolve.Safecode())
 	if err != nil {
 		return "", err
 	}
-	inner := shellCommand(found.Path, agent, jobID, projectRoot)
+	inner := shellCommand(found.Path, agent, jobID, projectRoot, tool)
 	cmd, desc, err := buildCmd(inner)
 	if err != nil {
 		return "", err
@@ -73,14 +76,16 @@ func Agent(agent, jobID, projectRoot string) (string, error) {
 
 // shellCommand builds the shell string executed inside the new terminal:
 //
-//	cd '<projectRoot>' && '<safecode>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
+//	cd '<projectRoot>' && '<safecode>' --tool '<tool>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
 //
 // cd-ing first matters because safecode finds the project root from $PWD (see
 // scripts/run.sh find_project_root). safecodePath is the absolute path from the
 // resolve package; it is quoted like every other value, so a checkout in a
 // directory with spaces survives both osascript and `bash -lc`. Arguments are
 // single-quoted and embedded single quotes are escaped, so no value can break
-// out of its quotes.
+// out of its quotes. An empty tool defaults to config.ToolClaudeCode so the
+// flag is always passed explicitly, regardless of what scripts/run.sh's own
+// default happens to be.
 //
 // TASK-5 investigation: none of buildCmd's five spawn paths keep the
 // window/pane open once the inner command exits, success or failure — tmux
@@ -92,9 +97,12 @@ func Agent(agent, jobID, projectRoot string) (string, error) {
 // window flashes and disappears before its output can be read — this is the
 // brief's "a window appears and it immediately closes again". The result is
 // wrapped in holdOnFailure (TASK-6) so a non-zero exit pauses instead.
-func shellCommand(safecodePath, agent, jobID, projectRoot string) string {
-	inner := fmt.Sprintf("cd %s && %s --agent %s --job %s",
-		shellQuote(projectRoot), shellQuote(safecodePath), shellQuote(agent), shellQuote(jobID))
+func shellCommand(safecodePath, agent, jobID, projectRoot, tool string) string {
+	if tool == "" {
+		tool = config.ToolClaudeCode
+	}
+	inner := fmt.Sprintf("cd %s && %s --tool %s --agent %s --job %s",
+		shellQuote(projectRoot), shellQuote(safecodePath), shellQuote(tool), shellQuote(agent), shellQuote(jobID))
 	return holdOnFailure(inner)
 }
 

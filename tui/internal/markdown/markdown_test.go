@@ -153,6 +153,29 @@ func TestViewerResizeReRenders(t *testing.T) {
 	}
 }
 
+// TestSetSizeDoesNotRerender verifies SetSize only updates the viewport
+// dimensions, leaving the previously rendered content (and its wrap width)
+// untouched — callers that need a re-render at the new size are expected to
+// follow up with SetContent (see detailView.ensureCurrentSized), and calling
+// SetSize alone must not pay for a render.
+func TestSetSizeDoesNotRerender(t *testing.T) {
+	src := strings.Repeat("word ", 200)
+	v := NewViewer(80, 10)
+	v.SetContent(src)
+	wide := v.LineCount()
+
+	v.SetSize(20, 10)
+	if got := v.LineCount(); got != wide {
+		t.Errorf("SetSize re-rendered content: LineCount = %d, want unchanged %d", got, wide)
+	}
+
+	// A subsequent SetContent picks up the new width.
+	v.SetContent(src)
+	if got := v.LineCount(); got == wide {
+		t.Errorf("SetContent after SetSize did not re-wrap at the new width: LineCount still %d", got)
+	}
+}
+
 func TestViewerViewHonoursHeight(t *testing.T) {
 	src := strings.Repeat("line\n", 40)
 	v := NewViewer(80, 5)

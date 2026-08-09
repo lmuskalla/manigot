@@ -325,8 +325,9 @@ your `PATH`.
 
 ### Supported platforms
 
-macOS and Linux. Firing an agent opens `sc --agent <name> --job <id>` in
-a new terminal, picked in this order:
+macOS and Linux. Firing an agent opens `sc --tool <tool> --agent <name> --job
+<id>` in a new terminal (`<tool>` from the settings screen — see below),
+picked in this order:
 
 1. a new **tmux** window, if the TUI is itself running inside tmux (`$TMUX` set)
 2. **Terminal.app** via `osascript` on macOS
@@ -366,6 +367,7 @@ List view:
 | `↑`/`↓` or `k`/`j` | move selection |
 | `enter` | open the job's detail view |
 | `n` | create a new job (runs the host `sc-job`) |
+| `s` | open settings (editor, agent tool) |
 | `ctrl+r` | refresh — re-read job files from disk |
 | `q` | quit |
 
@@ -380,11 +382,29 @@ Detail view:
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
-`e` resolves the editor to run as `$VISUAL`, then `$EDITOR`, then whichever
-of `nano`/`vi` is found first on `PATH`.
+`e` resolves the editor to run as: the settings screen's Editor field (see
+below), if set; otherwise `$VISUAL`, then `$EDITOR`, then whichever of
+`nano`/`vi` is found first on `PATH`.
 
 New-job form: type a title, `tab` to the type field and use `←`/`→` to pick
 `feature`/`fix`/`chore`, `enter` to create, `esc` to cancel.
+
+### Settings
+
+Press `s` from the job list to open the settings screen:
+
+- **Editor** — the command `e` (in the detail view) runs to open `brief.md`.
+  Leave blank to fall back to `$VISUAL`/`$EDITOR`/`nano`/`vi`.
+- **Tool** — `claude-code` or `opencode`, cycled with `←`/`→`. Selects which
+  agent CLI firing an agent from the action bar launches (adds `--tool` to
+  the `sc --agent ... --job ...` command the same way `sc --tool opencode`
+  would on the command line).
+
+`tab` moves between fields, `enter` saves, `esc` discards. Settings persist to
+`config/tui-settings.json` in the safecode checkout (gitignored — it's a
+local preference, not shared) and apply immediately; a missing file just
+means nothing has been saved yet, and every setting falls back to its default
+above.
 
 ### Stage → agent model
 

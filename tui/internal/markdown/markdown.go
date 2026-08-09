@@ -8,11 +8,14 @@
 package markdown
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // minWidth is the smallest wrap width we'll pass to Glamour. Below this, table
@@ -23,18 +26,72 @@ const minWidth = 20
 // the only width-dependent option we pass), so repeated calls to Render at the
 // same width reuse it instead of constructing a new one.
 //
-// This matters beyond the obvious construction cost: glamour.WithAutoStyle()
-// probes the terminal's background color via termenv.HasDarkBackground(),
-// which writes an OSC query to the tty and then reads raw bytes directly off
-// stdin until it sees the matching response (termenv_unix.go's
-// readNextResponse). That read races with — and can consume/discard — Bubble
-// Tea's own raw-mode stdin reader, which is what made keystrokes get lost or
-// delayed (TASK-1). Building the renderer once per width means that probe
-// only ever runs once per width instead of on nearly every keypress.
+// This matters beyond the obvious construction cost: glamour's "auto" style
+// (glamour.WithAutoStyle(), or WithStandardStyle("auto") — see getDefaultStyle
+// in glamour's source) probes the terminal's background color via
+// termenv.HasDarkBackground(), which writes an OSC query to the tty and then
+// blocking-reads raw bytes directly off stdin until it sees the matching
+// response — or until termenv.OSCTimeout (5s) elapses. That read races with —
+// and can consume/discard — Bubble Tea's own raw-mode stdin reader. Caching
+// the renderer here only bounds how often that race can happen (once per
+// width instead of once per keypress, TASK-1/2); it does not remove the race
+// itself. The actual fix is style, below.
 var (
 	rendererMu    sync.Mutex
 	rendererCache = map[int]*glamour.TermRenderer{}
+
+	// style is the glamour style ("auto", "dark", "light", or "notty") used
+	// to build every renderer. Defaults to "auto" so tests and any caller
+	// that never calls SetStyle keep glamour's original behavior (harmless
+	// under `go test`, since stdout there is normally not a terminal, so
+	// glamour's own getDefaultStyle skips the background probe and falls
+	// straight to NoTTYStyleConfig — see its term.IsTerminal check). main.go
+	// calls SetStyle once at startup with a concrete "dark"/"light"/"notty"
+	// value so "auto" is never seen once Bubble Tea is running.
+	style = "auto"
 )
+
+// SetStyle overrides the glamour style used to build every renderer from this
+// point on, invalidating any renderers already cached under the old style.
+// An empty value is a no-op. Intended to be called once, at startup, before
+// the first Render — see the style var's doc for why.
+func SetStyle(s string) {
+	rendererMu.Lock()
+	defer rendererMu.Unlock()
+	if s == "" || s == style {
+		return
+	}
+	style = s
+	rendererCache = map[int]*glamour.TermRenderer{}
+}
+
+// DetectStyle returns the concrete glamour style to use: "notty" if stdout
+// isn't a terminal, otherwise "dark" or "light" depending on the terminal's
+// background color. It mirrors glamour's own getDefaultStyle(auto) exactly,
+// so it picks the same style "auto" would have.
+//
+// It deliberately reads lipgloss.HasDarkBackground() rather than calling
+// termenv.HasDarkBackground() (what glamour's own "auto" style does)
+// directly. Bubble Tea's package init (tea_init.go) already calls
+// lipgloss.HasDarkBackground() once, before anything (including this
+// program's own main) runs, specifically to get the one-time terminal probe
+// out of the way before Bubble Tea takes over the terminal — see its doc
+// comment. Critically, lipgloss.Renderer caches that result behind its own
+// sync.Once, so this call reuses it for free. termenv.HasDarkBackground()
+// has NO such cache (termenv.Output only caches when explicitly constructed
+// with WithColorCache, which neither lipgloss nor glamour's default output
+// use) — calling it here directly would silently re-run the full blocking
+// OSC probe a second time, adding a second multi-second stall on top of
+// Bubble Tea's own unavoidable one instead of eliminating the problem.
+func DetectStyle() string {
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return "notty"
+	}
+	if lipgloss.HasDarkBackground() {
+		return "dark"
+	}
+	return "light"
+}
 
 func rendererFor(width int) (*glamour.TermRenderer, error) {
 	rendererMu.Lock()
@@ -43,7 +100,7 @@ func rendererFor(width int) (*glamour.TermRenderer, error) {
 		return r, nil
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(), // adapt to the user's terminal theme
+		glamour.WithStandardStyle(style),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
@@ -100,6 +157,15 @@ func (v *Viewer) Resize(width, height int) {
 	}
 	v.width, v.height = width, height
 	v.rebuild()
+}
+
+// SetSize updates the viewport dimensions without re-rendering. It exists for
+// callers that are about to call SetContent anyway (e.g. catching up a tab
+// that deferred both a size change and a content change while inactive — see
+// detailView.ensureCurrentSized) and would otherwise pay for two renders
+// where one does.
+func (v *Viewer) SetSize(width, height int) {
+	v.width, v.height = width, height
 }
 
 func (v *Viewer) rebuild() {

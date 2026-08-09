@@ -16,10 +16,11 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lmuskalla/safecode/tui/internal/job"
+	"github.com/lmuskalla/safecode/tui/internal/markdown"
 	"github.com/lmuskalla/safecode/tui/internal/resolve"
 	"github.com/lmuskalla/safecode/tui/internal/ui"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // version is the TUI version. Overridden at build time with:
@@ -60,6 +61,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "sc-tui: cannot read jobs: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Resolve the markdown color style once, up front, and pin it for the rest
+	// of the process — see markdown.DetectStyle's doc for exactly why this
+	// must happen this way (in short: it reuses Bubble Tea's own cached
+	// terminal probe instead of re-querying, which would stall for seconds).
+	markdown.SetStyle(markdown.DetectStyle())
 
 	p := tea.NewProgram(ui.NewApp(root, jobs), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {

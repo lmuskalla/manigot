@@ -24,14 +24,18 @@ var fallbacks = []string{"nano", "vi"}
 // fallback editor could be located.
 var ErrNotFound = errors.New("no editor found: set $VISUAL or $EDITOR, or install nano or vi")
 
-// Resolve returns the editor command to run: $VISUAL, then $EDITOR, then the
-// first of the fallback editors (nano, then vi) found via LookPath. It
-// returns ErrNotFound if none of those resolve.
+// Resolve returns the editor command to run: override (the TUI's persisted
+// config.Settings.Editor, when set) takes priority, then $VISUAL, then
+// $EDITOR, then the first of the fallback editors (nano, then vi) found via
+// LookPath. It returns ErrNotFound if none of those resolve.
 //
 // The returned string may include arguments, as $VISUAL/$EDITOR commonly do
 // (e.g. "code --wait"), so it is meant to be run through a shell rather than
 // exec'd directly — see Command.
-func Resolve() (string, error) {
+func Resolve(override string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
 	if v := os.Getenv("VISUAL"); v != "" {
 		return v, nil
 	}
@@ -51,8 +55,10 @@ func Resolve() (string, error) {
 // arguments (e.g. "code --wait") still works; path is passed positionally as
 // "$1" rather than interpolated into the shell string, so it needs no
 // shell-quoting even if it contains spaces or special characters.
-func Command(path string) (*exec.Cmd, error) {
-	ed, err := Resolve()
+//
+// override is forwarded to Resolve — see its docs.
+func Command(path, override string) (*exec.Cmd, error) {
+	ed, err := Resolve(override)
 	if err != nil {
 		return nil, err
 	}

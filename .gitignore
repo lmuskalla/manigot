@@ -3,6 +3,10 @@
 # Built TUI binary (produced by `make tui`).
 /bin/
 
+# Local TUI preferences (editor, agent tool), written by the TUI's settings
+# screen (tui/internal/config). Machine-specific, not shared.
+/config/
+
 # Runtime mount points: docs/ is bind-mounted here inside the container,
 # so tracking them would duplicate docs/ in the repo.
 .claude/

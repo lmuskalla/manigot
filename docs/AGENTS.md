@@ -32,6 +32,12 @@ session with `sc --tool claude-code|opencode`.
   (`SAFECODE_BIN`, `SAFECODE_JOB_BIN`, `SAFECODE_DONE_BIN`) → canonical name on
   `$PATH` → `$SAFECODE_HOME/scripts/*.sh`. Nothing in the TUI may hardcode a
   command name; shell aliases are unreachable from it.
+- `config/tui-settings.json` (gitignored) — local TUI preferences: which
+  editor opens `brief.md` and which agent tool (`claude-code`/`opencode`)
+  agent launches use. Written by the TUI's settings screen (`s` from the job
+  list), read/written via `tui/internal/config`. Missing is not an error —
+  every reader falls back to defaults (`$VISUAL`/`$EDITOR`/`nano`/`vi` for the
+  editor, `claude-code` for the tool).
 - `scripts/entrypoint.sh` — runs inside the container before the agent CLI starts.
   Branches on `SAFECODE_TOOL`: writes `~/.claude.json` to skip Claude Code's
   onboarding wizard, or checks for a provider API key and execs `opencode`.

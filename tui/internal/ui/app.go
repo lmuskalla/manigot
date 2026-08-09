@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lmuskalla/safecode/tui/internal/config"
 	"github.com/lmuskalla/safecode/tui/internal/editor"
 	"github.com/lmuskalla/safecode/tui/internal/hostcmd"
 	"github.com/lmuskalla/safecode/tui/internal/job"
 	"github.com/lmuskalla/safecode/tui/internal/launch"
 	"github.com/lmuskalla/safecode/tui/internal/resolve"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // appState selects which view is active. More states (detail, form) are added
@@ -25,7 +26,8 @@ type appState int
 const (
 	stateList appState = iota
 	stateDetail
-	stateNewJob // "n" from the list — create a job via the host sc-job command
+	stateNewJob   // "n" from the list — create a job via the host sc-job command
+	stateSettings // "s" from the list — edit the persisted TUI settings
 )
 
 // App is the root Bubble Tea model.
@@ -38,20 +40,37 @@ type App struct {
 	width  int
 	height int
 
+	// settings holds the persisted TUI preferences (editor, agent tool). It
+	// is loaded once at startup and updated in place whenever the settings
+	// form is submitted.
+	settings config.Settings
+
 	// detail is non-nil while state == stateDetail.
 	detail *detailView
 
 	// newJob is non-nil while state == stateNewJob.
 	newJob *newJobView
 
+	// settingsView is non-nil while state == stateSettings.
+	settingsView *settingsView
+
 	// status is a transient one-line message shown in the footer (e.g. after
 	// running sc-job or an agent).
 	status string
 }
 
-// NewApp builds the root model from a discovered job list.
+// NewApp builds the root model from a discovered job list. Settings are
+// loaded from disk (see config.Load); a load failure (e.g. a corrupt
+// tui-settings.json) is non-fatal — the app starts with default settings and
+// surfaces the error in the footer instead.
 func NewApp(root string, jobs []job.Job) *App {
-	return &App{root: root, jobs: jobs, state: stateList}
+	a := &App{root: root, jobs: jobs, state: stateList}
+	settings, err := config.Load()
+	a.settings = settings
+	if err != nil {
+		a.status = cmdErrorText(err)
+	}
+	return a
 }
 
 // Init starts the program. No initial commands are needed.
@@ -74,6 +93,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if a.newJob != nil {
 			a.newJob.resize(a.width, a.height)
+		}
+		if a.settingsView != nil {
+			a.settingsView.resize(a.width, a.height)
 		}
 		return a, nil
 	case editorDoneMsg:
@@ -99,6 +121,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateDetail(msg)
 		case stateNewJob:
 			return a.updateNewJob(msg)
+		case stateSettings:
+			return a.updateSettings(msg)
 		}
 	}
 	return a, nil
@@ -111,6 +135,8 @@ func (a *App) View() string {
 		return a.detail.render()
 	case stateNewJob:
 		return a.newJob.render()
+	case stateSettings:
+		return a.settingsView.render()
 	default:
 		return a.renderList()
 	}
@@ -126,22 +152,13 @@ func (a *App) selectedJob() (job.Job, bool) {
 
 // --- List view --------------------------------------------------------------
 
-// refresh re-reads the job list and (if open) the current detail view's files,
-// picking up changes agents made outside the TUI. It also clamps the cursor so
-// a job that was archived mid-session doesn't leave it out of range.
-//
-// TASK-4 investigation: refresh runs synchronously inside Update() on every
-// "esc"/"backspace" (back to list) and "ctrl+r". It re-walks
-// docs/jobs (job.Discover: one os.ReadDir plus one small brief.md read
-// per job) and re-renders every job file (detailView.reload). On a local
-// filesystem with the handful of jobs a project typically has, that's plain
-// disk I/O with no network calls — sub-millisecond in practice, nowhere near
-// the multi-second, input-dropping lag the brief describes, which TASK-1/3
-// already fully account for (a blocking stdin read racing Bubble Tea's own
-// reader on every markdown render). Moving this to an async tea.Cmd was
-// therefore not pursued; if a project ever accumulates enough jobs for this
-// walk to become perceptible, that's a separate, narrower change.
-func (a *App) refresh() {
+// refreshJobs re-reads the job list from disk (job.Discover: one os.ReadDir
+// plus one small brief.md read per job) and clamps the cursor so a job that
+// was archived mid-session doesn't leave it out of range. It does not touch
+// an open detail view — see refresh for that, and updateDetail's
+// "esc"/"backspace" case, which uses refreshJobs alone because the detail
+// view it would otherwise reload is about to be discarded anyway.
+func (a *App) refreshJobs() {
 	if jobs, err := job.Discover(a.root); err == nil {
 		a.jobs = jobs
 	}
@@ -151,6 +168,12 @@ func (a *App) refresh() {
 	if a.cursor < 0 {
 		a.cursor = 0
 	}
+}
+
+// refresh does refreshJobs, plus reloads the open detail view's files (if
+// any) so changes an agent made outside the TUI show up — used by "ctrl+r".
+func (a *App) refresh() {
+	a.refreshJobs()
 	if a.detail != nil {
 		a.detail.reload()
 	}
@@ -188,6 +211,30 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Create a new job via the host sc-job command.
 		a.newJob = newNewJobView(a.width, a.height)
 		a.state = stateNewJob
+	case "s":
+		// Edit the persisted TUI settings (editor, agent tool).
+		a.settingsView = newSettingsView(a.settings, a.width, a.height)
+		a.state = stateSettings
+	}
+	return a, nil
+}
+
+// updateSettings handles keys in the settings form.
+func (a *App) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch a.settingsView.update(msg) {
+	case stCancel:
+		a.settingsView = nil
+		a.state = stateList
+	case stSubmit:
+		s := a.settingsView.settingsValue()
+		if err := config.Save(s); err != nil {
+			a.settingsView.status = cmdErrorText(err)
+			return a, nil
+		}
+		a.settings = s
+		a.settingsView = nil
+		a.status = "settings saved"
+		a.state = stateList
 	}
 	return a, nil
 }
@@ -226,9 +273,11 @@ func (a *App) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "backspace":
-		// Return to the list, refreshing first — an agent may have edited the
-		// job's files since we opened the detail view.
-		a.refresh()
+		// Return to the list. Only the job list itself needs refreshing
+		// (a job may have been archived, or its status/title changed) —
+		// reloading the detail view we're about to throw away would be pure
+		// waste, and used to be a real source of lag (see refreshJobs' doc).
+		a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
 		a.status = "refreshed"
@@ -255,7 +304,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
 	if agent := a.agentForKey(msg.String()); agent != "" {
-		desc, err := launch.Agent(agent, a.detail.job.ID, a.root)
+		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ToolValue())
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 		} else {
@@ -276,7 +325,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // resolved (see editor.Resolve) — the caller surfaces it directly.
 func (a *App) editCmd() (tea.Cmd, error) {
 	path := a.detail.current().path
-	cmd, err := editor.Command(path)
+	cmd, err := editor.Command(path, a.settings.Editor)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +433,7 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 
 // footer is the bottom help/status line.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter open · n new · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter open · n new · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return statusStyle.Render(a.status)
 	}

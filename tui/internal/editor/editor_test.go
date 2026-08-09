@@ -26,7 +26,7 @@ func TestResolveVisualTakesPriority(t *testing.T) {
 	t.Setenv("EDITOR", "nano")
 	stubLookPath(t, map[string]bool{"nano": true, "vi": true})
 
-	got, err := Resolve()
+	got, err := Resolve("")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -35,12 +35,26 @@ func TestResolveVisualTakesPriority(t *testing.T) {
 	}
 }
 
+func TestResolveOverrideTakesPriorityOverVisual(t *testing.T) {
+	t.Setenv("VISUAL", "code --wait")
+	t.Setenv("EDITOR", "nano")
+	stubLookPath(t, map[string]bool{"nano": true, "vi": true})
+
+	got, err := Resolve("vim")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got != "vim" {
+		t.Errorf("got %q, want %q", got, "vim")
+	}
+}
+
 func TestResolveEditorWhenNoVisual(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "vim")
 	stubLookPath(t, map[string]bool{"nano": true, "vi": true})
 
-	got, err := Resolve()
+	got, err := Resolve("")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -54,7 +68,7 @@ func TestResolveFallsBackToNano(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	stubLookPath(t, map[string]bool{"nano": true, "vi": true})
 
-	got, err := Resolve()
+	got, err := Resolve("")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -68,7 +82,7 @@ func TestResolveFallsBackToViWhenNanoMissing(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	stubLookPath(t, map[string]bool{"vi": true})
 
-	got, err := Resolve()
+	got, err := Resolve("")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -82,7 +96,7 @@ func TestResolveErrorsWhenNothingFound(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	stubLookPath(t, map[string]bool{})
 
-	_, err := Resolve()
+	_, err := Resolve("")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("got err=%v, want ErrNotFound", err)
 	}
@@ -92,11 +106,29 @@ func TestCommandBuildsShellWrapper(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "myeditor --flag")
 
-	cmd, err := Command("/tmp/some file.md")
+	cmd, err := Command("/tmp/some file.md", "")
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
 	want := []string{"sh", "-c", `myeditor --flag "$1"`, "--", "/tmp/some file.md"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("Args = %v, want %v", cmd.Args, want)
+	}
+	for i := range want {
+		if cmd.Args[i] != want[i] {
+			t.Errorf("Args[%d] = %q, want %q", i, cmd.Args[i], want[i])
+		}
+	}
+}
+
+func TestCommandUsesOverrideEvenWithVisualSet(t *testing.T) {
+	t.Setenv("VISUAL", "code --wait")
+
+	cmd, err := Command("/tmp/x.md", "vim")
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	want := []string{"sh", "-c", `vim "$1"`, "--", "/tmp/x.md"}
 	if len(cmd.Args) != len(want) {
 		t.Fatalf("Args = %v, want %v", cmd.Args, want)
 	}
@@ -112,7 +144,7 @@ func TestCommandPropagatesResolveError(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	stubLookPath(t, map[string]bool{})
 
-	_, err := Command("/tmp/x.md")
+	_, err := Command("/tmp/x.md", "")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("got err=%v, want ErrNotFound", err)
 	}

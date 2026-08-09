@@ -6,8 +6,8 @@ import (
 )
 
 func TestShellCommandFormat(t *testing.T) {
-	got := shellCommand("/usr/local/bin/safecode", "developer", "irw320", "/home/me/proj")
-	wantInner := "cd '/home/me/proj' && '/usr/local/bin/safecode' --agent 'developer' --job 'irw320'"
+	got := shellCommand("/usr/local/bin/safecode", "developer", "irw320", "/home/me/proj", "claude-code")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/safecode' --tool 'claude-code' --agent 'developer' --job 'irw320'"
 	if !strings.HasPrefix(got, wantInner) {
 		t.Errorf("shellCommand =\n %q\nwant prefix\n %q", got, wantInner)
 	}
@@ -15,6 +15,22 @@ func TestShellCommandFormat(t *testing.T) {
 	// (TASK-6) rather than the terminal closing immediately.
 	if got != holdOnFailure(wantInner) {
 		t.Errorf("shellCommand does not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// An empty tool must default to claude-code, matching scripts/run.sh's own
+// default, rather than passing an empty --tool value through.
+func TestShellCommandDefaultsEmptyTool(t *testing.T) {
+	got := shellCommand("/bin/safecode", "developer", "irw320", "/home/me/proj", "")
+	if !strings.Contains(got, "--tool 'claude-code'") {
+		t.Errorf("shellCommand with empty tool = %q, want it to default to claude-code", got)
+	}
+}
+
+func TestShellCommandPassesOpencodeTool(t *testing.T) {
+	got := shellCommand("/bin/safecode", "developer", "irw320", "/home/me/proj", "opencode")
+	if !strings.Contains(got, "--tool 'opencode'") {
+		t.Errorf("shellCommand with opencode tool = %q, want --tool 'opencode'", got)
 	}
 }
 
@@ -40,7 +56,7 @@ func TestHoldOnFailureExitsCleanlyOnSuccess(t *testing.T) {
 // A checkout in a directory with spaces must still produce a single word for
 // the safecode path, since the string is re-parsed by osascript / bash -lc.
 func TestShellCommandQuotesPathWithSpaces(t *testing.T) {
-	got := shellCommand("/Users/me/My Projects/safecode/scripts/run.sh", "reviewer", "abc123", "/tmp/p")
+	got := shellCommand("/Users/me/My Projects/safecode/scripts/run.sh", "reviewer", "abc123", "/tmp/p", "claude-code")
 	if !strings.Contains(got, `'/Users/me/My Projects/safecode/scripts/run.sh'`) {
 		t.Errorf("safecode path not quoted as one word in %q", got)
 	}
@@ -89,7 +105,7 @@ func TestShellQuoteNeutralizesInjection(t *testing.T) {
 
 func TestShellCommandQuoteEscape(t *testing.T) {
 	// A projectRoot with a quote still ends up as one safe argument.
-	got := shellCommand("/bin/safecode", "a", "b", "/path/with'quote")
+	got := shellCommand("/bin/safecode", "a", "b", "/path/with'quote", "claude-code")
 	// The root must appear escaped, not as a raw close-quote.
 	if !strings.Contains(got, `'/path/with'\''quote'`) {
 		t.Errorf("root quote not escaped in %q", got)

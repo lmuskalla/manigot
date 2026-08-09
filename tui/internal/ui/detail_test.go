@@ -84,7 +84,21 @@ func TestDetailDefersResizeForInactiveTabs(t *testing.T) {
 	}
 
 	d := newDetailView(jobs[0], 100, 24) // wide viewport
+
+	// Activate tab 1 once so it has an initial wide-width render to diff
+	// against below — loadTabs no longer renders inactive tabs eagerly (see
+	// TestDetailViewOnlyRendersActiveTabOnLoad), so it starts out unrendered.
+	d.cur = 1
+	d.render()
 	wideLines := d.tabs[1].viewer.LineCount()
+	if wideLines == 0 {
+		t.Fatal("tab 1 should have rendered content once activated")
+	}
+
+	// Back to tab 0 before resizing, so the resize below marks tab 1 stale
+	// instead of resizing it directly.
+	d.cur = 0
+	d.render()
 
 	d.resize(30, 24) // much narrower — would re-wrap into more lines
 
@@ -111,6 +125,98 @@ func TestDetailDefersResizeForInactiveTabs(t *testing.T) {
 	}
 	if got := d.tabs[1].viewer.LineCount(); got == wideLines {
 		t.Errorf("tab 1 was not re-wrapped after becoming active (LineCount still %d)", got)
+	}
+}
+
+// TestDetailViewOnlyRendersActiveTabOnLoad is a regression test: opening a
+// job (newDetailView) used to call loadTabs, which eagerly rendered all four
+// tabs' markdown via glamour up front — non-trivial cost that made selecting
+// a job (and, via detailView.reload, leaving one) feel laggy. Only the active
+// tab should render immediately; the rest stay unrendered until switched to.
+func TestDetailViewOnlyRendersActiveTabOnLoad(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0004_w")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief\n\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "tasks.md"), []byte("# Tasks\n\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+
+	d := newDetailView(jobs[0], 80, 24)
+
+	if d.tabs[0].stale {
+		t.Error("active tab (0, brief) should not be marked stale after load")
+	}
+	if d.tabs[0].viewer.LineCount() == 0 {
+		t.Error("active tab (0, brief) should be rendered immediately on load")
+	}
+	for i := 1; i < len(d.tabs); i++ {
+		if !d.tabs[i].stale {
+			t.Errorf("inactive tab %d should be marked stale after load, deferring its render", i)
+		}
+		if got := d.tabs[i].viewer.LineCount(); got != 0 {
+			t.Errorf("inactive tab %d was rendered eagerly on load (LineCount=%d, want 0)", i, got)
+		}
+	}
+
+	// Switching to a deferred tab renders it lazily.
+	d.cur = 1
+	d.render()
+	if d.tabs[1].stale {
+		t.Error("tab 1 should no longer be stale once rendered")
+	}
+	if d.tabs[1].viewer.LineCount() == 0 {
+		t.Error("tab 1 should be rendered once it becomes active")
+	}
+}
+
+// TestDetailReloadOnlyRendersActiveTab is a regression test for the same bug
+// as TestDetailViewOnlyRendersActiveTabOnLoad, but for the reload path
+// (detailView.reload, driven by App.refresh — "ctrl+r" and, formerly, going
+// back to the list): it must not re-render every tab either, only the active
+// one, and it must pick up on-disk changes to the active tab's content.
+func TestDetailReloadOnlyRendersActiveTab(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0006_r")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief\n\nv1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "tasks.md"), []byte("# Tasks\n\nv1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+	d := newDetailView(jobs[0], 80, 24)
+
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief\n\nZZUPDATED\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d.reload()
+
+	if !strings.Contains(d.tabs[0].viewer.View(), "ZZUPDATED") {
+		t.Error("active tab was not re-rendered with the updated content on reload")
+	}
+	if d.tabs[1].stale != true {
+		t.Error("inactive tab should be marked stale after reload, not re-rendered")
+	}
+	if got := d.tabs[1].viewer.LineCount(); got != 0 {
+		t.Errorf("inactive tab was rendered eagerly on reload (LineCount=%d, want 0)", got)
 	}
 }
 
