@@ -1,0 +1,9 @@
+.env
+
+# Built TUI binary (produced by `make tui`).
+/bin/
+
+# Runtime mount points: docs/ is bind-mounted here inside the container,
+# so tracking them would duplicate docs/ in the repo.
+.claude/
+.opencode/
