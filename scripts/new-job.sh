@@ -185,6 +185,14 @@ TASK-2: ...
 <!-- Summary of what needs to change before this can be approved, if anything. -->
 EOF
 
+# ── Commit scaffolding ──────────────────────────────────────────────────────────
+# Commit the template docs immediately so the new branch doesn't start with
+# uncommitted changes — they'd otherwise follow the user around until work begins.
+if [[ -n "$CURRENT_BRANCH" ]]; then
+    git -C "$PROJECT_ROOT" add "$JOB_DIR"
+    git -C "$PROJECT_ROOT" commit -m "Scaffold job ${ID}_${SLUG}" >/dev/null
+fi
+
 # ── Done ────────────────────────────────────────────────────────────────────────
 echo ""
 echo "✓ Job created: ${ID}_${SLUG}"
