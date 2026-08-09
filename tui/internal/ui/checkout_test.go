@@ -155,3 +155,150 @@ func TestCheckoutKeyWithoutBranchIsNoop(t *testing.T) {
 		t.Error("expected a status message explaining why \"c\" did nothing")
 	}
 }
+
+// --- list-view "m" back-to-main quick checkout (TASK-4) --------------------
+
+// gitEnsureMain renames def to a branch literally named "main" if it isn't
+// already, so the "m" key's hardcoded "main" target is exercised regardless
+// of this git installation's init.defaultBranch config (which may be
+// "master" or anything else).
+func gitEnsureMain(t *testing.T, dir, def string) {
+	t.Helper()
+	if def == "main" {
+		return
+	}
+	gitRun(t, dir, "branch", "-m", def, "main")
+}
+
+// TestMainKeySwitchesToMainFromList exercises the full "m" flow from the list
+// view (no detail open): pressing it fires checkoutCmd("main"), running that
+// tea.Cmd checks out main for real, and feeding the resulting checkoutMsg
+// back through Update updates a.status and a.currentBranch/a.jobs — the
+// a.detail == nil branch of the checkoutMsg handler that
+// TestCheckoutKeySwitchesBranchAndRebuildsDetail above doesn't exercise.
+func TestMainKeySwitchesToMainFromList(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	gitEnsureMain(t, dir, def)
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/off10_o")
+	gitCommitJob(t, dir, "off10_o",
+		"# Brief: Off\n\nstatus: open\nid: off10\nbranch: feature/off10_o\ndate: 2026-01-01\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%d", err, len(jobs))
+	}
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.state = stateList
+	if a.currentBranch != "feature/off10_o" {
+		t.Fatalf("currentBranch = %q, want feature/off10_o", a.currentBranch)
+	}
+
+	model, cmd := a.updateList(keyMsg("m"))
+	got := model.(*App)
+	if cmd == nil {
+		t.Fatal("expected \"m\" to return a tea.Cmd, got nil")
+	}
+
+	msg := cmd()
+	checkoutM, ok := msg.(checkoutMsg)
+	if !ok {
+		t.Fatalf("expected checkoutMsg, got %T", msg)
+	}
+	if checkoutM.err != nil {
+		t.Fatalf("checkout failed: %v", checkoutM.err)
+	}
+	if checkoutM.branch != "main" {
+		t.Errorf("checkoutMsg.branch = %q, want main", checkoutM.branch)
+	}
+
+	// The working tree really did switch.
+	out, execErr := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+	if execErr != nil || strings.TrimSpace(string(out)) != "main" {
+		t.Fatalf("git HEAD after checkout = %q (err=%v), want main", out, execErr)
+	}
+
+	model2, followUp := got.Update(checkoutM)
+	if followUp != nil {
+		t.Errorf("expected no follow-up cmd from checkoutMsg handling, got one")
+	}
+	final := model2.(*App)
+
+	if final.detail != nil {
+		t.Error("checking out main from the list must not open a detail view")
+	}
+	if final.currentBranch != "main" {
+		t.Errorf("currentBranch after checkout = %q, want main", final.currentBranch)
+	}
+	if !strings.Contains(final.status, "switched to main") {
+		t.Errorf("status = %q, want it to mention switching to main", final.status)
+	}
+	// The off-branch job should now show as off-branch relative to main.
+	if len(final.jobs) != 1 || final.jobs[0].OnCurrentBranch {
+		t.Errorf("jobs after checkout = %+v, want the job to no longer be OnCurrentBranch", final.jobs)
+	}
+}
+
+// TestMainKeyAlreadyOnMainStillReportsStatus verifies checking out main while
+// already on it — a no-op as far as git is concerned (`git checkout` on the
+// already-current branch still exits 0) — still surfaces a clear status
+// rather than silently doing nothing.
+func TestMainKeyAlreadyOnMainStillReportsStatus(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	gitEnsureMain(t, dir, def)
+	gitCommitJob(t, dir, "cur10_c", "# Brief: Cur\n\nstatus: open\nid: cur10\nbranch: main\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.state = stateList
+
+	model, cmd := a.updateList(keyMsg("m"))
+	got := model.(*App)
+	if cmd == nil {
+		t.Fatal("expected \"m\" to return a tea.Cmd even when already on main")
+	}
+	msg := cmd()
+	checkoutM := msg.(checkoutMsg)
+	if checkoutM.err != nil {
+		t.Fatalf("checkout of the already-current branch failed: %v", checkoutM.err)
+	}
+
+	model2, _ := got.Update(checkoutM)
+	final := model2.(*App)
+	if !strings.Contains(final.status, "switched to main") {
+		t.Errorf("status = %q, want it to still mention main on a no-op checkout", final.status)
+	}
+}
+
+// TestMainKeyRefusedCheckoutSurfacesStatusInList verifies a checkout git
+// refuses (e.g. uncommitted changes it would clobber) is reported in
+// a.status when there is no open detail view, and leaves the job list alone.
+func TestMainKeyRefusedCheckoutSurfacesStatusInList(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	gitCommitJob(t, dir, "cur10_c", "# Brief: Cur\n\nstatus: open\nid: cur10\nbranch: "+def+"\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.state = stateList
+
+	wantErr := errors.New("git checkout main: exit status 1: error: your local changes would be overwritten")
+	model, cmd := a.Update(checkoutMsg{branch: "main", err: wantErr})
+	if cmd != nil {
+		t.Errorf("expected no follow-up cmd, got one")
+	}
+	got := model.(*App)
+
+	if got.detail != nil {
+		t.Error("no detail view should be open after a list-view checkout failure")
+	}
+	want := cmdErrorText(wantErr)
+	if got.status != want {
+		t.Errorf("status = %q, want %q", got.status, want)
+	}
+	if len(got.jobs) != 1 {
+		t.Errorf("job list should be untouched by a failed checkout; got %d job(s)", len(got.jobs))
+	}
+}

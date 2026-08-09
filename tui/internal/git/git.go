@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -184,6 +185,97 @@ func ShowFile(root, branch, path string) ([]byte, error) {
 		return nil, wrapErr(fmt.Sprintf("git show %s:%s", branch, path), err, stderr)
 	}
 	return out, nil
+}
+
+// Commit is one entry in the recent-activity log built by RecentCommits.
+type Commit struct {
+	Hash      string
+	ShortHash string
+	Subject   string
+	RelTime   string
+	Branch    string
+}
+
+// recentCommitsFieldSep delimits the --format fields RecentCommits parses
+// below. It's the ASCII Unit Separator, which — unlike a comma, space or pipe
+// — never legitimately appears in a commit subject.
+const recentCommitsFieldSep = "\x1f"
+
+// RecentCommits returns the last n commits reachable from any local branch in
+// root, deduped by commit hash and ordered most-recent first.
+//
+// It runs a single `git log --source -n <n> <every local branch>` rather than
+// querying each branch tip separately and merging results by hand: passing
+// every branch as a positional ref makes a single `git log` union-traverse
+// their combined history and visit each commit exactly once, so a commit
+// reachable from several branches (e.g. a job branch that hasn't diverged
+// from main yet) still only appears once, and the overall most-recent-first
+// order falls out of git's own traversal instead of needing a manual
+// hash-set merge. `--source` (surfaced per-line via `%S`) reports which of
+// the given refs a commit was reached through, which doubles as the "which
+// branch is this commit on" label — including for shared/undiverged commits.
+//
+// Branches are passed to git log in a deterministic order — the current
+// branch first, then the rest in LocalBranches' order — so which branch gets
+// credited (via %S) for a commit reachable from more than one of them is
+// deterministic: the current branch wins ties.
+//
+// A repository with no commits yet or no local branches (an unborn HEAD)
+// returns an empty slice and a nil error, matching LocalBranches' own
+// degrade. A non-repo or missing git binary returns ErrNotARepo.
+func RecentCommits(root string, n int) ([]Commit, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+	branches, err := LocalBranches(root)
+	if err != nil {
+		return nil, err
+	}
+	if len(branches) == 0 {
+		return nil, nil
+	}
+
+	cur, _ := CurrentBranch(root) // "" (detached HEAD / error) leaves ordering as-is
+	ordered := make([]string, 0, len(branches))
+	if cur != "" {
+		ordered = append(ordered, cur)
+	}
+	for _, b := range branches {
+		if b == cur {
+			continue
+		}
+		ordered = append(ordered, b)
+	}
+
+	format := strings.Join([]string{"%H", "%h", "%s", "%cr", "%S"}, recentCommitsFieldSep)
+	args := append([]string{"log", "-n", strconv.Itoa(n), "--source", "--format=" + format}, ordered...)
+
+	out, stderr, err := run(root, args...)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return nil, ErrNotARepo
+		}
+		return nil, wrapErr("git log", err, stderr)
+	}
+
+	var commits []Commit
+	for _, line := range strings.Split(string(out), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, recentCommitsFieldSep)
+		if len(fields) != 5 {
+			continue
+		}
+		commits = append(commits, Commit{
+			Hash:      fields[0],
+			ShortHash: fields[1],
+			Subject:   fields[2],
+			RelTime:   fields[3],
+			Branch:    fields[4],
+		})
+	}
+	return commits, nil
 }
 
 // Checkout switches the working tree at root to branch (short name), via

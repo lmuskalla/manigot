@@ -37,6 +37,20 @@ type App struct {
 	jobs  []job.Job
 	state appState
 
+	// currentBranch is the branch checked out in root right now (git.
+	// CurrentBranch), refreshed alongside the job list so it never goes
+	// stale relative to renderJobRow's "· <branch>" tags. Empty for a
+	// detached HEAD or a non-repo project (job.Discover's working-tree-only
+	// fallback) — both render nothing rather than an awkward empty label.
+	currentBranch string
+
+	// recentCommits backs the list header's read-only "recent activity"
+	// strip: the last few commits across all local branches (git.
+	// RecentCommits), refreshed alongside currentBranch. nil when the repo
+	// has no commits yet or RecentCommits errors (e.g. a non-repo project)
+	// — renderRecentActivity degrades to rendering nothing in that case.
+	recentCommits []git.Commit
+
 	cursor int
 	width  int
 	height int
@@ -66,6 +80,8 @@ type App struct {
 // surfaces the error in the footer instead.
 func NewApp(root string, jobs []job.Job) *App {
 	a := &App{root: root, jobs: jobs, state: stateList}
+	a.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
+	a.refreshRecentCommits()
 	settings, err := config.Load()
 	a.settings = settings
 	if err != nil {
@@ -174,6 +190,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.state = stateList
 				a.status = "switched to " + msg.branch + ", but the job is no longer listed"
 			}
+		} else {
+			// No detail view open — the list view's "back to main" quick
+			// checkout. refreshJobs above already picked up the new
+			// currentBranch; still surface a status so the checkout
+			// (including an already-on-<branch> no-op, which git itself
+			// treats as success) isn't silent.
+			a.status = "switched to " + msg.branch
 		}
 		return a, nil
 	case tea.KeyMsg:
@@ -246,6 +269,30 @@ func (a *App) indexOfJob(id string) int {
 
 // --- List view --------------------------------------------------------------
 
+// recentActivityCount is how many commits the list header's read-only
+// "recent activity" strip shows. Fixed at 1 (the brief's own named fallback,
+// "last commit only") rather than the originally-implemented 5: at 5 entries
+// the strip pushed every job row down by up to 5 lines versus the header's
+// pre-existing footprint, which the brief explicitly disallows ("must not
+// ... push down the job rows"). At 1 entry, renderList reclaims the header's
+// existing blank spacer line for the activity line instead of adding a new
+// one, so the strip adds zero net lines versus the header before this
+// feature existed.
+const recentActivityCount = 1
+
+// refreshRecentCommits re-reads the recent-activity strip from git. Like
+// currentBranch, an error (e.g. a non-repo project) degrades to an empty
+// strip rather than surfacing in the status line — this is decorative,
+// optional header content, not an action the user asked for.
+func (a *App) refreshRecentCommits() {
+	commits, err := git.RecentCommits(a.root, recentActivityCount)
+	if err != nil {
+		a.recentCommits = nil
+		return
+	}
+	a.recentCommits = commits
+}
+
 // refreshJobs re-reads the job list from disk (job.Discover: one os.ReadDir
 // plus one small brief.md read per job) and clamps the cursor so a job that
 // was archived mid-session doesn't leave it out of range. It does not touch
@@ -256,6 +303,8 @@ func (a *App) refreshJobs() {
 	if jobs, err := job.Discover(a.root); err == nil {
 		a.jobs = jobs
 	}
+	a.currentBranch, _ = git.CurrentBranch(a.root) // "" on detached HEAD / non-repo
+	a.refreshRecentCommits()
 	if a.cursor > 0 && a.cursor >= len(a.jobs) {
 		a.cursor = len(a.jobs) - 1
 	}
@@ -320,6 +369,16 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.status = "→ quick session in " + desc
 		}
+	case "m":
+		// Quick "back to main" checkout — the one friction point the brief
+		// calls out (finishing a job branch and wanting a quick launch
+		// against main without manually switching first). Not a generic
+		// branch picker: "main" is the project's hardcoded base-branch
+		// convention (scripts/new-job.sh), same as detail view's "c" reuses
+		// git.Checkout/checkoutCmd. Runs as a tea.Cmd so a slow git
+		// operation doesn't block rendering; checkoutMsg's a.detail == nil
+		// branch reports the outcome to a.status.
+		return a, a.checkoutCmd("main")
 	}
 	return a, nil
 }
@@ -366,6 +425,8 @@ func (a *App) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if jobs, derr := job.Discover(a.root); derr == nil {
 			a.jobs = jobs
 		}
+		a.currentBranch, _ = git.CurrentBranch(a.root) // "" on detached HEAD / non-repo
+		a.refreshRecentCommits()
 		a.cursor = 0 // newest first after Discover's date-desc sort
 		a.status = "created \"" + title + "\" (" + typ + ")"
 		a.newJob = nil
@@ -581,7 +642,20 @@ func (a *App) renderList() string {
 	b.WriteString(titleStyle.Render("safecode"))
 	b.WriteString("  ")
 	b.WriteString(dimStyle.Render("jobs in " + shortRoot(a.root)))
-	b.WriteString("\n\n")
+	if a.currentBranch != "" {
+		b.WriteString(dimStyle.Render(" · on "))
+		b.WriteString(accentStyle.Render(a.currentBranch))
+	}
+	b.WriteString("\n")
+	// The activity strip takes over the header's existing blank spacer line
+	// rather than adding lines after it, so a non-empty strip doesn't push
+	// the column header (and every job row below it) down any further than
+	// the pre-existing blank-line header already did.
+	if activity := a.renderRecentActivity(w); activity != "" {
+		b.WriteString(activity)
+	} else {
+		b.WriteString("\n")
+	}
 
 	// Column header row.
 	header := headerStyle.Render(pad("ID", cols.id)) + "  " +
@@ -611,6 +685,39 @@ func (a *App) renderList() string {
 	b.WriteString("\n")
 	b.WriteString(a.footer())
 
+	return b.String()
+}
+
+// renderRecentActivity renders the list header's read-only "recent activity"
+// strip: up to recentActivityCount commits across all local branches, one
+// compact dimmed line each, most-recent first (see git.RecentCommits for the
+// dedup/attribution rules). Renders nothing — not even a heading — when
+// a.recentCommits is empty (a fresh repo, or refreshRecentCommits degrading a
+// non-repo project's error away), matching the rest of the header's
+// optional-content handling. This is fixed and non-interactive: no
+// scrolling, no drill-down, per the brief's explicit rejection of a git log
+// viewer.
+func (a *App) renderRecentActivity(w int) string {
+	if len(a.recentCommits) == 0 {
+		return ""
+	}
+	const hashW, relW, branchW = 7, 10, 16
+	// Subject gets whatever's left after the fixed-width columns and their
+	// spacing, same truncate() job titles use so a long commit message can't
+	// wrap the line.
+	subjectW := w - hashW - relW - branchW - 6
+	if subjectW < 12 {
+		subjectW = 12
+	}
+	var b strings.Builder
+	for _, c := range a.recentCommits {
+		line := pad(c.ShortHash, hashW) + "  " +
+			pad(truncate(c.Subject, subjectW), subjectW) + "  " +
+			pad(c.RelTime, relW) + "  " +
+			truncate(c.Branch, branchW)
+		b.WriteString(dimStyle.Render(strings.TrimRight(line, " ")))
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 
@@ -644,7 +751,7 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 
 // footer is the bottom help/status line.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · o quick · n new · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · o quick · n new · m main · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return statusStyle.Render(a.status)
 	}
