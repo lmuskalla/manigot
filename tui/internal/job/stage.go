@@ -6,11 +6,18 @@ import (
 	"strings"
 )
 
-// Stage is the workflow stage a job is in, per the brief's stage model:
+// Stage is the workflow stage a job is in, per the ideal-workflow model:
 //
 //   - analyze: open job, tasks not yet written   → product-owner, analyst
 //   - develop: tasks.md written                  → developer
 //   - review:  implementation.md written         → reviewer, security
+//
+// Stage is informational only: it labels which step of the ideal workflow a
+// job's files say it has reached, shown as a hint in the TUI's detail view
+// ("stage: <name>"). It used to also gate which agents could be launched from
+// there, but per the "launch agents without workflow" brief that gate was
+// removed — all agents are always launchable, regardless of stage — so Stage
+// no longer has an Agents() method; do not reintroduce one as a gate.
 type Stage string
 
 const (
@@ -18,20 +25,6 @@ const (
 	StageDevelop Stage = "develop"
 	StageReview  Stage = "review"
 )
-
-// stageAgents maps each stage to the agents the brief says to surface in the
-// action bar. Order is the display order.
-var stageAgents = map[Stage][]string{
-	StageAnalyze: {"product-owner", "analyst"},
-	StageDevelop: {"developer"},
-	StageReview:  {"reviewer", "security"},
-}
-
-// Agents returns the agents to surface for this stage (empty for an unknown
-// stage).
-func (s Stage) Agents() []string {
-	return stageAgents[s]
-}
 
 // Stage derives the job's current workflow stage from which files are written.
 // Precedence: implementation.md written → review; else tasks.md written →

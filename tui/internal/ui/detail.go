@@ -310,20 +310,20 @@ func (d *detailView) render() string {
 	return b.String()
 }
 
-// renderActionBar draws the stage → agents action bar. The shown buttons come
-// from Job.Stage().Agents() (the brief's stage model); each is labelled with
-// the key TASK-8 binds to the launcher.
+// renderActionBar draws the action bar: all five agent buttons, always, in
+// agentOrder — launching any of them is no longer gated by the job's stage
+// (see app.go's agentForKey). "stage: <name>" is kept as an informational-only
+// hint of where the job's files say it is in the ideal workflow; it no longer
+// restricts which buttons appear.
+//
+// The "D" mark-done button is appended after a "│" separator and styled
+// differently (statusDoneStyle, not accentStyle) since it is not an agent
+// action — it archives the job via sc-done rather than launching a session.
 func (d *detailView) renderActionBar() string {
-	stage := d.job.Stage()
-	agents := stage.Agents()
+	left := dimStyle.Render("stage: " + string(d.job.Stage()))
 
-	left := dimStyle.Render("stage: " + string(stage))
-	if len(agents) == 0 {
-		return left
-	}
-
-	buttons := make([]string, 0, len(agents))
-	for _, a := range agents {
+	buttons := make([]string, 0, len(agentOrder))
+	for _, a := range agentOrder {
 		m, ok := agentMeta[a]
 		if !ok {
 			// Unknown agent name — render it literally without a key.
@@ -333,7 +333,9 @@ func (d *detailView) renderActionBar() string {
 		key := accentStyle.Render("[" + m.key + "]")
 		buttons = append(buttons, key+" "+m.display)
 	}
-	return left + "   " + strings.Join(buttons, "    ")
+
+	doneButton := statusDoneStyle.Render("[D]") + " " + statusDoneStyle.Render("Done")
+	return left + "   " + strings.Join(buttons, "    ") + "    " + dimStyle.Render("│") + "  " + doneButton
 }
 
 // renderTabs draws [brief] tasks implementation verdict with the active tab
@@ -370,6 +372,6 @@ func (d *detailView) renderFooter() string {
 		// hint is scoped to when it would actually work.
 		hint += " · e edit"
 	}
-	hint += " · agent keys above · ctrl+r refresh · esc back · q quit"
+	hint += " · agent keys above · D mark done · ctrl+r refresh · esc back · q quit"
 	return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint))
 }

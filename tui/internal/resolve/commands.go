@@ -29,11 +29,8 @@ func Job() Spec {
 	}
 }
 
-// Done describes the command that finishes a job (scripts/finish-job.sh).
-//
-// The TUI has no finish-job action yet; the spec exists so the resolver covers
-// the whole command surface and the SAFECODE_DONE_BIN contract is honoured the
-// moment such an action is added.
+// Done describes the command that finishes a job (scripts/finish-job.sh). Used
+// by hostcmd.DoneCommand for the job detail view's "mark done" (capital D) key.
 func Done() Spec {
 	return Spec{
 		Label:  "sc-done",

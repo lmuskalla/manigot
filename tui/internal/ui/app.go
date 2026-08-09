@@ -83,6 +83,12 @@ type editorDoneMsg struct {
 	err  error
 }
 
+// doneMsg reports the outcome of the "D" mark-done shortcut's
+// tea.ExecProcess once the suspended finish-job.sh run returns.
+type doneMsg struct {
+	err error
+}
+
 // Update handles window resizing and routes key presses to the active view.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -106,6 +112,24 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.detail.reloadCurrent()
 				a.detail.setStatus("edited " + filepath.Base(msg.path))
 			}
+		}
+		return a, nil
+	case doneMsg:
+		// finish-job.sh's exit code is not a reliable success/failure signal:
+		// every one of its read -rp confirmation prompts does `exit 0` on
+		// decline, not just the happy path. So regardless of msg.err, always
+		// fall back to refreshing the job list from disk and returning to it
+		// — a job that got archived is simply gone from the re-read list, one
+		// that was declined or failed is still there. A non-zero exit (the
+		// script itself erroring, e.g. uncommitted changes) still surfaces
+		// through cmdErrorText first, same as any other host-command failure.
+		a.refreshJobs()
+		a.detail = nil
+		a.state = stateList
+		if msg.err != nil {
+			a.status = cmdErrorText(msg.err)
+		} else {
+			a.status = "refreshed"
 		}
 		return a, nil
 	case tea.KeyMsg:
@@ -300,6 +324,15 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return a, cmd
 		}
+	case "D":
+		// Mark done: not an agent action, so it is handled here rather than
+		// falling into the agentForKey dispatch below.
+		cmd, err := a.doneCmd()
+		if err != nil {
+			a.detail.setStatus(cmdErrorText(err))
+			return a, nil
+		}
+		return a, cmd
 	}
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
@@ -334,14 +367,33 @@ func (a *App) editCmd() (tea.Cmd, error) {
 	}), nil
 }
 
-// agentForKey returns the agent name whose action-bar key equals k and that is
-// valid for the open job's current stage ("" otherwise). This is what gates the
-// launch — pressing 'r' only fires reviewer when the job is in the review stage.
+// doneCmd resolves the sc-done invocation for the open job and returns the
+// tea.Cmd that runs it. Like editCmd, this goes through tea.ExecProcess —
+// finish-job.sh's several read -rp confirmations need a real interactive
+// terminal, unlike launch.Agent's detached new-window spawn used for agents.
+// An error here means the command itself could not be resolved (see
+// hostcmd.DoneCommand) — the caller surfaces it directly.
+func (a *App) doneCmd() (tea.Cmd, error) {
+	cmd, err := hostcmd.DoneCommand(a.detail.job.Name, a.root)
+	if err != nil {
+		return nil, err
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return doneMsg{err: err}
+	}), nil
+}
+
+// agentForKey returns the agent name whose action-bar key equals k ("" if no
+// agent uses that key). All five agents are always eligible, regardless of
+// the open job's current stage: the brief this shipped under
+// ("launch agents without workflow") is explicitly about not forcing the
+// ideal-workflow stage order — a user may write brief.md and tasks.md by hand
+// and go straight to @developer, for example.
 func (a *App) agentForKey(k string) string {
 	if a.detail == nil {
 		return ""
 	}
-	for _, agent := range a.detail.job.Stage().Agents() {
+	for _, agent := range agentOrder {
 		if m, ok := agentMeta[agent]; ok && m.key == k {
 			return agent
 		}

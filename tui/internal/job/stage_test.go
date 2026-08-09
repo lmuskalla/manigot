@@ -151,23 +151,3 @@ func TestJobStage(t *testing.T) {
 		t.Errorf("written implementation.md stage = %s, want review", got)
 	}
 }
-
-func TestStageAgents(t *testing.T) {
-	cases := map[Stage][]string{
-		StageAnalyze: {"product-owner", "analyst"},
-		StageDevelop: {"developer"},
-		StageReview:  {"reviewer", "security"},
-	}
-	for s, want := range cases {
-		got := s.Agents()
-		if len(got) != len(want) {
-			t.Errorf("%s agents = %v, want %v", s, got, want)
-			continue
-		}
-		for i := range got {
-			if got[i] != want[i] {
-				t.Errorf("%s agents[%d] = %q, want %q", s, i, got[i], want[i])
-			}
-		}
-	}
-}

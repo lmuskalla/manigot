@@ -377,8 +377,9 @@ Detail view:
 |---|---|
 | `tab` / `1`-`4` | switch file: brief · tasks · implementation · verdict |
 | `j`/`k`, `pgup`/`pgdn`, `g`/`G` | scroll |
-| `a` `p` `d` `r` `s` | run the agent shown in the action bar (stage-gated) |
+| `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict are agent-written) |
+| `D` | mark the job done (runs the host `sc-done`, in the foreground so its confirmation prompts work) |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
@@ -406,19 +407,31 @@ local preference, not shared) and apply immediately; a missing file just
 means nothing has been saved yet, and every setting falls back to its default
 above.
 
-### Stage → agent model
+### Stage label
 
-The action bar only offers the agents relevant to the job's current stage,
-matching the job workflow above:
+The detail view's action bar shows `stage: <name>` as an informational hint of
+where the job's files say it is in the ideal workflow above — it no longer
+restricts which agents can be launched from there. Any of the five agents can
+be fired at any time, so a job worked on outside the ideal flow (e.g. a
+hand-written `brief.md` and `tasks.md`, straight to `@developer`) isn't
+blocked by the TUI.
 
-| stage | when | agents offered |
-|---|---|---|
-| analyze | job open, tasks not yet written | Product Owner, Analyst |
-| develop | `tasks.md` written | Developer |
-| review | `implementation.md` written | Reviewer, Security |
+| stage | when |
+|---|---|
+| analyze | job open, tasks not yet written |
+| develop | `tasks.md` written |
+| review | `implementation.md` written |
 
 A file counts as "written" once it has real content beyond its `sc-job`
 scaffold (template comments, empty headings, and frontmatter don't count).
+
+Press `D` from the detail view at any point to run the host `sc-done`
+(`scripts/finish-job.sh`) and mark the job done — it squash-merges the job
+branch into the default branch, archives the job directory under
+`docs/jobs/archive/`, and sets `status: done`. This runs in the foreground
+(suspending the TUI, like `e`) because `sc-done` asks for interactive
+confirmation along the way; per its own behavior, it warns rather than blocks
+on a missing or unapproved verdict, so this is available from any stage too.
 
 ---
 

@@ -44,3 +44,32 @@ func NewJob(title, jobType, projectRoot string) (string, error) {
 	}
 	return string(out), nil
 }
+
+// DoneCommand resolves the host job-completion command — `<cmd> "<jobName>"`,
+// see scripts/finish-job.sh — and returns the *exec.Cmd ready to run, but does
+// not run it: unlike NewJob, finish-job.sh's several `read -rp` confirmations
+// need a real interactive terminal, so the caller runs this in the foreground
+// (tea.ExecProcess) rather than capturing its output.
+//
+// jobName is the job directory's exact name (e.g. "8g06st_launch-agents"),
+// not an ID prefix, for an unambiguous match against scripts/finish-job.sh's
+// own "exact match first" resolution.
+//
+// The command is resolved at call time (see resolve.Done) and invoked by
+// absolute path, with cwd and $PWD both set to projectRoot — the same
+// pattern NewJob uses, because finish-job.sh locates the project root from
+// $PWD via the same find_project_root helper new-job.sh uses.
+func DoneCommand(jobName, projectRoot string) (*exec.Cmd, error) {
+	found, err := resolve.Resolve(resolve.Done())
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(found.Path, jobName)
+	cmd.Dir = projectRoot
+	// exec.Cmd sets cwd via chdir but does not update the PWD env var; the
+	// script reads $PWD, so set it explicitly to match.
+	cmd.Env = append(os.Environ(), "PWD="+projectRoot)
+
+	return cmd, nil
+}
