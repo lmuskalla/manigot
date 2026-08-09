@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,31 +33,39 @@ func mkOffBranchApp(t *testing.T) *App {
 	return a
 }
 
+// assertBlocked asserts the shared reaction to a branchGuard block: no
+// footer status text (the reaction lives entirely in the off-branch hint up
+// in the title+meta line, not a second message down at the footer — see
+// detailView.blockedByBranch), branchFlash set so that hint blinks, and a
+// non-nil cmd — now always the branchFlashDoneMsg timer from
+// blockedByBranchCmd, never the actual editor/sc-done/sc-delete/agent-launch
+// action, since the blocked branch returns before ever calling those.
+func assertBlocked(t *testing.T, a *App, cmd tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		t.Error("expected the branchFlashDoneMsg timer cmd even when blocked")
+	}
+	if a.detail.status != "" {
+		t.Errorf("status = %q, want empty — the reaction is the flashing hint up top, not a footer message", a.detail.status)
+	}
+	if !a.detail.branchFlash {
+		t.Error("a branch-mismatch block should set branchFlash so the title+meta hint blinks")
+	}
+}
+
 // TestBranchGuardBlocksEdit verifies "e" refuses to open the editor on an
-// off-branch job's brief and points the user at "b" instead.
+// off-branch job's brief.
 func TestBranchGuardBlocksEdit(t *testing.T) {
 	a := mkOffBranchApp(t)
-
 	_, cmd := a.updateDetail(keyMsg("e"))
-	if cmd != nil {
-		t.Error("expected no tea.Cmd (editor) for an off-branch job")
-	}
-	if !strings.Contains(a.detail.status, "press b to switch") {
-		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
-	}
+	assertBlocked(t, a, cmd)
 }
 
 // TestBranchGuardBlocksDone verifies "D" refuses to archive an off-branch job.
 func TestBranchGuardBlocksDone(t *testing.T) {
 	a := mkOffBranchApp(t)
-
 	_, cmd := a.updateDetail(keyMsg("D"))
-	if cmd != nil {
-		t.Error("expected no tea.Cmd (sc-done) for an off-branch job")
-	}
-	if !strings.Contains(a.detail.status, "press b to switch") {
-		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
-	}
+	assertBlocked(t, a, cmd)
 }
 
 // TestBranchGuardBlocksDelete verifies both delete triggers — the physical
@@ -72,14 +79,8 @@ func TestBranchGuardBlocksDelete(t *testing.T) {
 	for name, key := range keys {
 		t.Run(name, func(t *testing.T) {
 			a := mkOffBranchApp(t)
-
 			_, cmd := a.updateDetail(key)
-			if cmd != nil {
-				t.Error("expected no tea.Cmd (sc-delete) for an off-branch job")
-			}
-			if !strings.Contains(a.detail.status, "press b to switch") {
-				t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
-			}
+			assertBlocked(t, a, cmd)
 		})
 	}
 }
@@ -88,14 +89,8 @@ func TestBranchGuardBlocksDelete(t *testing.T) {
 // launch against an off-branch job's working tree.
 func TestBranchGuardBlocksAgentLaunch(t *testing.T) {
 	a := mkOffBranchApp(t)
-
 	_, cmd := a.updateDetail(keyMsg("d")) // "d" = developer
-	if cmd != nil {
-		t.Error("expected no tea.Cmd (agent launch) for an off-branch job")
-	}
-	if !strings.Contains(a.detail.status, "press b to switch") {
-		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
-	}
+	assertBlocked(t, a, cmd)
 }
 
 // TestBranchGuardAllowsCurrentBranchJob confirms the guard is a no-op for a
@@ -120,5 +115,53 @@ func TestBranchGuardAllowsCurrentBranchJob(t *testing.T) {
 
 	if status, blocked := a.branchGuard(); blocked {
 		t.Errorf("branchGuard blocked a current-branch job; status=%q", status)
+	}
+}
+
+// TestBranchFlashClearsOnMatchingGen simulates blockedByBranchCmd's timer
+// firing (without actually waiting branchFlashDuration): a branchFlashDoneMsg
+// carrying the generation the block just set clears branchFlash.
+func TestBranchFlashClearsOnMatchingGen(t *testing.T) {
+	a := mkOffBranchApp(t)
+	a.updateDetail(keyMsg("e"))
+	if !a.detail.branchFlash {
+		t.Fatal("setup: expected branchFlash set after a blocked action")
+	}
+	gen := a.detail.branchFlashGen
+
+	model, _ := a.Update(branchFlashDoneMsg{gen: gen})
+	got := model.(*App)
+	if got.detail.branchFlash {
+		t.Error("a branchFlashDoneMsg with the current generation should clear branchFlash")
+	}
+}
+
+// TestBranchFlashStaleGenIgnored guards the race blockedByBranchCmd's gen
+// exists for: a delayed timer from an earlier blocked attempt must not clear
+// a flash a later attempt (re)triggered in the meantime.
+func TestBranchFlashStaleGenIgnored(t *testing.T) {
+	a := mkOffBranchApp(t)
+	a.updateDetail(keyMsg("e")) // first blocked attempt
+	staleGen := a.detail.branchFlashGen
+	a.updateDetail(keyMsg("D")) // second blocked attempt — bumps the generation again
+
+	model, _ := a.Update(branchFlashDoneMsg{gen: staleGen})
+	got := model.(*App)
+	if !got.detail.branchFlash {
+		t.Error("a stale generation's timer must not clear a flash a later attempt re-triggered")
+	}
+}
+
+// TestBranchFlashDoneMsgNoDetail confirms a branchFlashDoneMsg arriving after
+// the user has already left the detail view (e.g. pressed esc before the
+// timer fired) is a safe no-op rather than a nil-pointer panic.
+func TestBranchFlashDoneMsgNoDetail(t *testing.T) {
+	a := &App{}
+	model, cmd := a.Update(branchFlashDoneMsg{gen: 1})
+	if cmd != nil {
+		t.Error("expected no follow-up cmd")
+	}
+	if model.(*App).detail != nil {
+		t.Error("detail should still be nil")
 	}
 }

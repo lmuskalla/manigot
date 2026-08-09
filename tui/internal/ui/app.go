@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lmuskalla/safecode/tui/internal/config"
@@ -120,6 +121,22 @@ type checkoutMsg struct {
 	err    error
 }
 
+// branchFlashDuration is how long the off-branch hint's blink (see
+// detailView.blockedByBranch) lasts before automatically clearing — long
+// enough to register as a reaction to the just-blocked key, short enough not
+// to keep blinking indefinitely while the user reads the hint it's drawing
+// attention to.
+const branchFlashDuration = 2 * time.Second
+
+// branchFlashDoneMsg clears the open detail view's branchFlash a few seconds
+// after a blocked action set it (see blockedByBranchCmd). gen guards against
+// a stale timer from an earlier blocked attempt clearing a flash a later
+// attempt (re)triggered in the meantime — the handler only clears when it
+// still matches detailView.branchFlashGen.
+type branchFlashDoneMsg struct {
+	gen int
+}
+
 // Update handles window resizing and routes key presses to the active view.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -224,6 +241,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// (including an already-on-<branch> no-op, which git itself
 			// treats as success) isn't silent.
 			a.status = "switched to " + msg.branch
+		}
+		return a, nil
+	case branchFlashDoneMsg:
+		if a.detail != nil && a.detail.branchFlashGen == msg.gen {
+			a.detail.branchFlash = false
 		}
 		return a, nil
 	case tea.KeyMsg:
@@ -547,9 +569,8 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// only) respond — for any other tab this falls through to the
 		// default key handling below, same as any other unbound key.
 		if a.detail.current().editable {
-			if status, blocked := a.branchGuard(); blocked {
-				a.detail.setStatus(status)
-				return a, nil
+			if _, blocked := a.branchGuard(); blocked {
+				return a, a.blockedByBranchCmd()
 			}
 			cmd, err := a.editCmd()
 			if err != nil {
@@ -561,9 +582,8 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "D":
 		// Mark done: not an agent action, so it is handled here rather than
 		// falling into the agentForKey dispatch below.
-		if status, blocked := a.branchGuard(); blocked {
-			a.detail.setStatus(status)
-			return a, nil
+		if _, blocked := a.branchGuard(); blocked {
+			return a, a.blockedByBranchCmd()
 		}
 		cmd, err := a.doneCmd()
 		if err != nil {
@@ -584,9 +604,8 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// finish-job.sh does). The destructive confirmation itself lives in
 		// delete-job.sh's own read -rp prompt, not here — same division of
 		// responsibility "D" mark-done already uses.
-		if status, blocked := a.branchGuard(); blocked {
-			a.detail.setStatus(status)
-			return a, nil
+		if _, blocked := a.branchGuard(); blocked {
+			return a, a.blockedByBranchCmd()
 		}
 		cmd, err := a.deleteCmd()
 		if err != nil {
@@ -611,9 +630,8 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
 	if agent := a.agentForKey(msg.String()); agent != "" {
-		if status, blocked := a.branchGuard(); blocked {
-			a.detail.setStatus(status)
-			return a, nil
+		if _, blocked := a.branchGuard(); blocked {
+			return a, a.blockedByBranchCmd()
 		}
 		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ToolValue())
 		if err != nil {
@@ -676,12 +694,25 @@ func (a *App) deleteCmd() (tea.Cmd, error) {
 	}), nil
 }
 
+// blockedByBranchCmd reacts to a branchGuard block on the open detail view:
+// it flags branchFlash (see detailView.blockedByBranch) so the off-branch
+// hint already shown in the title+meta line blinks, and returns the tea.Cmd
+// that clears the flash again after branchFlashDuration.
+func (a *App) blockedByBranchCmd() tea.Cmd {
+	gen := a.detail.blockedByBranch()
+	return tea.Tick(branchFlashDuration, func(time.Time) tea.Msg {
+		return branchFlashDoneMsg{gen: gen}
+	})
+}
+
 // branchGuard reports whether the open job's branch differs from the branch
 // actually checked out right now, and if so a status message pointing the
 // user at "b" — the guard behind the mutating actions (launch agent, "e"
 // edit, "D" mark-done, "x"/delete remove job) named in the "keep-track-of-jobs" brief's
 // coupled scope: none of them may silently run against the wrong branch's
-// working tree once discovery is cross-branch.
+// working tree once discovery is cross-branch. The returned status text is
+// no longer shown directly — blockedByBranchCmd's flash is the on-screen
+// reaction now — but callers (and tests) still use it as a diagnostic.
 //
 // The current branch is re-checked fresh via git.CurrentBranch rather than
 // trusted from job.OnCurrentBranch's discovery-time snapshot, since "b" (or a

@@ -61,6 +61,22 @@ type detailView struct {
 	// status, when non-empty, replaces the footer's key hint — used to confirm
 	// an agent launch (set by TASK-8) or report a launch error.
 	status string
+
+	// branchFlash marks the off-branch hint in the title+meta line (see
+	// render) for blink treatment — set the moment branchGuard blocks an
+	// action (blockedByBranch), so the *existing* red hint up top flashes to
+	// draw the eye there instead of a second warning appearing at the
+	// footer. Cleared a few seconds later by app.go's branchFlashDoneMsg
+	// handler (see branchFlashDuration) so the flash reads as a momentary
+	// reaction rather than a state that lingers until the user switches
+	// branches.
+	branchFlash bool
+
+	// branchFlashGen is bumped every time blockedByBranch (re)triggers a
+	// flash. Round-tripped through branchFlashDoneMsg so a delayed clear from
+	// an earlier blocked attempt can't cut short a flash a later attempt
+	// (re)started in the meantime — see app.go's branchFlashDoneMsg handler.
+	branchFlashGen int
 }
 
 // newDetailView loads all four files for job j at the given viewport size.
@@ -252,6 +268,20 @@ func (d *detailView) setStatus(s string) {
 	d.syncViewerSize()
 }
 
+// blockedByBranch reacts to a branchGuard block: it clears any footer status
+// (the reaction lives entirely in the off-branch hint already shown in the
+// title+meta line, see render — not as a second message down at the
+// footer) and flags branchFlash so that hint blinks. Returns the new
+// branchFlashGen, which the caller (app.go's blockedByBranchCmd) rounds back
+// through a delayed branchFlashDoneMsg to clear the flash again.
+func (d *detailView) blockedByBranch() int {
+	d.status = ""
+	d.branchFlash = true
+	d.branchFlashGen++
+	d.syncViewerSize()
+	return d.branchFlashGen
+}
+
 // syncViewerSize resizes the active tab's viewer to the current body
 // dimensions immediately, and marks the other three as stale instead of
 // eagerly re-rendering them too.
@@ -416,12 +446,22 @@ func (d *detailView) render() string {
 	// Branch: show which branch the job lives on, and flag it when that's a
 	// different branch than the one currently checked out (so the user
 	// understands why edits are guarded and knows to press "b" to switch).
+	// The off-branch case renders in warnStyle's red — a plain foreground
+	// color, no background fill — rather than dimStyle, so it reads as a
+	// warning at a glance instead of blending into ordinary meta text; once
+	// branchFlash is set (a blocked action was just attempted, see
+	// blockedByBranch), it also blinks to draw the eye back to this exact
+	// hint instead of a second message appearing at the footer.
 	if d.job.Branch != "" {
-		branchMeta := " · branch: " + d.job.Branch
-		if !d.job.OnCurrentBranch {
-			branchMeta = " · " + d.job.Branch + " (other branch — press b to switch)"
+		if d.job.OnCurrentBranch {
+			b.WriteString(dimStyle.Render(" · branch: " + d.job.Branch))
+		} else {
+			style := warnStyle
+			if d.branchFlash {
+				style = style.Blink(true)
+			}
+			b.WriteString(style.Render(" · " + d.job.Branch + " (other branch — press b to switch)"))
 		}
-		b.WriteString(dimStyle.Render(branchMeta))
 	}
 	b.WriteString("\n\n")
 
