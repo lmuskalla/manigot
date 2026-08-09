@@ -239,6 +239,17 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Edit the persisted TUI settings (editor, agent tool).
 		a.settingsView = newSettingsView(a.settings, a.width, a.height)
 		a.state = stateSettings
+	case "o":
+		// Launch a bare safecode session (no agent, no job) in a detached
+		// new terminal — a quick ad-hoc change that doesn't belong to any
+		// specific job's workflow. Mirrors updateDetail's agent-launch
+		// reporting so the two launch paths feel consistent in the footer.
+		desc, err := launch.Quick(a.root, a.settings.ToolValue())
+		if err != nil {
+			a.status = cmdErrorText(err)
+		} else {
+			a.status = "→ quick session in " + desc
+		}
 	}
 	return a, nil
 }
@@ -485,7 +496,7 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 
 // footer is the bottom help/status line.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter open · n new · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · o quick · n new · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return statusStyle.Render(a.status)
 	}

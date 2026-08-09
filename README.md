@@ -334,6 +334,10 @@ picked in this order:
 3. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
    `konsole`, or `xterm`, whichever is found first on `PATH`
 
+The list view's `o` shortcut (see Keybindings) opens a bare `sc --tool <tool>`
+instead — same spawn paths, but with no agent and no job, for a quick ad-hoc
+session that isn't tied to a specific job's workflow.
+
 Windows is not supported in this version.
 
 ### Build & install
@@ -366,6 +370,7 @@ List view:
 |---|---|
 | `↑`/`↓` or `k`/`j` | move selection |
 | `enter` | open the job's detail view |
+| `o` | launch a quick safecode session (no agent, no job) |
 | `n` | create a new job (runs the host `sc-job`) |
 | `s` | open settings (editor, agent tool) |
 | `ctrl+r` | refresh — re-read job files from disk |

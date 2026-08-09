@@ -18,6 +18,57 @@ func TestShellCommandFormat(t *testing.T) {
 	}
 }
 
+// --- quick (bare-session) launcher ------------------------------------------
+
+func TestQuickShellCommandFormat(t *testing.T) {
+	got := quickShellCommand("/usr/local/bin/safecode", "/home/me/proj", "claude-code")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/safecode' --tool 'claude-code'"
+	if !strings.HasPrefix(got, wantInner) {
+		t.Errorf("quickShellCommand =\n %q\nwant prefix\n %q", got, wantInner)
+	}
+	// Must be wrapped by holdOnFailure, exactly like the agent path.
+	if got != holdOnFailure(wantInner) {
+		t.Errorf("quickShellCommand does not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// A bare session must never carry --agent or --job — that's the whole point of
+// the quick launch path.
+func TestQuickShellCommandOmitsAgentAndJob(t *testing.T) {
+	got := quickShellCommand("/usr/local/bin/safecode", "/home/me/proj", "claude-code")
+	if strings.Contains(got, "--agent") {
+		t.Errorf("quickShellCommand unexpectedly contains --agent: %q", got)
+	}
+	if strings.Contains(got, "--job") {
+		t.Errorf("quickShellCommand unexpectedly contains --job: %q", got)
+	}
+}
+
+// An empty tool must default to claude-code, mirroring the agent path and
+// scripts/run.sh's own default.
+func TestQuickShellCommandDefaultsEmptyTool(t *testing.T) {
+	got := quickShellCommand("/bin/safecode", "/home/me/proj", "")
+	if !strings.Contains(got, "--tool 'claude-code'") {
+		t.Errorf("quickShellCommand with empty tool = %q, want it to default to claude-code", got)
+	}
+}
+
+func TestQuickShellCommandPassesOpencodeTool(t *testing.T) {
+	got := quickShellCommand("/bin/safecode", "/home/me/proj", "opencode")
+	if !strings.Contains(got, "--tool 'opencode'") {
+		t.Errorf("quickShellCommand with opencode tool = %q, want --tool 'opencode'", got)
+	}
+}
+
+// A checkout in a directory with spaces must still produce a single word for
+// the safecode path, since the string is re-parsed by osascript / bash -lc.
+func TestQuickShellCommandQuotesPathWithSpaces(t *testing.T) {
+	got := quickShellCommand("/Users/me/My Projects/safecode/scripts/run.sh", "/tmp/p", "claude-code")
+	if !strings.Contains(got, `'/Users/me/My Projects/safecode/scripts/run.sh'`) {
+		t.Errorf("safecode path not quoted as one word in %q", got)
+	}
+}
+
 // An empty tool must default to claude-code, matching scripts/run.sh's own
 // default, rather than passing an empty --tool value through.
 func TestShellCommandDefaultsEmptyTool(t *testing.T) {

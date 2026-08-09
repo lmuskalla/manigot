@@ -57,6 +57,39 @@ func Agent(agent, jobID, projectRoot, tool string) (string, error) {
 		return "", err
 	}
 	inner := shellCommand(found.Path, agent, jobID, projectRoot, tool)
+	return launchDetached(inner)
+}
+
+// Quick opens a new terminal that runs safecode with just `--tool <tool>` (no
+// --agent, no --job) in projectRoot — a bare session for an ad-hoc change that
+// doesn't belong to any specific job/agent workflow. tool is one of
+// config.ToolClaudeCode or config.ToolOpenCode; an empty value defaults to
+// config.ToolClaudeCode, matching Agent. It returns the same short human
+// description of where it opened so the caller can surface it in a status line.
+//
+// scripts/run.sh already treats --agent and --job as optional, so a bare `sc
+// --tool <tool>` simply runs claude/opencode against the current project with
+// no agent flag and no job prompt — no container-side changes were needed to
+// support this.
+func Quick(projectRoot, tool string) (string, error) {
+	found, err := resolve.Resolve(resolve.Safecode())
+	if err != nil {
+		return "", err
+	}
+	inner := quickShellCommand(found.Path, projectRoot, tool)
+	return launchDetached(inner)
+}
+
+// launchDetached is the shared spawn/reap tail used by both launch paths: it
+// builds the *exec.Cmd for inner, discards its stdio so the launcher cannot
+// corrupt the TUI's alt screen, starts it, and reaps the launcher
+// asynchronously so it doesn't zombie (the actual terminal/pane outlives it).
+// It returns the short "where it opened" description buildCmd produces.
+//
+// See Agent's doc comment for why a launcher that starts successfully but then
+// fails on its own (e.g. no display server) is not surfaced here — holdOnFailure
+// covers the inner command's own fast failures instead.
+func launchDetached(inner string) (string, error) {
 	cmd, desc, err := buildCmd(inner)
 	if err != nil {
 		return "", err
@@ -103,6 +136,27 @@ func shellCommand(safecodePath, agent, jobID, projectRoot, tool string) string {
 	}
 	inner := fmt.Sprintf("cd %s && %s --tool %s --agent %s --job %s",
 		shellQuote(projectRoot), shellQuote(safecodePath), shellQuote(tool), shellQuote(agent), shellQuote(jobID))
+	return holdOnFailure(inner)
+}
+
+// quickShellCommand builds the shell string for a bare safecode session (no
+// --agent, no --job), executed inside the new terminal:
+//
+//	cd '<projectRoot>' && '<safecode>' --tool '<tool>'; ec=$?; ...
+//
+// It is the --agent/--job-less counterpart to shellCommand: same cd-first,
+// shellQuote-everything, holdOnFailure-wrap behavior (so a fast failure of the
+// inner command still holds the window open — TASK-6), just without the
+// agent/job flags. An empty tool defaults to config.ToolClaudeCode for the same
+// reason shellCommand does. It is deliberately a separate function rather than
+// a generalization of shellCommand so the latter's exact-format tests stay
+// unchanged.
+func quickShellCommand(safecodePath, projectRoot, tool string) string {
+	if tool == "" {
+		tool = config.ToolClaudeCode
+	}
+	inner := fmt.Sprintf("cd %s && %s --tool %s",
+		shellQuote(projectRoot), shellQuote(safecodePath), shellQuote(tool))
 	return holdOnFailure(inner)
 }
 
