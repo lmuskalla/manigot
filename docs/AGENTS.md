@@ -53,10 +53,14 @@ session with `sc --tool claude-code|opencode`.
   A project can override one by adding a same-named file under its own `docs/agents/`.
 - `project-template/` — what gets copied into a new project (`docs/AGENTS.md`
   plus `docs/jobs/`) to bootstrap the job workflow there.
-- `docs/AGENTS.md` — the project context file, tool-neutral by name. Neither CLI
-  reads it from inside the `docs/` mount, so `run.sh` mounts it read-only a second
-  time at `/workspace/AGENTS.md` (OpenCode) or `/workspace/.claude/CLAUDE.md`
-  (Claude Code). `docs/CLAUDE.md` still works as a fallback for older projects.
+- `docs/AGENTS.md` — the project context file, tool-neutral by name, and the
+  canonical source agents read at session start. Neither CLI reads it from inside
+  the `docs/` mount, so `run.sh` mounts it read-only a second time at the path each
+  tool actually looks in: `/workspace/AGENTS.md` (OpenCode) or
+  `/workspace/.claude/CLAUDE.md` (Claude Code). Those mount paths are **read-only**
+  — to change the project context, always edit the source `docs/AGENTS.md`, never
+  the mounts `/workspace/AGENTS.md` or `/workspace/.claude/CLAUDE.md`.
+  `docs/CLAUDE.md` still works as a fallback for older projects.
 - `.env` (gitignored) — holds `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_ACCOUNT_UUID`,
   `CLAUDE_EMAIL`, `CLAUDE_ORG_UUID` for Claude Code, and for OpenCode at least one
   provider key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
@@ -93,6 +97,9 @@ Bug fixes skip the `@product-owner`/`@analyst` steps and go straight to
 - NEVER commit `.env` or any file containing OAuth tokens / account UUIDs
 - NEVER touch a mounted project's files outside its `docs/` directory from
   within safecode tooling itself
+- NEVER edit the read-only context mounts `/workspace/AGENTS.md` or
+  `/workspace/.claude/CLAUDE.md` — they are read-only overlays of `docs/AGENTS.md`.
+  Change the canonical source `docs/AGENTS.md` instead
 - Keep `agents/*.md` and `project-template/docs/AGENTS.md` in sync with
   whatever this file documents — they're meant to describe the same system
 - When scope is unclear: ask, don't guess

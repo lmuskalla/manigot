@@ -6,7 +6,9 @@ safecode is vendor-agnostic: it runs Claude Code (`sc`) or OpenCode
 (`sc --tool opencode`) against the same project, and this one file serves
 both — safecode mounts it read-only wherever the selected tool looks for it
 (/workspace/AGENTS.md for OpenCode, /workspace/.claude/CLAUDE.md for Claude
-Code). The same global agents are available under @name either way.
+Code). Those mount paths are read-only: to change this context, edit this
+file (docs/AGENTS.md), never the mount paths.
+The same global agents are available under @name either way.
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 
