@@ -14,7 +14,7 @@ import (
 // --- current-branch header line (TASK-3) ------------------------------------
 
 // TestRenderListShowsCurrentBranch verifies the list header names the branch
-// currently checked out, next to the "jobs in <root>" text.
+// currently checked out, in the "safecode - <project> - on <branch>" title.
 func TestRenderListShowsCurrentBranch(t *testing.T) {
 	dir, def := gitInitRepo(t)
 	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
@@ -50,7 +50,7 @@ func TestRenderListOmitsBranchOnNonRepo(t *testing.T) {
 	}
 
 	got := a.renderList()
-	if strings.Contains(got, "· on ") {
+	if strings.Contains(got, " - on ") {
 		t.Errorf("renderList should render no branch tag on a non-repo project:\n%s", got)
 	}
 }
@@ -110,8 +110,8 @@ func TestRenderListRecentActivityShowsMostRecentAcrossBranches(t *testing.T) {
 
 	jobs, _ := job.Discover(dir) // no jobs dir here — 0 jobs
 	a := NewApp(dir, jobs)
-	// spare = height - 5 - len(jobs) = 6 - 5 - 0 = 1, clamping the strip to
-	// its floor of 1 entry.
+	// spare = height - dashboardFixedChrome - len(jobs) = 6 - 8 - 0 = -2,
+	// clamping the strip to its floor of 1 entry.
 	a.width, a.height = 80, 6
 
 	got := a.renderList()

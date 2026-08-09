@@ -409,7 +409,7 @@ func TestDetailViewMetaLineShowsBranch(t *testing.T) {
 	// Off-branch job: branch shown + flagged as other-branch. The chrome's
 	// off-branch format doesn't repeat the "branch: " label prefix (see
 	// detailView.render's branchMeta) — it reads "<branch> (other branch —
-	// press c to switch)" instead, so this asserts on the branch name alone.
+	// press b to switch)" instead, so this asserts on the branch name alone.
 	// (Before TASK-6's dedup stripping, this also matched the raw frontmatter
 	// line rendered a second time in the body — that was a coincidental
 	// pass, not what this test means to cover.)

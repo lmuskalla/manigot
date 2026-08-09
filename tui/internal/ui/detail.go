@@ -354,9 +354,9 @@ func (d *detailView) bodyWidth() int {
 }
 
 func (d *detailView) bodyHeight() int {
-	// title(1) + tab bar(1) + action bar(1) + blank(1) + body + blank(1) + footer(footerLines)
-	// = (5 + footerLines) chrome rows around the body.
-	h := d.height - 5 - d.footerLines()
+	// title(1) + tab bar(1) + agents line(1) + stage/done line(1) + blank(1) + body + blank(1) + footer(footerLines)
+	// = (6 + footerLines) chrome rows around the body.
+	h := d.height - 6 - d.footerLines()
 	if h < 1 {
 		h = 1
 	}
@@ -393,21 +393,22 @@ func (d *detailView) render() string {
 	b.WriteString(dimStyle.Render(meta))
 	// Branch: show which branch the job lives on, and flag it when that's a
 	// different branch than the one currently checked out (so the user
-	// understands why edits are guarded and knows to press "c" to switch).
+	// understands why edits are guarded and knows to press "b" to switch).
 	if d.job.Branch != "" {
 		branchMeta := " · branch: " + d.job.Branch
 		if !d.job.OnCurrentBranch {
-			branchMeta = " · " + d.job.Branch + " (other branch — press c to switch)"
+			branchMeta = " · " + d.job.Branch + " (other branch — press b to switch)"
 		}
 		b.WriteString(dimStyle.Render(branchMeta))
 	}
 	b.WriteString("\n")
 
-	// Tab bar.
+	// Tab bar ("docs:" line).
 	b.WriteString(d.renderTabs(w))
 	b.WriteString("\n")
 
-	// Agent action bar keyed to the job's workflow stage.
+	// Agent action bar: an "agents:" line, then "stage: <name>" plus the
+	// Done button on its own line beneath.
 	b.WriteString(d.renderActionBar())
 	b.WriteString("\n\n")
 
@@ -421,51 +422,40 @@ func (d *detailView) render() string {
 	return b.String()
 }
 
-// actionButton is one entry in the action bar: either an agent-launch button
-// or the "D" mark-done button (done == true). Both render in the same
-// "[key] Label" shape — see renderActionBar's doc comment for why that
-// unification matters.
+// actionButton is one entry in the agents line: an agent-launch button,
+// rendered "[key] Label" — see renderActionBar's doc comment.
 type actionButton struct {
 	key, label string
-	done       bool
 }
 
-// renderActionBar draws the action bar: the job's stage (informational-only —
-// see below), then all six buttons — the five agents in agentOrder, always
-// shown regardless of stage (app.go's agentForKey is not stage-gated either),
-// plus "D" mark-done — in one consistent "[key] Label" format.
-//
-// Before this, the five agent buttons and the "[D] Done" button used visibly
-// different formatting (Done sat behind a "│" separator with extra spacing,
-// in a different style) — inconsistent enough to read as "5 buttons + a
-// separator + a 6th button", part of what made the bar feel like a wall.
-// Done still gets its own colour (statusDoneStyle, the same green used for
-// "done" status elsewhere) to flag that it's categorically different from
-// the five launch actions — it archives the job via sc-done rather than
-// starting a session — but the structural format (brackets, spacing,
-// grouping) is now identical across all six.
+// renderActionBar draws the two-line action bar: an "agents:" line listing
+// the five agents in agentOrder (always shown regardless of the job's
+// stage — app.go's agentForKey is not stage-gated either), each in a
+// consistent "[key] Label" format; then, on its own line beneath, "stage:
+// <name>" alongside the "[D] Done" mark-done button.
 //
 // "stage: <name>" stays purely informational: an at-a-glance hint of where
 // the job's files say it is in the ideal workflow. It no longer restricts
-// which buttons appear (launching any agent is not gated by stage).
+// which buttons appear (launching any agent is not gated by stage). Done
+// keeps its own colour (statusDoneStyle, the same green used for "done"
+// status elsewhere) to flag that it's categorically different from the five
+// launch actions — it archives the job via sc-done rather than starting a
+// session.
 //
 // Narrow-width handling: this is designed against an 80-column baseline, and
-// there isn't room there for six full "[key] Label" buttons — "Product
-// Owner" alone is 18 characters; all six full labels plus stage add up to
-// around 100. Once the full-label line would overflow d.width, every
-// button's *label* — never its key, which must always stay reachable/
-// visible — is truncated to share whatever room remains, using the same "…"
-// convention truncate() (app.go) already applies to job titles. Wrapping to
-// a second line was the brief's other offered option; truncation was chosen
-// instead because a wrapped action bar would add a row the fixed chrome-row
-// budget in bodyHeight doesn't account for (it assumes a single-line action
-// bar) — the same kind of alt-screen-clipping risk
+// there isn't room there for five full "[key] Label" agent buttons —
+// "Product Owner" alone is 18 characters. Once the full-label agents line
+// would overflow d.width, every button's *label* — never its key, which must
+// always stay reachable/visible — is truncated to share whatever room
+// remains, using the same "…" convention truncate() (app.go) already applies
+// to job titles. Wrapping to a further line was the brief's other offered
+// option; truncation was chosen instead because it would add a row the fixed
+// chrome-row budget in bodyHeight doesn't account for (it assumes a
+// two-line action bar) — the same kind of alt-screen-clipping risk
 // TestDetailBodyHeightShrinksForMultiLineStatus guards against for the
 // footer, without that guard existing here.
 func (d *detailView) renderActionBar() string {
-	stage := "stage: " + string(d.job.Stage())
-
-	buttons := make([]actionButton, 0, len(agentOrder)+1)
+	buttons := make([]actionButton, 0, len(agentOrder))
 	for _, a := range agentOrder {
 		m, ok := agentMeta[a]
 		if !ok {
@@ -475,18 +465,18 @@ func (d *detailView) renderActionBar() string {
 		}
 		buttons = append(buttons, actionButton{key: m.key, label: m.display})
 	}
-	buttons = append(buttons, actionButton{key: "D", label: "Done", done: true})
 
 	w := d.width
 	if w == 0 {
 		w = 72
 	}
 	const sep = "  "
+	const agentsLabel = "agents:"
 
-	// Fixed cost: stage, every button's "[key] " prefix, and the separators
-	// between all elements — everything but the label text, which is the
-	// only part allowed to shrink.
-	fixed := len(stage)
+	// Fixed cost: the "agents:" label, every button's "[key] " prefix, and
+	// the separators between all elements — everything but the label text,
+	// which is the only part allowed to shrink.
+	fixed := len(agentsLabel)
 	for _, btn := range buttons {
 		fixed += len(sep) + len("["+btn.key+"] ")
 	}
@@ -496,29 +486,30 @@ func (d *detailView) renderActionBar() string {
 		perLabel = labelBudget / len(buttons)
 	}
 
-	var b strings.Builder
-	b.WriteString(dimStyle.Render(stage))
+	var agentsLine strings.Builder
+	agentsLine.WriteString(dimStyle.Render(agentsLabel))
 	for _, btn := range buttons {
 		label := btn.label
 		if perLabel < len(label) {
 			label = truncateToWidth(label, perLabel)
 		}
-		keyStyle := accentStyle
-		if btn.done {
-			keyStyle = statusDoneStyle
-		}
-		b.WriteString(sep)
-		b.WriteString(keyStyle.Render("[" + btn.key + "]"))
+		agentsLine.WriteString(sep)
+		agentsLine.WriteString(accentStyle.Render("[" + btn.key + "]"))
 		if label != "" {
-			b.WriteString(" ")
-			if btn.done {
-				b.WriteString(statusDoneStyle.Render(label))
-			} else {
-				b.WriteString(label)
-			}
+			agentsLine.WriteString(" ")
+			agentsLine.WriteString(label)
 		}
 	}
-	return b.String()
+
+	stage := "stage: " + string(d.job.Stage())
+	var stageLine strings.Builder
+	stageLine.WriteString(dimStyle.Render(stage))
+	stageLine.WriteString(sep)
+	stageLine.WriteString(statusDoneStyle.Render("[D]"))
+	stageLine.WriteString(" ")
+	stageLine.WriteString(statusDoneStyle.Render("Done"))
+
+	return agentsLine.String() + "\n" + stageLine.String()
 }
 
 // truncateToWidth is truncate() (app.go) with a floor of 0 instead of
@@ -534,8 +525,8 @@ func truncateToWidth(s string, n int) string {
 	return truncate(s, n)
 }
 
-// renderTabs draws [brief] tasks implementation verdict with the active tab
-// highlighted and not-yet-written files dimmed.
+// renderTabs draws "docs: [brief] tasks implementation verdict" with the
+// active tab highlighted and not-yet-written files dimmed.
 func (d *detailView) renderTabs(width int) string {
 	parts := make([]string, len(d.tabs))
 	for i, t := range d.tabs {
@@ -554,7 +545,7 @@ func (d *detailView) renderTabs(width int) string {
 		}
 	}
 	bar := strings.Join(parts, "  ")
-	return bar
+	return dimStyle.Render("docs:") + "  " + bar
 }
 
 // renderFooter draws the scroll position, key hint, and (when set) the
@@ -577,9 +568,9 @@ func (d *detailView) renderFooter() string {
 		hint += " · e edit"
 	}
 	if !d.job.OnCurrentBranch {
-		// "c" only does anything for a job that isn't already on the
+		// "b" only does anything for a job that isn't already on the
 		// checked-out branch — scoped the same way "e edit" is above.
-		hint += " · c switch branch"
+		hint += " · b switch branch"
 	}
 	hint += " · agent keys above · D mark done · ctrl+r refresh · esc back · q quit"
 

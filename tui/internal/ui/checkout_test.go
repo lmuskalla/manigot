@@ -12,13 +12,13 @@ import (
 	"github.com/lmuskalla/safecode/tui/internal/job"
 )
 
-// keyMsg builds a single-rune key press, e.g. keyMsg("c"), for driving
+// keyMsg builds a single-rune key press, e.g. keyMsg("b"), for driving
 // updateDetail directly in tests below.
 func keyMsg(s string) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
 
-// TestCheckoutKeySwitchesBranchAndRebuildsDetail exercises the full "c" flow:
+// TestCheckoutKeySwitchesBranchAndRebuildsDetail exercises the full "b" flow:
 // pressing it in the detail view of an off-branch job fires checkoutCmd,
 // running that tea.Cmd checks out the job's branch for real, and feeding the
 // resulting checkoutMsg back through Update rebuilds the detail view so the
@@ -44,10 +44,10 @@ func TestCheckoutKeySwitchesBranchAndRebuildsDetail(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
-	// Press "c" — must return a tea.Cmd rather than mutate git inline.
-	_, cmd := a.updateDetail(keyMsg("c"))
+	// Press "b" — must return a tea.Cmd rather than mutate git inline.
+	_, cmd := a.updateDetail(keyMsg("b"))
 	if cmd == nil {
-		t.Fatal("expected \"c\" to return a tea.Cmd, got nil")
+		t.Fatal("expected \"b\" to return a tea.Cmd, got nil")
 	}
 
 	msg := cmd()
@@ -147,12 +147,12 @@ func TestCheckoutKeyWithoutBranchIsNoop(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
-	_, cmd := a.updateDetail(keyMsg("c"))
+	_, cmd := a.updateDetail(keyMsg("b"))
 	if cmd != nil {
 		t.Error("expected no tea.Cmd when the job has no known branch")
 	}
 	if a.detail.status == "" {
-		t.Error("expected a status message explaining why \"c\" did nothing")
+		t.Error("expected a status message explaining why \"b\" did nothing")
 	}
 }
 

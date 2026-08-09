@@ -54,7 +54,7 @@ func TestAgentForKeyIgnoresStage(t *testing.T) {
 	wantByKey := map[string]string{
 		"p": "product-owner",
 		"a": "analyst",
-		"v": "developer", // TASK-8: renamed from "d", which collided with "D" mark-done
+		"d": "developer",
 		"r": "reviewer",
 		"s": "security",
 	}
@@ -86,20 +86,19 @@ func TestAgentForKeyUnknownKey(t *testing.T) {
 // detail view.
 func TestAgentForKeyNoDetail(t *testing.T) {
 	a := &App{}
-	if got := a.agentForKey("v"); got != "" { // TASK-8: renamed from "d"
+	if got := a.agentForKey("d"); got != "" {
 		t.Errorf("agentForKey with no detail = %q, want empty", got)
 	}
 }
 
-// TestAgentForKeyDNoLongerResolves is a regression test for TASK-8's fix to
-// the "d"/"D" collision: "d" must no longer resolve to any agent (Developer
-// moved to "v") — confirming the collision is actually gone, not just
-// renamed elsewhere and still reachable under the old key too.
-func TestAgentForKeyDNoLongerResolves(t *testing.T) {
+// TestAgentForKeyVNoLongerResolves confirms "v" (Developer's key in a
+// previous revision) no longer resolves to any agent now that Developer is
+// back on "d".
+func TestAgentForKeyVNoLongerResolves(t *testing.T) {
 	a := &App{}
 	a.detail = newDetailView(mkStageJob(t, job.StageAnalyze), 80, 24)
-	if got := a.agentForKey("d"); got != "" {
-		t.Errorf(`agentForKey("d") = %q, want empty now that Developer uses "v"`, got)
+	if got := a.agentForKey("v"); got != "" {
+		t.Errorf(`agentForKey("v") = %q, want empty now that Developer uses "d"`, got)
 	}
 }
 
@@ -136,7 +135,7 @@ func TestRenderActionBarUnifiedFormat(t *testing.T) {
 	if strings.Contains(bar, "│") {
 		t.Errorf("action bar should no longer use a separator between the agent buttons and Done:\n%s", bar)
 	}
-	for _, want := range []string{"[p] Product Owner", "[a] Analyst", "[v] Developer", "[r] Reviewer", "[s] Security", "[D] Done"} {
+	for _, want := range []string{"[p] Product Owner", "[a] Analyst", "[d] Developer", "[r] Reviewer", "[s] Security", "[D] Done"} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("action bar missing button in the unified format %q:\n%s", want, bar)
 		}
@@ -144,24 +143,30 @@ func TestRenderActionBarUnifiedFormat(t *testing.T) {
 }
 
 // TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact confirms the
-// chosen narrow-width behaviour: at 80 columns, six full "[key] Label"
-// buttons plus the stage label don't fit, so labels are truncated — but
-// every bracketed key must still be present and untouched.
+// chosen narrow-width behaviour: at 80 columns, five full "[key] Label"
+// agent buttons plus the "agents:" label don't fit on one line, so labels
+// are truncated — but every bracketed key must still be present and
+// untouched. The action bar itself is two lines (agents, then stage/done);
+// only the agents line participates in truncation.
 func TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact(t *testing.T) {
 	j := mkStageJob(t, job.StageAnalyze)
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
 
 	lines := strings.Split(bar, "\n")
-	if len(lines) != 1 {
-		t.Fatalf("action bar at 80 cols should stay on one line (truncation, not wrapping), got %d lines:\n%s", len(lines), bar)
+	if len(lines) != 2 {
+		t.Fatalf("action bar should render on two lines (agents, then stage/done), got %d lines:\n%s", len(lines), bar)
 	}
-	for _, key := range []string{"[p]", "[a]", "[v]", "[r]", "[s]", "[D]"} {
-		if !strings.Contains(bar, key) {
-			t.Errorf("action bar at 80 cols is missing key %q — keys must never be truncated:\n%s", key, bar)
+	agentsLine, stageLine := lines[0], lines[1]
+	for _, key := range []string{"[p]", "[a]", "[d]", "[r]", "[s]"} {
+		if !strings.Contains(agentsLine, key) {
+			t.Errorf("agents line at 80 cols is missing key %q — keys must never be truncated:\n%s", key, agentsLine)
 		}
 	}
-	if strings.Contains(bar, "Product Owner") {
-		t.Errorf("action bar at 80 cols should have truncated the longest label, not shown it in full:\n%s", bar)
+	if strings.Contains(agentsLine, "Product Owner") {
+		t.Errorf("agents line at 80 cols should have truncated the longest label, not shown it in full:\n%s", agentsLine)
+	}
+	if !strings.Contains(stageLine, "[D]") {
+		t.Errorf("stage line missing the Done button:\n%s", stageLine)
 	}
 }

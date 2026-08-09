@@ -106,7 +106,7 @@ type doneMsg struct {
 	err error
 }
 
-// checkoutMsg reports the outcome of the detail view's "c" switch-to-job-
+// checkoutMsg reports the outcome of the detail view's "b" switch-to-job-
 // branch action (a `git checkout <branch>`, run off the UI thread via
 // checkoutCmd so a slow git operation doesn't block rendering).
 type checkoutMsg struct {
@@ -282,6 +282,13 @@ const (
 	recentActivityCeiling = 5
 )
 
+// dashboardFixedChrome is the number of renderList rows that are always
+// present outside the job rows and the recent-activity strip's own variable
+// footprint: title line, "Recent commits" headline, the blank spacer before
+// the jobs section, "Jobs" headline, column header, divider, blank line
+// before the footer, and the footer itself.
+const dashboardFixedChrome = 8
+
 // refreshRecentCommits re-reads the recent-activity strip from git, always
 // fetching up to the ceiling. How many of those cached commits actually get
 // rendered is decided later, at render time, by recentActivityShown — not
@@ -312,10 +319,11 @@ func (a *App) refreshRecentCommits() {
 // ceiling.
 //
 // The fixed chrome outside the job rows and the strip itself — title line,
-// column header, divider, blank line before the footer, footer — is 5 rows,
-// mirroring the same kind of budget detailView.bodyHeight documents for the
-// detail view. spare is what's left of the terminal height once that chrome
-// and every job row are accounted for.
+// "Recent commits" headline, the blank spacer before the jobs section,
+// "Jobs" headline, column header, divider, blank line before the footer,
+// footer — is 8 rows, mirroring the same kind of budget detailView.bodyHeight
+// documents for the detail view. spare is what's left of the terminal height
+// once that chrome and every job row are accounted for.
 //
 // a.height == 0 (an App that has never received a tea.WindowSizeMsg, e.g.
 // some existing tests) falls back to the floor, the same kind of guard
@@ -324,7 +332,7 @@ func (a *App) recentActivityShown() int {
 	if a.height == 0 {
 		return recentActivityFloor
 	}
-	spare := a.height - 5 - len(a.jobs)
+	spare := a.height - dashboardFixedChrome - len(a.jobs)
 	n := clamp(spare, recentActivityFloor, recentActivityCeiling)
 	if n > len(a.recentCommits) {
 		// Fewer real commits than the computed count — render whatever's
@@ -361,7 +369,7 @@ func (a *App) spareHeaderRoom() int {
 	if a.height == 0 {
 		return 0
 	}
-	spare := a.height - 5 - len(a.jobs)
+	spare := a.height - dashboardFixedChrome - len(a.jobs)
 	stripLines := a.recentActivityShown()
 	if stripLines < 1 {
 		stripLines = 1
@@ -454,7 +462,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// calls out (finishing a job branch and wanting a quick launch
 		// against main without manually switching first). Not a generic
 		// branch picker: "main" is the project's hardcoded base-branch
-		// convention (scripts/new-job.sh), same as detail view's "c" reuses
+		// convention (scripts/new-job.sh), same as detail view's "b" reuses
 		// git.Checkout/checkoutCmd. Runs as a tea.Cmd so a slow git
 		// operation doesn't block rendering; checkoutMsg's a.detail == nil
 		// branch reports the outcome to a.status.
@@ -563,7 +571,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, cmd
-	case "c":
+	case "b":
 		// Switch to this job's branch (the mechanism the branch-mismatch
 		// guards on launch/edit/done point the user at). Not gated on
 		// job.OnCurrentBranch — that flag is a discovery-time snapshot that
@@ -632,13 +640,13 @@ func (a *App) doneCmd() (tea.Cmd, error) {
 
 // branchGuard reports whether the open job's branch differs from the branch
 // actually checked out right now, and if so a status message pointing the
-// user at "c" — the guard behind the three mutating actions (launch agent,
+// user at "b" — the guard behind the three mutating actions (launch agent,
 // "e" edit, "D" mark-done) named in the "keep-track-of-jobs" brief's coupled
 // scope: none of them may silently run against the wrong branch's working
 // tree once discovery is cross-branch.
 //
 // The current branch is re-checked fresh via git.CurrentBranch rather than
-// trusted from job.OnCurrentBranch's discovery-time snapshot, since "c" (or a
+// trusted from job.OnCurrentBranch's discovery-time snapshot, since "b" (or a
 // checkout run outside the TUI) may have moved it since the job list was last
 // read.
 //
@@ -659,10 +667,10 @@ func (a *App) branchGuard() (status string, blocked bool) {
 	if curLabel == "" {
 		curLabel = "(detached HEAD)"
 	}
-	return fmt.Sprintf("on branch %s, this job is on %s — press c to switch", curLabel, j.Branch), true
+	return fmt.Sprintf("on branch %s, this job is on %s — press b to switch", curLabel, j.Branch), true
 }
 
-// checkoutCmd returns the tea.Cmd behind the "c" switch-to-job-branch action:
+// checkoutCmd returns the tea.Cmd behind the "b" switch-to-job-branch action:
 // it runs `git checkout branch` in a.root off the UI goroutine (unlike
 // editCmd/doneCmd, this does not need tea.ExecProcess — there is no
 // interactive process to hand the terminal to, just a git call) and reports
@@ -718,14 +726,16 @@ func (a *App) renderList() string {
 
 	var b strings.Builder
 
-	// Header.
-	b.WriteString(titleStyle.Render("safecode"))
-	b.WriteString("  ")
-	b.WriteString(dimStyle.Render("jobs in " + shortRoot(a.root)))
+	// Title line: "safecode - <project> - on <branch>".
+	title := "safecode - " + shortRoot(a.root)
 	if a.currentBranch != "" {
-		b.WriteString(dimStyle.Render(" · on "))
-		b.WriteString(accentStyle.Render(a.currentBranch))
+		title += " - on " + a.currentBranch
 	}
+	b.WriteString(titleStyle.Render(title))
+	b.WriteString("\n")
+
+	// Git log section.
+	b.WriteString(headerStyle.Render("Recent commits"))
 	b.WriteString("\n")
 	// The activity strip's line count is recentActivityShown() — computed from
 	// the actual spare room below the job rows, so it can grow past the
@@ -746,6 +756,13 @@ func (a *App) renderList() string {
 	if summary := a.renderJobSummary(); summary != "" {
 		b.WriteString(summary)
 	}
+
+	// Blank spacer between the git log section and the jobs section.
+	b.WriteString("\n")
+
+	// Jobs section.
+	b.WriteString(headerStyle.Render("Jobs"))
+	b.WriteString("\n")
 
 	// Column header row.
 	header := headerStyle.Render(pad("ID", cols.id)) + "  " +

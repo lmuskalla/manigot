@@ -34,7 +34,7 @@ func mkOffBranchApp(t *testing.T) *App {
 }
 
 // TestBranchGuardBlocksEdit verifies "e" refuses to open the editor on an
-// off-branch job's brief and points the user at "c" instead.
+// off-branch job's brief and points the user at "b" instead.
 func TestBranchGuardBlocksEdit(t *testing.T) {
 	a := mkOffBranchApp(t)
 
@@ -42,7 +42,7 @@ func TestBranchGuardBlocksEdit(t *testing.T) {
 	if cmd != nil {
 		t.Error("expected no tea.Cmd (editor) for an off-branch job")
 	}
-	if !strings.Contains(a.detail.status, "press c to switch") {
+	if !strings.Contains(a.detail.status, "press b to switch") {
 		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
 	}
 }
@@ -55,7 +55,7 @@ func TestBranchGuardBlocksDone(t *testing.T) {
 	if cmd != nil {
 		t.Error("expected no tea.Cmd (sc-done) for an off-branch job")
 	}
-	if !strings.Contains(a.detail.status, "press c to switch") {
+	if !strings.Contains(a.detail.status, "press b to switch") {
 		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
 	}
 }
@@ -65,11 +65,11 @@ func TestBranchGuardBlocksDone(t *testing.T) {
 func TestBranchGuardBlocksAgentLaunch(t *testing.T) {
 	a := mkOffBranchApp(t)
 
-	_, cmd := a.updateDetail(keyMsg("v")) // "v" = developer (TASK-8: renamed from "d")
+	_, cmd := a.updateDetail(keyMsg("d")) // "d" = developer
 	if cmd != nil {
 		t.Error("expected no tea.Cmd (agent launch) for an off-branch job")
 	}
-	if !strings.Contains(a.detail.status, "press c to switch") {
+	if !strings.Contains(a.detail.status, "press b to switch") {
 		t.Errorf("status = %q, want a branch-mismatch guard message", a.detail.status)
 	}
 }
