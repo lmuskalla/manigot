@@ -1,6 +1,6 @@
 # Brief: Launch agents without workflow
 
-status: open
+status: done
 type: feature
 id: 8g06st
 branch: feature/8g06st_launch-agents-without-workflow
