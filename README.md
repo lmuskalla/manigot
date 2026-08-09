@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="assets/manigot.png" />
+</p>
+
+
 # manigot
 
 Isolated agent environment per project. One Docker image, real filesystem
