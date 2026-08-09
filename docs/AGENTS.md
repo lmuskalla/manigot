@@ -40,7 +40,10 @@ session with `sc --tool claude-code|opencode`.
   editor, `claude-code` for the tool).
 - `scripts/entrypoint.sh` — runs inside the container before the agent CLI starts.
   Branches on `SAFECODE_TOOL`: writes `~/.claude.json` to skip Claude Code's
-  onboarding wizard, or checks for a provider API key and execs `opencode`.
+  onboarding wizard, pre-accept folder trust for `/workspace`, and start it in
+  permission-bypass mode (full auto, no per-tool prompts) via
+  `--dangerously-skip-permissions`; or checks for a provider API key and execs
+  `opencode`.
 - `agents/` — the six global agents (`analyst`, `developer`, `reviewer`,
   `security`, `product-owner`, `designer`), available in every project via
   `@name`. Baked in twice: verbatim to `~/.claude/agents/`, and to

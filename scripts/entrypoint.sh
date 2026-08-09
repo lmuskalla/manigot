@@ -22,14 +22,28 @@ if [[ "$TOOL" == "claude-code" ]]; then
         # Get Claude Code version for lastOnboardingVersion
         CLAUDE_VERSION=$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "2.1.0")
 
+        # `projects["/workspace"].hasTrustDialogAccepted` pre-accepts the
+        # folder-trust dialog for the container's fixed WORKDIR, so the "do you
+        # trust the files in this folder?" prompt never appears on first start.
+        # `bypassPermissionsModeAccepted` pre-accepts the one-time bypass
+        # disclaimer so `--dangerously-skip-permissions` (passed to the exec
+        # below) actually takes effect in interactive sessions — without it
+        # Claude Code downgrades bypass mode to default with "bypass requires
+        # accepting the disclaimer interactively first".
         cat > "$CLAUDE_JSON" <<EOF
 {
   "hasCompletedOnboarding": true,
   "lastOnboardingVersion": "$CLAUDE_VERSION",
+  "bypassPermissionsModeAccepted": true,
   "oauthAccount": {
     "accountUuid": "$CLAUDE_ACCOUNT_UUID",
     "emailAddress": "$CLAUDE_EMAIL",
     "organizationUuid": "$CLAUDE_ORG_UUID"
+  },
+  "projects": {
+    "/workspace": {
+      "hasTrustDialogAccepted": true
+    }
   }
 }
 EOF
@@ -95,5 +109,12 @@ git config --global --add safe.directory /workspace
 if [[ "$TOOL" == "opencode" ]]; then
     exec opencode "$@"
 else
-    exec claude "$@"
+    # --dangerously-skip-permissions starts every Claude Code session in full
+    # auto mode (no per-tool-call confirmation). Safe in this context because
+    # safecode launches an isolated, ephemeral container specifically for this
+    # purpose; the brief explicitly wants Claude Code to start in auto mode.
+    # Placed before "$@" so it composes with the passthrough (--agent <name>
+    # and/or the positional job prompt). The opencode branch is intentionally
+    # untouched — the brief is a Claude-Code-only request.
+    exec claude --dangerously-skip-permissions "$@"
 fi
