@@ -103,20 +103,19 @@ CURRENT_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
 DEFAULT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
 
 if [[ "$CURRENT_BRANCH" != "$BRANCH" ]]; then
-    echo "Warning: you are on '$CURRENT_BRANCH', job branch is '$BRANCH'"
-    read -rp "  Switch to job branch before merging? [Y/n] " CONFIRM
-    if [[ ! "$CONFIRM" =~ ^[Nn]$ ]]; then
-        git -C "$PROJECT_ROOT" checkout "$BRANCH"
-    fi
+    echo "Note: you are on '$CURRENT_BRANCH', job branch is '$BRANCH'"
+    echo "→ Switching to job branch $BRANCH..."
+    git -C "$PROJECT_ROOT" checkout "$BRANCH"
 fi
 
-# Check for uncommitted changes
+# Check for uncommitted changes (archiving + merging both need a clean tree)
 if ! git -C "$PROJECT_ROOT" diff --quiet || ! git -C "$PROJECT_ROOT" diff --cached --quiet; then
     echo "Error: uncommitted changes on branch '$BRANCH'. Commit or stash before finishing."
     exit 1
 fi
 
 # ── Info ────────────────────────────────────────────────────────────────────────
+JOB_TITLE=$(head -1 "$BRIEF" | sed 's/^# Brief: *//')
 echo ""
 echo "Finishing job: $JOB_NAME"
 echo "  Branch  : $BRANCH → $DEFAULT_BRANCH"
@@ -125,10 +124,22 @@ echo ""
 read -rp "  Proceed? [y/N] " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 
-# ── Merge (squash — one commit per job, not the full branch history) ────────────
-JOB_TITLE=$(head -1 "$BRIEF" | sed 's/^# Brief: *//')
-
+# ── Archive on the job branch first ─────────────────────────────────────────────
+# The job directory is moved and committed on the job branch so the squash merge
+# below folds the archive move into a single commit on the default branch — one
+# commit per job, no separate "archive:" commit afterwards.
 echo ""
+echo "→ Archiving job directory on $BRANCH..."
+mkdir -p "$PROJECT_ROOT/$ARCHIVE_DIR"
+mv "$JOB_DIR" "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME"
+
+# ── Update status in brief.md ───────────────────────────────────────────────────
+sed -i "s/^status: .*/status: done/" "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME/brief.md"
+
+git -C "$PROJECT_ROOT" add "$PROJECT_ROOT/$JOBS_DIR"
+git -C "$PROJECT_ROOT" commit -m "archive: $JOB_NAME"
+
+# ── Squash-merge into the default branch (one commit for the whole job) ─────────
 echo "→ Switching to $DEFAULT_BRANCH..."
 git -C "$PROJECT_ROOT" checkout "$DEFAULT_BRANCH"
 
@@ -140,19 +151,6 @@ Job: $JOB_NAME"
 
 echo "→ Deleting branch $BRANCH..."
 git -C "$PROJECT_ROOT" branch -D "$BRANCH"
-
-# ── Archive job directory ────────────────────────────────────────────────────────
-echo "→ Archiving job directory..."
-mkdir -p "$PROJECT_ROOT/$ARCHIVE_DIR"
-mv "$JOB_DIR" "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME"
-
-# ── Update status in brief.md ───────────────────────────────────────────────────
-sed -i "s/^status: .*/status: done/" "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME/brief.md"
-
-# ── Commit the archive move ──────────────────────────────────────────────────────
-git -C "$PROJECT_ROOT" add "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME"
-git -C "$PROJECT_ROOT" add "$PROJECT_ROOT/$JOBS_DIR" 2>/dev/null || true
-git -C "$PROJECT_ROOT" commit -m "archive: $JOB_NAME"
 
 # ── Done ────────────────────────────────────────────────────────────────────────
 echo ""

@@ -10,11 +10,12 @@ You receive the job ID and the path to the job directory. From there you read ev
 
 ## How to start
 
-1. Read `brief.md` — understand what was asked and why
-2. Read `tasks.md` — understand what was planned
-3. Read `implementation.md` — understand what the developer says they did
-4. Run `git diff main...HEAD` to see every actual change made on this branch
-5. Cross-reference the diff against the task list
+1. Read `brief.md` — understand what was asked, and note the `branch:` field
+2. Make sure you are on that branch: `git branch --show-current`, and if it differs run `git checkout <branch>`. The diff in step 5 is only meaningful on the job's branch. If the switch fails (uncommitted changes block it, or the branch is missing), stop and report back.
+3. Read `tasks.md` — understand what was planned
+4. Read `implementation.md` — understand what the developer says they did
+5. Run `git diff main...HEAD` to see every actual change made on this branch
+6. Cross-reference the diff against the task list
 
 The git diff is your primary review surface — not just the files the developer mentioned. If something changed that isn't in `implementation.md`, that's a finding.
 
@@ -48,5 +49,11 @@ notes: specific file, line, and reason if not PASS
 ```
 
 End with overall: APPROVED / NEEDS WORK / REJECTED and a clear list of what must change before this can be merged. Everything here is a blocker — if it's not a blocker, don't list it.
+
+Commit `verdict.md` once it is written — an uncommitted verdict blocks `sc-done`:
+```
+git add verdict.md
+git commit -m "[ID] verdict: <one-line summary>"
+```
 
 You cannot write or edit source files. Report findings in `verdict.md`. The developer addresses them in follow-up tasks on the same branch.

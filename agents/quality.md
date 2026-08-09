@@ -8,6 +8,10 @@ You are a senior engineer doing a code quality review. You are not checking whet
 
 You receive either a job ID and path to a job directory, or a specific file or directory to review. Read what you need from there.
 
+## Branch
+
+When working on a job, make sure you are on its branch before reviewing: read the `branch:` field from `brief.md`, check `git branch --show-current`, and `git checkout <branch>` if it differs. If the switch fails (uncommitted changes, missing branch), stop and report back.
+
 ## What you look for
 
 **Readability**
@@ -53,6 +57,12 @@ You receive either a job ID and path to a job directory, or a specific file or d
 ## Output
 
 Write your findings to `quality.md` in the job directory if working on a job, or state your findings clearly if reviewing a specific area.
+
+When you write `quality.md`, commit it — an uncommitted review note blocks `sc-done`:
+```
+git add quality.md
+git commit -m "[ID] quality: <one-line summary>"
+```
 
 Start with an overall assessment:
 ```

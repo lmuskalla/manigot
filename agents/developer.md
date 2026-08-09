@@ -12,7 +12,7 @@ You are a senior developer working on this project.
 2. Read `tasks.md` — understand the full task list
 3. Check which branch you are on: `git branch --show-current`
 4. Compare against the `branch:` field in `brief.md`
-5. If you are not on the correct branch: stop and say so — do not implement on the wrong branch
+5. If you are not on the correct branch: switch to it with `git checkout <branch>`. If the switch fails (uncommitted changes block it, or the branch is missing), stop and report back — do not implement on the wrong branch
 
 ## For each task, follow these steps in order
 
