@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lmuskalla/safecode/tui/internal/config"
 	"github.com/lmuskalla/safecode/tui/internal/editor"
+	"github.com/lmuskalla/safecode/tui/internal/git"
 	"github.com/lmuskalla/safecode/tui/internal/hostcmd"
 	"github.com/lmuskalla/safecode/tui/internal/job"
 	"github.com/lmuskalla/safecode/tui/internal/launch"
@@ -89,6 +90,14 @@ type doneMsg struct {
 	err error
 }
 
+// checkoutMsg reports the outcome of the detail view's "c" switch-to-job-
+// branch action (a `git checkout <branch>`, run off the UI thread via
+// checkoutCmd so a slow git operation doesn't block rendering).
+type checkoutMsg struct {
+	branch string
+	err    error
+}
+
 // Update handles window resizing and routes key presses to the active view.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -132,6 +141,41 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.status = "refreshed"
 		}
 		return a, nil
+	case checkoutMsg:
+		if msg.err != nil {
+			// Checkout refused (e.g. uncommitted changes it would clobber)
+			// — surface git's own reason without touching the job list or
+			// the open detail view.
+			if a.detail != nil {
+				a.detail.setStatus(cmdErrorText(msg.err))
+			} else {
+				a.status = cmdErrorText(msg.err)
+			}
+			return a, nil
+		}
+		// Checkout succeeded: the working tree now reflects msg.branch, so
+		// re-discover (branch tags / OnCurrentBranch change for every job)
+		// and, if a detail view is open, rebuild it against the same job id
+		// so its tabs switch from git-show reads to the working tree.
+		a.refreshJobs()
+		if a.detail != nil {
+			id := a.detail.job.ID
+			if j, ok := a.jobByID(id); ok {
+				a.detail = newDetailView(j, a.width, a.height)
+				if idx := a.indexOfJob(id); idx >= 0 {
+					a.cursor = idx
+				}
+				a.detail.setStatus("switched to " + msg.branch)
+			} else {
+				// The job vanished from the re-discovered list (e.g. it only
+				// ever existed on the branch we just left) — fall back to
+				// the list rather than show a stale detail view.
+				a.detail = nil
+				a.state = stateList
+				a.status = "switched to " + msg.branch + ", but the job is no longer listed"
+			}
+		}
+		return a, nil
 	case tea.KeyMsg:
 		// Global keys handled in every state.
 		switch msg.String() {
@@ -172,6 +216,32 @@ func (a *App) selectedJob() (job.Job, bool) {
 		return job.Job{}, false
 	}
 	return a.jobs[a.cursor], true
+}
+
+// jobByID returns the job with the given ID from the current list, or false
+// if it is no longer present — used by the checkoutMsg handler to rebuild the
+// open detail view against the re-discovered copy of the same job after a
+// branch switch (the old job.Job snapshot is stale: it still points at the
+// pre-checkout Branch/OnCurrentBranch).
+func (a *App) jobByID(id string) (job.Job, bool) {
+	for _, j := range a.jobs {
+		if j.ID == id {
+			return j, true
+		}
+	}
+	return job.Job{}, false
+}
+
+// indexOfJob returns the list index of the job with the given ID, or -1.
+// Used alongside jobByID to keep the list cursor in sync with the job left
+// open in the detail view after a re-discover (checkoutMsg, refresh).
+func (a *App) indexOfJob(id string) int {
+	for i, j := range a.jobs {
+		if j.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 // --- List view --------------------------------------------------------------
@@ -328,6 +398,10 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// only) respond — for any other tab this falls through to the
 		// default key handling below, same as any other unbound key.
 		if a.detail.current().editable {
+			if status, blocked := a.branchGuard(); blocked {
+				a.detail.setStatus(status)
+				return a, nil
+			}
 			cmd, err := a.editCmd()
 			if err != nil {
 				a.detail.setStatus(cmdErrorText(err))
@@ -338,16 +412,37 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "D":
 		// Mark done: not an agent action, so it is handled here rather than
 		// falling into the agentForKey dispatch below.
+		if status, blocked := a.branchGuard(); blocked {
+			a.detail.setStatus(status)
+			return a, nil
+		}
 		cmd, err := a.doneCmd()
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 			return a, nil
 		}
 		return a, cmd
+	case "c":
+		// Switch to this job's branch (the mechanism the branch-mismatch
+		// guards on launch/edit/done point the user at). Not gated on
+		// job.OnCurrentBranch — that flag is a discovery-time snapshot that
+		// could be stale, so this always dispatches the checkout and lets
+		// git itself decide (a no-op "Already on '<branch>'" checkout still
+		// succeeds). Runs as a tea.Cmd so a slow git operation doesn't block
+		// the UI.
+		if a.detail.job.Branch == "" {
+			a.detail.setStatus("no branch known for this job")
+			return a, nil
+		}
+		return a, a.checkoutCmd(a.detail.job.Branch)
 	}
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
 	if agent := a.agentForKey(msg.String()); agent != "" {
+		if status, blocked := a.branchGuard(); blocked {
+			a.detail.setStatus(status)
+			return a, nil
+		}
 		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ToolValue())
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
@@ -392,6 +487,51 @@ func (a *App) doneCmd() (tea.Cmd, error) {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return doneMsg{err: err}
 	}), nil
+}
+
+// branchGuard reports whether the open job's branch differs from the branch
+// actually checked out right now, and if so a status message pointing the
+// user at "c" — the guard behind the three mutating actions (launch agent,
+// "e" edit, "D" mark-done) named in the "keep-track-of-jobs" brief's coupled
+// scope: none of them may silently run against the wrong branch's working
+// tree once discovery is cross-branch.
+//
+// The current branch is re-checked fresh via git.CurrentBranch rather than
+// trusted from job.OnCurrentBranch's discovery-time snapshot, since "c" (or a
+// checkout run outside the TUI) may have moved it since the job list was last
+// read.
+//
+// A job with no known Branch — job.Discover's working-tree-only fallback for
+// a project that isn't a git repo — is never guarded: there is nothing to
+// compare against, and OnCurrentBranch is unconditionally true there, so the
+// three actions keep their exact pre-guard behaviour for non-git projects.
+func (a *App) branchGuard() (status string, blocked bool) {
+	j := a.detail.job
+	if j.Branch == "" {
+		return "", false
+	}
+	cur, _ := git.CurrentBranch(a.root) // "" on detached HEAD / not-a-repo
+	if cur == j.Branch {
+		return "", false
+	}
+	curLabel := cur
+	if curLabel == "" {
+		curLabel = "(detached HEAD)"
+	}
+	return fmt.Sprintf("on branch %s, this job is on %s — press c to switch", curLabel, j.Branch), true
+}
+
+// checkoutCmd returns the tea.Cmd behind the "c" switch-to-job-branch action:
+// it runs `git checkout branch` in a.root off the UI goroutine (unlike
+// editCmd/doneCmd, this does not need tea.ExecProcess — there is no
+// interactive process to hand the terminal to, just a git call) and reports
+// the outcome as a checkoutMsg once it returns.
+func (a *App) checkoutCmd(branch string) tea.Cmd {
+	root := a.root
+	return func() tea.Msg {
+		err := git.Checkout(root, branch)
+		return checkoutMsg{branch: branch, err: err}
+	}
 }
 
 // agentForKey returns the agent name whose action-bar key equals k ("" if no
@@ -475,6 +615,11 @@ func (a *App) renderList() string {
 }
 
 // renderJobRow renders one job as a single (possibly highlighted) line.
+//
+// A job living on a branch other than the one currently checked out gets a
+// compact trailing "· <branch>" tag (not a new column, so the fixed column
+// layout stays stable) so the user can tell at a glance which jobs are
+// "elsewhere" before opening one.
 func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	status := statusOpenStyle.Render(pad(j.Status, cols.status))
 	if j.Status == "done" {
@@ -488,6 +633,9 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 		truncate(j.Title, cols.title),
 	}
 	line := strings.Join(cells, "  ")
+	if j.Branch != "" && !j.OnCurrentBranch {
+		line += "  " + dimStyle.Render("· "+j.Branch)
+	}
 	if selected {
 		return selectedStyle.Render("▶ " + line)
 	}

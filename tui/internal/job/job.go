@@ -6,6 +6,14 @@
 // frontmatter block at the top of brief.md. See
 // docs/jobs/archive/irw320_tui/tasks.md ("Implementation notes") for the exact
 // format contract this parser must honour.
+//
+// Discovery is cross-branch and git-backed (see the "keep-track-of-jobs"
+// brief): Discover enumerates jobs from every local branch via the git
+// package, so a job open on another branch still shows up in the list while a
+// different branch is checked out. Each Job carries the branch it was found on
+// (Branch) and whether that is the currently-checked-out branch
+// (OnCurrentBranch), so downstream code can pick its read strategy (working
+// tree vs git show) without re-querying git.
 package job
 
 import (
@@ -24,6 +32,11 @@ type Job struct {
 	// Dir is the absolute path to the job directory.
 	Dir string
 
+	// Root is the absolute project root the job was discovered under. It is
+	// the git -C target for the off-branch read paths (Stage / detail view)
+	// when OnCurrentBranch is false; current-branch reads use Dir directly.
+	Root string
+
 	// ID is the 6-char job id. It comes from the brief.md frontmatter when
 	// present, otherwise it is derived from the leading segment of Name
 	// (split on the first '_').
@@ -40,8 +53,30 @@ type Job struct {
 	// job is archived.
 	Status string
 
-	// Branch is the git branch for the job.
+	// Branch is the git branch the job was discovered on. For a job that
+	// appears on more than one branch, dedupByID (Discover) collapses the
+	// duplicates to the one named in the brief's own `branch:` frontmatter
+	// field, so this is the authoritative "where this job lives" answer for
+	// the UI.
 	Branch string
+
+	// briefBranch holds the brief's own `branch:` frontmatter value, captured
+	// before Discover overwrites Branch with the discovery branch. It is
+	// identical across every copy of the same job (they share one brief
+	// file), so dedupByID uses it as the tie-breaker: among copies found on
+	// different branches, the one whose Branch matches briefBranch wins.
+	// Unexported on purpose — it is internal bookkeeping for Discover.
+	briefBranch string
+
+	// OnCurrentBranch reports whether the job's files are present in the
+	// working tree and should be read from disk (rather than via `git show`).
+	// It is true for a job on the currently-checked-out branch in a git repo,
+	// and also in the working-tree-only fallback path (a non-repo, or a repo
+	// with no branches yet — where the working tree is the only source); it is
+	// false only for a job discovered on another branch. Downstream read paths
+	// (detail view, Stage) branch on it to pick their strategy without
+	// re-querying git.
+	OnCurrentBranch bool
 
 	// Date is the brief.md date field (YYYY-MM-DD).
 	Date string
@@ -86,6 +121,27 @@ func ReadJob(dir string) (Job, error) {
 	}
 	parseBrief(data, &j)
 	return j, nil
+}
+
+// ReadJobFromBytes builds a Job from a brief.md's bytes, without touching the
+// disk. It is the cross-branch discovery path: a brief living on another
+// branch is read via git show (bytes) rather than os.ReadFile, so this entry
+// point parses those bytes directly into a Job with the same defaults ReadJob
+// uses. name is the job directory name (used for Name/Dir/ID and as the title
+// fallback); dir is the absolute path the job *would* have on the current
+// branch, kept so the working-tree read paths (detail view, Stage) still work
+// for jobs whose branch happens to be checked out.
+func ReadJobFromBytes(name, dir string, brief []byte) Job {
+	j := Job{
+		Name:   name,
+		Dir:    dir,
+		ID:     idFromName(name),
+		Title:  name,
+		Type:   "feature",
+		Status: "open",
+	}
+	parseBrief(brief, &j)
+	return j
 }
 
 // idFromName splits "irw320_tui" → "irw320". With no underscore, the whole

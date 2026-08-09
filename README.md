@@ -323,6 +323,14 @@ credentials itself. It finds those commands dynamically — see
 [Installing without symlinks](#installing-without-symlinks) if they are not on
 your `PATH`.
 
+The job list is discovered across **every local branch**, not just the one
+currently checked out — since each job's docs live on its own branch, this is
+the only way to see everything in flight at once. A row for a job that isn't
+on the current branch is dimmed with a trailing `· <branch>` tag; open it and
+press `c` in the detail view to check out that branch before editing its
+brief, launching an agent, or marking it done — those three actions refuse
+(and point you at `c`) while a job's branch and the checked-out branch differ.
+
 ### Supported platforms
 
 macOS and Linux. Firing an agent opens `sc --tool <tool> --agent <name> --job
@@ -385,6 +393,7 @@ Detail view:
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict are agent-written) |
 | `D` | mark the job done (runs the host `sc-done`, in the foreground so its confirmation prompts work) |
+| `c` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/agent keys work on a job that isn't on the current branch |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 

@@ -126,7 +126,10 @@ func TestJobStage(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "brief.md"), []byte(tmplBrief), 0o644)
 
-	mkJob := func() Job { j, _ := ReadJob(dir); return j }
+	// The files written below live in the working tree, so this job is a
+	// current-branch job for read-strategy purposes: Stage() must read them
+	// from disk rather than via git show.
+	mkJob := func() Job { j, _ := ReadJob(dir); j.OnCurrentBranch = true; return j }
 
 	// Only brief → analyze.
 	if got := mkJob().Stage(); got != StageAnalyze {
@@ -149,5 +152,73 @@ func TestJobStage(t *testing.T) {
 		[]byte("# Implementation: X\n\nid: abc123\n\n## Summary\n\nReal prose line one here.\nMore real prose line two.\n"), 0o644)
 	if got := mkJob().Stage(); got != StageReview {
 		t.Errorf("written implementation.md stage = %s, want review", got)
+	}
+}
+
+// TestStageOffBranchReadsViaGit confirms Stage() reads a job's files from its
+// branch via git (not the working tree) when OnCurrentBranch is false. Without
+// this, every cross-branch job would falsely report analyze because its files
+// aren't checked out into the working tree at all.
+func TestStageOffBranchReadsViaGit(t *testing.T) {
+	dir, def := gitInitRepo(t)
+
+	// Build the job on a feature branch: brief + written tasks.md → stage develop.
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/ddd01_d")
+	gitCommitJob(t, dir, "ddd01_d", "# Brief: Ddd\n\nstatus: open\nid: ddd01\nbranch: feature/ddd01_d\ndate: 2026-01-01\n")
+	tasks := "# Tasks: Ddd\n\nid: ddd01\nstatus: open\n\n## Task breakdown\n\nTASK-1: real work here\n"
+	if err := os.WriteFile(filepath.Join(dir, "docs", "jobs", "ddd01_d", "tasks.md"), []byte(tasks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "tasks")
+	gitRun(t, dir, "checkout", "-q", def)
+
+	// The job dir is NOT in the default branch's working tree.
+	if _, err := os.Stat(filepath.Join(dir, "docs", "jobs", "ddd01_d")); !os.IsNotExist(err) {
+		t.Fatalf("ddd01_d unexpectedly checked out on default branch: %v", err)
+	}
+
+	// Discover from the default branch and find the off-branch job.
+	jobs, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	var j Job
+	for _, cand := range jobs {
+		if cand.ID == "ddd01" {
+			j = cand
+		}
+	}
+	if j.ID == "" {
+		t.Fatalf("ddd01 not discovered: %+v", jobs)
+	}
+	if j.OnCurrentBranch {
+		t.Fatal("ddd01 should be an off-branch job (OnCurrentBranch=false) for this test")
+	}
+	if got := j.Stage(); got != StageDevelop {
+		t.Errorf("off-branch job Stage = %s, want develop (tasks.md read via git show)", got)
+	}
+}
+
+// TestStageOffBranchAnalyzeWhenNoTasks confirms an off-branch job with only a
+// brief (no written tasks/implementation) reports analyze via the git-read path.
+func TestStageOffBranchAnalyzeWhenNoTasks(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/eee01_e")
+	gitCommitJob(t, dir, "eee01_e", "# Brief: Eee\n\nstatus: open\nid: eee01\nbranch: feature/eee01_e\ndate: 2026-01-01\n")
+	gitRun(t, dir, "checkout", "-q", def)
+
+	jobs, _ := Discover(dir)
+	var j Job
+	for _, cand := range jobs {
+		if cand.ID == "eee01" {
+			j = cand
+		}
+	}
+	if j.ID == "" {
+		t.Fatalf("eee01 not discovered: %+v", jobs)
+	}
+	if got := j.Stage(); got != StageAnalyze {
+		t.Errorf("off-branch brief-only Stage = %s, want analyze", got)
 	}
 }

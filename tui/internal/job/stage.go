@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lmuskalla/safecode/tui/internal/git"
 )
 
 // Stage is the workflow stage a job is in, per the ideal-workflow model:
@@ -29,15 +31,40 @@ const (
 // Stage derives the job's current workflow stage from which files are written.
 // Precedence: implementation.md written → review; else tasks.md written →
 // develop; else analyze. This matches the brief's stage model exactly.
+//
+// For a job on the current branch the files are read from the working tree
+// (so uncommitted edits still count); for a job discovered on another branch
+// they are read via `git show <Branch>:…` from that branch — otherwise every
+// cross-branch job would falsely report stage analyze because its files
+// aren't in the working tree at all.
 func (j Job) Stage() Stage {
 	switch {
-	case FileIsWritten(filepath.Join(j.Dir, "implementation.md")):
+	case j.fileWritten("implementation.md"):
 		return StageReview
-	case FileIsWritten(filepath.Join(j.Dir, "tasks.md")):
+	case j.fileWritten("tasks.md"):
 		return StageDevelop
 	default:
 		return StageAnalyze
 	}
+}
+
+// fileWritten reports whether the named job file (e.g. "tasks.md") is written,
+// reading it from the working tree for current-branch jobs and via git show
+// for jobs living on another branch. The filename is relative to the job dir.
+func (j Job) fileWritten(filename string) bool {
+	if j.OnCurrentBranch {
+		return FileIsWritten(filepath.Join(j.Dir, filename))
+	}
+	// Off-branch: read the file's bytes from its branch and apply the same
+	// "written" rule FileIsWritten uses. A missing file (git show →
+	// os.ErrNotExist) is simply not written, same as a missing working-tree
+	// file in the current-branch path.
+	rel := filepath.ToSlash(filepath.Join(JobsRelDir, j.Name, filename))
+	data, err := git.ShowFile(j.Root, j.Branch, rel)
+	if err != nil {
+		return false
+	}
+	return isWritten(data)
 }
 
 // FileIsWritten reports whether the file at path has real content beyond its
@@ -53,11 +80,21 @@ func (j Job) Stage() Stage {
 //
 // This correctly classifies the new-job.sh templates as unwritten and the
 // analyst/developer/reviewer-filled versions as written.
+//
+// FileIsWritten reads from disk; isWritten is the bytes-only core, used by
+// Job.fileWritten for off-branch jobs whose contents arrive via git show.
 func FileIsWritten(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
+	return isWritten(data)
+}
+
+// isWritten applies the "written" rule (see FileIsWritten) to already-read
+// file bytes, so the off-branch path (git show → bytes) shares the exact same
+// classification logic as the working-tree path (disk read).
+func isWritten(data []byte) bool {
 	body := stripHTMLComments(string(data))
 
 	substantive := 0

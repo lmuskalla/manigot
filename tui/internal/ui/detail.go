@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lmuskalla/safecode/tui/internal/git"
 	"github.com/lmuskalla/safecode/tui/internal/job"
 	"github.com/lmuskalla/safecode/tui/internal/markdown"
 )
@@ -100,19 +101,25 @@ func (d *detailView) loadTabs() {
 	}
 }
 
-// loadTab re-reads one tab's file from disk into t.content. If the tab is
+// loadTab re-reads one tab's file into t.content. If the tab is
 // currently active, its viewer is rebuilt immediately; otherwise the viewer
 // is left alone and the tab is marked stale so ensureCurrentSized catches it
 // up lazily once it actually becomes active.
+//
+// A job on the current branch is read from the working tree (os.ReadFile) so
+// uncommitted edits still show; a job discovered on another branch is read
+// via `git show <Branch>:…`, so its four files appear in the tabs even though
+// they don't exist under j.Dir in this working tree. Either way a missing
+// file falls back to the "(label)" placeholder.
 func (d *detailView) loadTab(i int) {
 	t := &d.tabs[i]
-	data, err := os.ReadFile(t.path)
-	if err != nil {
-		t.exists = false
-		t.content = filePlaceholder(t.label, filepath.Base(t.path))
-	} else {
+	data, ok := d.readFile(t)
+	if ok {
 		t.exists = true
 		t.content = string(data)
+	} else {
+		t.exists = false
+		t.content = filePlaceholder(t.label, filepath.Base(t.path))
 	}
 	if i == d.cur {
 		t.viewer.SetContent(t.content)
@@ -120,6 +127,25 @@ func (d *detailView) loadTab(i int) {
 	} else {
 		t.stale = true
 	}
+}
+
+// readFile reads one tab's file bytes from the working tree (current-branch
+// job) or via git show (off-branch job). ok is false when the file isn't
+// available through the chosen path.
+func (d *detailView) readFile(t *fileTab) (data []byte, ok bool) {
+	if d.job.OnCurrentBranch {
+		b, err := os.ReadFile(t.path)
+		if err != nil {
+			return nil, false
+		}
+		return b, true
+	}
+	rel := filepath.ToSlash(filepath.Join(job.JobsRelDir, d.job.Name, filepath.Base(t.path)))
+	b, err := git.ShowFile(d.job.Root, d.job.Branch, rel)
+	if err != nil {
+		return nil, false
+	}
+	return b, true
 }
 
 // reload re-reads all four files (used by App.refresh).
@@ -290,6 +316,16 @@ func (d *detailView) render() string {
 	b.WriteString(titleStyle.Render(d.job.Title))
 	meta := fmt.Sprintf("  %s · %s · %s · %s", d.job.ID, d.job.Status, d.job.Type, d.job.Date)
 	b.WriteString(dimStyle.Render(meta))
+	// Branch: show which branch the job lives on, and flag it when that's a
+	// different branch than the one currently checked out (so the user
+	// understands why edits are guarded and knows to press "c" to switch).
+	if d.job.Branch != "" {
+		branchMeta := " · branch: " + d.job.Branch
+		if !d.job.OnCurrentBranch {
+			branchMeta = " · " + d.job.Branch + " (other branch — press c to switch)"
+		}
+		b.WriteString(dimStyle.Render(branchMeta))
+	}
 	b.WriteString("\n")
 
 	// Tab bar.
@@ -371,6 +407,11 @@ func (d *detailView) renderFooter() string {
 		// "e" only does anything on editable tabs (brief.md today), so the
 		// hint is scoped to when it would actually work.
 		hint += " · e edit"
+	}
+	if !d.job.OnCurrentBranch {
+		// "c" only does anything for a job that isn't already on the
+		// checked-out branch — scoped the same way "e edit" is above.
+		hint += " · c switch branch"
 	}
 	hint += " · agent keys above · D mark done · ctrl+r refresh · esc back · q quit"
 	return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint))

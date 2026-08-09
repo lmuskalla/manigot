@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -250,5 +251,211 @@ func TestDetailFooterEditHintOnlyOnEditableTab(t *testing.T) {
 	d.cur = 1
 	if strings.Contains(d.renderFooter(), "e edit") {
 		t.Errorf("footer on the tasks tab unexpectedly shows the edit hint:\n%s", d.renderFooter())
+	}
+}
+
+// --- cross-branch detail view (TASK-4) --------------------------------------
+//
+// gitRun / gitInitRepo / gitCommitJob are local copies of the job-package
+// helpers so this test stays self-contained.
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
+	}
+}
+
+func gitInitRepo(t *testing.T) (dir, defaultBranch string) {
+	t.Helper()
+	dir = t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "config", "user.email", "t@example.com")
+	gitRun(t, dir, "config", "user.name", "Test")
+	gitRun(t, dir, "config", "commit.gpgsign", "false")
+	os.WriteFile(filepath.Join(dir, "README"), []byte("init\n"), 0o644)
+	gitRun(t, dir, "add", "README")
+	gitRun(t, dir, "commit", "-q", "-m", "init")
+	b, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("read default branch: %v", err)
+	}
+	return dir, strings.TrimSpace(string(b))
+}
+
+func gitCommitJob(t *testing.T, dir, name, brief string) {
+	t.Helper()
+	jobDir := filepath.Join(dir, "docs", "jobs", name)
+	os.MkdirAll(jobDir, 0o755)
+	os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte(brief), 0o644)
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "job "+name)
+}
+
+// TestDetailViewReadsOffBranchJobViaGit confirms the detail view shows an
+// off-branch job's files even though they aren't checked out into the working
+// tree at all. Without TASK-4 every tab would show the "(label)" placeholder
+// and a blank body.
+func TestDetailViewReadsOffBranchJobViaGit(t *testing.T) {
+	dir, def := gitInitRepo(t)
+
+	// Build a job with real brief + tasks content on a feature branch.
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/off01_o")
+	gitCommitJob(t, dir, "off01_o",
+		"# Brief: OffBranch\n\nstatus: open\nid: off01\nbranch: feature/off01_o\ndate: 2026-01-01\n\n## What\n\nZZOFFBRANCHBODY\n")
+	tasks := "# Tasks: OffBranch\n\nid: off01\nstatus: open\n\n## Task breakdown\n\nTASK-1: real off-branch work here\n"
+	os.WriteFile(filepath.Join(dir, "docs", "jobs", "off01_o", "tasks.md"), []byte(tasks), 0o644)
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "tasks")
+	gitRun(t, dir, "checkout", "-q", def)
+
+	// The job dir is absent from the default branch's working tree.
+	if _, err := os.Stat(filepath.Join(dir, "docs", "jobs", "off01_o")); !os.IsNotExist(err) {
+		t.Fatalf("off01_o unexpectedly checked out on default branch: %v", err)
+	}
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%d", err, len(jobs))
+	}
+	if jobs[0].OnCurrentBranch {
+		t.Fatal("expected an off-branch job (OnCurrentBranch=false)")
+	}
+
+	d := newDetailView(jobs[0], 80, 24)
+
+	// Brief tab: exists, body content read via git show.
+	if !d.tabs[0].exists {
+		t.Error("brief tab should exist for an off-branch job (read via git show)")
+	}
+	if !strings.Contains(d.tabs[0].viewer.View(), "ZZOFFBRANCHBODY") {
+		t.Errorf("brief body not loaded for off-branch job; view:\n%s", d.tabs[0].viewer.View())
+	}
+
+	// Tasks tab: exists with the TASK- marker.
+	d.cur = 1
+	d.render()
+	if !d.tabs[1].exists {
+		t.Error("tasks tab should exist for an off-branch job (read via git show)")
+	}
+	if !strings.Contains(d.tabs[1].viewer.View(), "TASK-1") {
+		t.Errorf("tasks body not loaded for off-branch job; view:\n%s", d.tabs[1].viewer.View())
+	}
+
+	// Tabs whose files don't exist on the branch (implementation, verdict)
+	// still fall back to the "(label)" placeholder, same as the working-tree
+	// path's missing-file behaviour. (The inactive tab's viewer isn't
+	// rendered yet — loadTab only sets t.content for non-active tabs — so we
+	// assert on content, then confirm activating it renders the placeholder.)
+	if d.tabs[2].exists {
+		t.Error("implementation tab should be the placeholder (no implementation.md on the branch)")
+	}
+	if !strings.Contains(d.tabs[2].content, "has not been written yet") {
+		t.Errorf("implementation tab content should be the placeholder; content:\n%s", d.tabs[2].content)
+	}
+	d.cur = 2
+	d.render()
+	if !strings.Contains(d.tabs[2].viewer.View(), "has not been written yet") {
+		t.Errorf("implementation tab should render the placeholder once active; view:\n%s", d.tabs[2].viewer.View())
+	}
+}
+
+// TestDetailViewCurrentBranchStillReadsWorkingTree confirms the current-branch
+// path did not regress: a job checked out into the working tree still reflects
+// uncommitted edits (TASK-4's "current-branch jobs keep working-tree reads").
+func TestDetailViewCurrentBranchStillReadsWorkingTree(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	gitCommitJob(t, dir, "cur01_c", "# Brief: CurBranch\n\nstatus: open\nid: cur01\nbranch: "+def+"\ndate: 2026-01-01\n\n## What\n\noriginal\n")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 || !jobs[0].OnCurrentBranch {
+		t.Fatalf("expected one current-branch job; got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	if !strings.Contains(d.tabs[0].viewer.View(), "original") {
+		t.Errorf("current-branch brief not loaded; view:\n%s", d.tabs[0].viewer.View())
+	}
+
+	// Edit brief in the working tree WITHOUT committing — it must show up.
+	briefPath := filepath.Join(dir, "docs", "jobs", "cur01_c", "brief.md")
+	os.WriteFile(briefPath, []byte("# Brief: CurBranch\n\nstatus: open\nid: cur01\nbranch: "+def+"\ndate: 2026-01-01\n\n## What\n\nZZUNCOMMITTED\n"), 0o644)
+	d.reload()
+	if !strings.Contains(d.tabs[0].viewer.View(), "ZZUNCOMMITTED") {
+		t.Errorf("uncommitted edit not reflected for current-branch job; view:\n%s", d.tabs[0].viewer.View())
+	}
+}
+
+// --- branch surfacing (TASK-5) ----------------------------------------------
+
+// TestDetailViewMetaLineShowsBranch confirms the detail view's meta line names
+// the job's branch, and flags it as "other branch" when the job isn't on the
+// currently-checked-out branch.
+func TestDetailViewMetaLineShowsBranch(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	// Off-branch job.
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/off05_o")
+	gitCommitJob(t, dir, "off05_o", "# Brief: Off\n\nstatus: open\nid: off05\nbranch: feature/off05_o\ndate: 2026-01-01\n")
+	gitRun(t, dir, "checkout", "-q", def)
+	// Current-branch job.
+	gitCommitJob(t, dir, "cur05_c", "# Brief: Cur\n\nstatus: open\nid: cur05\nbranch: "+def+"\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	byID := map[string]job.Job{}
+	for _, j := range jobs {
+		byID[j.ID] = j
+	}
+
+	// Off-branch job: branch shown + flagged as other-branch.
+	dOff := newDetailView(byID["off05"], 80, 24)
+	out := dOff.render()
+	if !strings.Contains(out, "branch: feature/off05_o") {
+		t.Errorf("off-branch meta line missing the branch:\n%s", out)
+	}
+	if !strings.Contains(out, "other branch") {
+		t.Errorf("off-branch meta line missing the 'other branch' flag:\n%s", out)
+	}
+
+	// Current-branch job: branch shown, no other-branch flag.
+	dCur := newDetailView(byID["cur05"], 80, 24)
+	out = dCur.render()
+	if !strings.Contains(out, "branch: "+def) {
+		t.Errorf("current-branch meta line missing the branch:\n%s", out)
+	}
+	if strings.Contains(out, "other branch") {
+		t.Errorf("current-branch meta line should NOT show the other-branch flag:\n%s", out)
+	}
+}
+
+// TestJobListMarksOffBranchRows confirms the job list appends a "· <branch>"
+// tag to rows whose job isn't on the current branch, and leaves current-branch
+// rows untouched (no new column introduced).
+func TestJobListMarksOffBranchRows(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/off06_o")
+	gitCommitJob(t, dir, "off06_o", "# Brief: Off\n\nstatus: open\nid: off06\nbranch: feature/off06_o\ndate: 2026-01-01\n")
+	gitRun(t, dir, "checkout", "-q", def)
+	gitCommitJob(t, dir, "cur06_c", "# Brief: Cur\n\nstatus: open\nid: cur06\nbranch: "+def+"\ndate: 2026-02-02\n")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	cols := listColumns()
+
+	byID := map[string]job.Job{}
+	for _, j := range jobs {
+		byID[j.ID] = j
+	}
+
+	// Off-branch row carries the branch tag.
+	offRow := a.renderJobRow(byID["off06"], cols, false)
+	if !strings.Contains(offRow, "feature/off06_o") {
+		t.Errorf("off-branch row missing the branch tag:\n%s", offRow)
+	}
+
+	// Current-branch row carries no branch tag (its Branch equals the current).
+	curRow := a.renderJobRow(byID["cur06"], cols, false)
+	if strings.Contains(curRow, def) {
+		t.Errorf("current-branch row should not carry a branch tag (Branch == current); got:\n%s", curRow)
 	}
 }
