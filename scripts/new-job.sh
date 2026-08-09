@@ -64,12 +64,19 @@ AUTHOR=$(git config user.name 2>/dev/null || echo "unknown")
 mkdir -p "$JOB_DIR"
 
 # ── Git branch ──────────────────────────────────────────────────────────────────
+# Always branch from the base branch (main), regardless of the branch the user is
+# currently on. A new job must not inherit work from another in-flight job's branch.
 BRANCH="${JOB_TYPE}/${ID}_${SLUG}"
+BASE_BRANCH="main"
 CURRENT_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
 if [[ -n "$CURRENT_BRANCH" ]]; then
-    git -C "$PROJECT_ROOT" checkout -b "$BRANCH"
-    echo "  Branch   : $BRANCH"
+    if ! git -C "$PROJECT_ROOT" rev-parse --verify --quiet "refs/heads/${BASE_BRANCH}" >/dev/null; then
+        echo "Error: base branch '${BASE_BRANCH}' does not exist; cannot create job branch from it." >&2
+        exit 1
+    fi
+    git -C "$PROJECT_ROOT" checkout -b "$BRANCH" "$BASE_BRANCH"
+    echo "  Branch   : $BRANCH (based on $BASE_BRANCH)"
 else
     echo "  Warning  : not a git repository — skipping branch creation"
     BRANCH="(no git)"

@@ -24,7 +24,8 @@ session with `sc --tool claude-code|opencode`.
   `/workspace/.claude` for Claude Code, `/workspace/.opencode` for OpenCode.
   Validates auth per tool and passes the choice on as `SAFECODE_TOOL`.
 - `scripts/new-job.sh` — installed as `sc-job`. Creates a new job directory
-  under `docs/jobs/<id>_<slug>/` and a matching git branch.
+  under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
+  `main` (regardless of the branch the user is currently on).
 - `scripts/finish-job.sh` — installed as `sc-done`. Archives a finished job.
 - `scripts/tui.sh` — installed as `sc-tui`; wrapper around
   `bin/safecode-tui` that exports `SAFECODE_HOME` so the TUI can find the scripts.

@@ -142,7 +142,7 @@ allowed, because there it is the normal way to authenticate.
 | command | does |
 |---|---|
 | `sc` | start a session in the current project |
-| `sc-job` | create a job directory + branch |
+| `sc-job` | create a job directory + branch (off `main`) |
 | `sc-done` | archive a finished job |
 | `sc-tui` | the terminal UI (needs `make tui` first) |
 
