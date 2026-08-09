@@ -3,8 +3,6 @@
 </p>
 
 
-# manigot
-
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
