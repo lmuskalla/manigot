@@ -38,7 +38,7 @@
 // $PATH. A value that cannot be resolved is an error: the resolver does not
 // silently ignore a misspelled override.
 //
-// SAFECODE_HOME is exported by scripts/safecode-tui.sh, so the wrapper-script
+// SAFECODE_HOME is exported by scripts/tui.sh, so the wrapper-script
 // install needs no configuration at all; setting it by hand is only necessary
 // when running the binary directly from an unusual location.
 package resolve

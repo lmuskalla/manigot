@@ -10,7 +10,7 @@ session with `sc --tool claude-code|opencode`.
 - Runtime: Docker (single image, built from `Dockerfile`)
 - Agent CLIs: Claude Code (`claude`) and OpenCode (`opencode`), both installed in the image
 - Orchestration: Bash scripts in `scripts/` (`run.sh`, `new-job.sh`, `finish-job.sh`,
-  `safecode-tui.sh`, `entrypoint.sh`)
+  `tui.sh`, `entrypoint.sh`)
 - Build/CLI: `Makefile` (`make build`, `make rebuild`, `make install`, `make tui`)
 - Host-side TUI: Go, in `tui/` — built with `make tui`, never runs in the container
 - Agent definitions: Markdown files in `agents/`, baked into the image at build time
@@ -26,7 +26,7 @@ session with `sc --tool claude-code|opencode`.
 - `scripts/new-job.sh` — installed as `sc-job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch.
 - `scripts/finish-job.sh` — installed as `sc-done`. Archives a finished job.
-- `scripts/safecode-tui.sh` — installed as `sc-tui`; wrapper around
+- `scripts/tui.sh` — installed as `sc-tui`; wrapper around
   `bin/safecode-tui` that exports `SAFECODE_HOME` so the TUI can find the scripts.
 - `tui/internal/resolve` — locates the host commands for the TUI: env override
   (`SAFECODE_BIN`, `SAFECODE_JOB_BIN`, `SAFECODE_DONE_BIN`) → canonical name on

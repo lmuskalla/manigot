@@ -21,7 +21,7 @@ safecode/
     run.sh                ← container launcher      → 'sc'
     new-job.sh            ← job generator           → 'sc-job'
     finish-job.sh         ← job archiver            → 'sc-done'
-    safecode-tui.sh       ← TUI launcher            → 'sc-tui'
+    tui.sh                ← TUI launcher            → 'sc-tui'
     entrypoint.sh         ← runs inside the container before the agent CLI starts
   tui/                    ← host-side TUI source (Go); `make tui` builds bin/safecode-tui
   bin/                    ← built binaries (gitignored)
@@ -158,7 +158,7 @@ If you would rather not write to `/usr/local/bin`, define shell aliases instead:
 alias sc='~/code/safecode/scripts/run.sh'
 alias sc-job='~/code/safecode/scripts/new-job.sh'
 alias sc-done='~/code/safecode/scripts/finish-job.sh'
-alias sc-tui='~/code/safecode/scripts/safecode-tui.sh'
+alias sc-tui='~/code/safecode/scripts/tui.sh'
 ```
 
 One catch: aliases only exist inside your interactive shell, so the TUI cannot
@@ -175,7 +175,7 @@ export SAFECODE_DONE_BIN=…                   #   job completion
 Each `*_BIN` takes either a path or a bare command name to look up on `PATH`. A
 value that cannot be resolved is reported as an error rather than silently
 ignored, so a typo is visible. `SAFECODE_HOME` is set automatically when you
-start the TUI through `scripts/safecode-tui.sh`, so in that case there is
+start the TUI through `scripts/tui.sh`, so in that case there is
 nothing to configure.
 
 ---
@@ -345,7 +345,7 @@ make install    # puts sc-tui (and the other launchers) on your PATH
 
 `make tui` builds a single static binary at `bin/safecode-tui` (requires
 Go 1.23+ and network access the first time, to fetch the Charm modules).
-`make install` symlinks `scripts/safecode-tui.sh` onto your `PATH` alongside
+`make install` symlinks `scripts/tui.sh` onto your `PATH` alongside
 `sc` and `sc-job`; that wrapper also tells the binary where this
 checkout is, so the TUI can find the scripts even when nothing else is
 installed.

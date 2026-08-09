@@ -46,7 +46,7 @@ BINDIR  := $(PREFIX)/bin
 # <installed name>:<script>.
 LINKS := \
 	sc:run.sh \
-	sc-tui:safecode-tui.sh \
+	sc-tui:tui.sh \
 	sc-job:new-job.sh \
 	sc-done:finish-job.sh
 

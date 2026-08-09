@@ -14,7 +14,19 @@ set -euo pipefail
 # Then run `sc-tui` from anywhere inside a project that has a docs/.
 
 # ── Resolve repo + binary ───────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Follow symlinks to the real script location — this is installed as a
+# PATH symlink (make install), and `dirname "${BASH_SOURCE[0]}"` alone would
+# resolve to the symlink's directory (e.g. /usr/local/bin), not the checkout.
+resolve_script_dir() {
+    local src="${BASH_SOURCE[0]}" dir
+    while [[ -h "$src" ]]; do
+        dir="$(cd -P "$(dirname "$src")" && pwd)"
+        src="$(readlink "$src")"
+        [[ "$src" != /* ]] && src="$dir/$src"
+    done
+    cd -P "$(dirname "$src")" && pwd
+}
+SCRIPT_DIR="$(resolve_script_dir)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/bin/safecode-tui"
 
