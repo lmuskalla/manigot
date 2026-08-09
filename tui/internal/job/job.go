@@ -1,10 +1,10 @@
 // Package job reads safecode job data from the filesystem.
 //
-// A job lives at <project-root>/docs/processes/<id>_<slug>/ and contains four
+// A job lives at <project-root>/docs/jobs/<id>_<slug>/ and contains four
 // markdown files: brief.md, tasks.md, implementation.md and verdict.md. This
 // package deals only with locating jobs and parsing the loose (non-YAML)
 // frontmatter block at the top of brief.md. See
-// docs/processes/irw320_tui/tasks.md ("Implementation notes") for the exact
+// docs/jobs/archive/irw320_tui/tasks.md ("Implementation notes") for the exact
 // format contract this parser must honour.
 package job
 
@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-// Job is one safecode job directory under docs/processes/.
+// Job is one safecode job directory under docs/jobs/.
 type Job struct {
 	// Name is the directory name, e.g. "irw320_tui". It is the machine
 	// identity of the job.

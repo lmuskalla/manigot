@@ -16,7 +16,7 @@ import (
 // alt-screen clips the bottom of the status (the "fix:" line).
 func TestDetailBodyHeightShrinksForMultiLineStatus(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0001_x")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0001_x")
 	if err := os.MkdirAll(jobDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestDetailBodyHeightShrinksForMultiLineStatus(t *testing.T) {
 // marked stale and only actually re-rendered once they become active.
 func TestDetailDefersResizeForInactiveTabs(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0003_z")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0003_z")
 	if err := os.MkdirAll(jobDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestDetailDefersResizeForInactiveTabs(t *testing.T) {
 // tabs where pressing "e" is a no-op.
 func TestDetailFooterEditHintOnlyOnEditableTab(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0002_y")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0002_y")
 	if err := os.MkdirAll(jobDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

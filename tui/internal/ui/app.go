@@ -132,7 +132,7 @@ func (a *App) selectedJob() (job.Job, bool) {
 //
 // TASK-4 investigation: refresh runs synchronously inside Update() on every
 // "esc"/"backspace" (back to list) and "ctrl+r". It re-walks
-// docs/processes (job.Discover: one os.ReadDir plus one small brief.md read
+// docs/jobs (job.Discover: one os.ReadDir plus one small brief.md read
 // per job) and re-renders every job file (detailView.reload). On a local
 // filesystem with the handful of jobs a project typically has, that's plain
 // disk I/O with no network calls — sub-millisecond in practice, nowhere near

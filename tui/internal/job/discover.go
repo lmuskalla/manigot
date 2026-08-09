@@ -6,11 +6,11 @@ import (
 	"sort"
 )
 
-// ProcessesRelDir is where live jobs live, relative to the project root.
+// JobsRelDir is where live jobs live, relative to the project root.
 // Kept in sync with scripts/new-job.sh:10 and scripts/finish-job.sh:9.
-const ProcessesRelDir = "docs/processes"
+const JobsRelDir = "docs/jobs"
 
-// ArchiveDirName is the subdirectory under ProcessesRelDir that holds finished
+// ArchiveDirName is the subdirectory under JobsRelDir that holds finished
 // jobs. finish-job.sh moves done jobs here and filters it out with
 // `-v '/archive'`; discovery does the same.
 const ArchiveDirName = "archive"
@@ -41,16 +41,16 @@ func FindProjectRoot() (string, error) {
 	}
 }
 
-// Discover enumerates jobs under <root>/docs/processes, excluding the archive/
+// Discover enumerates jobs under <root>/docs/jobs, excluding the archive/
 // directory. Jobs are sorted by date descending (newest first), with Name as a
 // stable tiebreaker — the same "recent work first" ordering the README's job
 // workflow implies.
 //
-// A missing docs/processes directory (a fresh project with no jobs yet) is not
+// A missing docs/jobs directory (a fresh project with no jobs yet) is not
 // an error: it returns an empty slice.
 func Discover(root string) ([]Job, error) {
-	procs := filepath.Join(root, ProcessesRelDir)
-	entries, err := os.ReadDir(procs)
+	jobsDir := filepath.Join(root, JobsRelDir)
+	entries, err := os.ReadDir(jobsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -66,7 +66,7 @@ func Discover(root string) ([]Job, error) {
 		if e.Name() == ArchiveDirName {
 			continue
 		}
-		dir := filepath.Join(procs, e.Name())
+		dir := filepath.Join(jobsDir, e.Name())
 		j, _ := ReadJob(dir) // ReadJob never hard-fails; see its docs.
 		jobs = append(jobs, j)
 	}

@@ -52,4 +52,4 @@ Give agents access to external context via MCP — database schemas, git history
 - [x] Add `make install` target that sets up symlinks automatically (bvi7n6)
 - [ ] Consider a `sc list-jobs` command for quick overview without TUI
 - [ ] Git user config inside container (name + email) so developer agent commits don't fail
-- [ ] Update example job files to reflect `docs/processes/` path (currently says `docs/templates/processes/`)
+- [x] Update example job files to reflect `docs/jobs/` path (was `docs/templates/processes/`)

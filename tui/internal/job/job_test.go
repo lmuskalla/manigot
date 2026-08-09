@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// writeJob writes a minimal docs/processes/<name>/brief.md.
+// writeJob writes a minimal docs/jobs/<name>/brief.md.
 func writeJob(t *testing.T, root, name, brief string) {
 	t.Helper()
-	dir := filepath.Join(root, "docs", "processes", name)
+	dir := filepath.Join(root, "docs", "jobs", name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestDiscover(t *testing.T) {
 		"# Brief: Older\n\nstatus: open\ntype: fix\ndate: 2025-01-01\n")
 	writeJob(t, root, "zzzz99_newer", "# Brief: Newer\n\nstatus: done\ndate: 2026-12-31\n")
 	writeJob(t, root, "archive/q_archived", "# Brief: Archived\n\ndate: 2020-01-01\n")
-	if err := os.WriteFile(filepath.Join(root, "docs", "processes", "README.md"),
+	if err := os.WriteFile(filepath.Join(root, "docs", "jobs", "README.md"),
 		[]byte("not a job"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -140,13 +140,13 @@ func TestDiscover(t *testing.T) {
 
 func TestDiscoverEmptyWhenNoProcesses(t *testing.T) {
 	root := t.TempDir()
-	// docs/ exists but no docs/processes/.
+	// docs/ exists but no docs/jobs/.
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	jobs, err := Discover(root)
 	if err != nil {
-		t.Fatalf("Discover on missing processes dir: unexpected error %v", err)
+		t.Fatalf("Discover on missing jobs dir: unexpected error %v", err)
 	}
 	if jobs != nil && len(jobs) != 0 {
 		t.Errorf("expected no jobs, got %d", len(jobs))

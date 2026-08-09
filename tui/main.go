@@ -3,8 +3,8 @@
 // The safecode TUI is a host-side terminal interface for managing safecode
 // jobs and launching agents without remembering command syntax. It runs on the
 // user's machine (NOT inside the safecode container), reads a project's
-// docs/processes/ directories, and shells out to the host commands sc and
-// sc-job. See docs/processes/irw320_tui/ for the full design.
+// docs/jobs/ directories, and shells out to the host commands sc and
+// sc-job. See docs/jobs/archive/irw320_tui/ for the full design.
 //
 // Run from the repository root:
 //

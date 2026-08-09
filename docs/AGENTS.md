@@ -24,7 +24,7 @@ session with `sc --tool claude-code|opencode`.
   `/workspace/.claude` for Claude Code, `/workspace/.opencode` for OpenCode.
   Validates auth per tool and passes the choice on as `SAFECODE_TOOL`.
 - `scripts/new-job.sh` — installed as `sc-job`. Creates a new job directory
-  under `docs/processes/<id>_<slug>/` and a matching git branch.
+  under `docs/jobs/<id>_<slug>/` and a matching git branch.
 - `scripts/finish-job.sh` — installed as `sc-done`. Archives a finished job.
 - `scripts/safecode-tui.sh` — installed as `sc-tui`; wrapper around
   `bin/safecode-tui` that exports `SAFECODE_HOME` so the TUI can find the scripts.
@@ -42,7 +42,7 @@ session with `sc --tool claude-code|opencode`.
   (OpenCode takes the name from the filename and uses a different tools schema).
   A project can override one by adding a same-named file under its own `docs/agents/`.
 - `project-template/` — what gets copied into a new project (`docs/AGENTS.md`
-  plus `docs/templates/processes/`) to bootstrap the job workflow there.
+  plus `docs/jobs/`) to bootstrap the job workflow there.
 - `docs/AGENTS.md` — the project context file, tool-neutral by name. Neither CLI
   reads it from inside the `docs/` mount, so `run.sh` mounts it read-only a second
   time at `/workspace/AGENTS.md` (OpenCode) or `/workspace/.claude/CLAUDE.md`
@@ -68,7 +68,7 @@ session with `sc --tool claude-code|opencode`.
 - `sc-tui` — host-side terminal UI for browsing jobs and firing agents
 
 ## Job workflow
-Each job lives in `docs/processes/<id>_<slug>/` with four files:
+Each job lives in `docs/jobs/<id>_<slug>/` with four files:
 `brief.md` (what/why, filled in by the user), `tasks.md` (`@analyst`),
 `implementation.md` (`@developer`), `verdict.md` (`@reviewer` / `@security`).
 A branch `feature|fix|chore/<id>_<slug>` is created alongside it.

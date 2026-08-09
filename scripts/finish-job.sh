@@ -8,8 +8,8 @@ set -euo pipefail
 # Installed as `sc-done`. See `make install`.
 
 # ── Configuration ───────────────────────────────────────────────────────────────
-PROCESSES_DIR="docs/processes"
-ARCHIVE_DIR="docs/processes/archive"
+JOBS_DIR="docs/jobs"
+ARCHIVE_DIR="docs/jobs/archive"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
@@ -45,19 +45,19 @@ JOB_DIR=""
 JOB_NAME=""
 
 # Exact match first
-if [[ -d "$PROJECT_ROOT/$PROCESSES_DIR/$JOB_ARG" ]]; then
-    JOB_DIR="$PROJECT_ROOT/$PROCESSES_DIR/$JOB_ARG"
+if [[ -d "$PROJECT_ROOT/$JOBS_DIR/$JOB_ARG" ]]; then
+    JOB_DIR="$PROJECT_ROOT/$JOBS_DIR/$JOB_ARG"
     JOB_NAME="$JOB_ARG"
 else
     # Partial match on ID prefix
-    MATCH=$(find "$PROJECT_ROOT/$PROCESSES_DIR" -maxdepth 1 -type d -name "${JOB_ARG}*" 2>/dev/null | grep -v '/archive' | head -1 || true)
+    MATCH=$(find "$PROJECT_ROOT/$JOBS_DIR" -maxdepth 1 -type d -name "${JOB_ARG}*" 2>/dev/null | grep -v '/archive' | head -1 || true)
     if [[ -n "$MATCH" ]]; then
         JOB_DIR="$MATCH"
         JOB_NAME="$(basename "$MATCH")"
     else
-        echo "Error: job '$JOB_ARG' not found under $PROCESSES_DIR/"
+        echo "Error: job '$JOB_ARG' not found under $JOBS_DIR/"
         echo "Active jobs:"
-        find "$PROJECT_ROOT/$PROCESSES_DIR" -maxdepth 1 -type d ! -name "archive" ! -name "processes" | sort | while read -r d; do
+        find "$PROJECT_ROOT/$JOBS_DIR" -maxdepth 1 -type d ! -name "archive" ! -name "jobs" | sort | while read -r d; do
             echo "  $(basename "$d")"
         done
         exit 1
@@ -120,7 +120,7 @@ fi
 echo ""
 echo "Finishing job: $JOB_NAME"
 echo "  Branch  : $BRANCH → $DEFAULT_BRANCH"
-echo "  Archive : $PROCESSES_DIR/archive/$JOB_NAME"
+echo "  Archive : $JOBS_DIR/archive/$JOB_NAME"
 echo ""
 read -rp "  Proceed? [y/N] " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
@@ -148,7 +148,7 @@ sed -i "s/^status: .*/status: done/" "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME/brief
 
 # ── Commit the archive move ──────────────────────────────────────────────────────
 git -C "$PROJECT_ROOT" add "$PROJECT_ROOT/$ARCHIVE_DIR/$JOB_NAME"
-git -C "$PROJECT_ROOT" add "$PROJECT_ROOT/$PROCESSES_DIR" 2>/dev/null || true
+git -C "$PROJECT_ROOT" add "$PROJECT_ROOT/$JOBS_DIR" 2>/dev/null || true
 git -C "$PROJECT_ROOT" commit -m "archive: $JOB_NAME"
 
 # ── Done ────────────────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import (
 // is re-read once the editor exits cleanly.
 func TestEditorDoneMsgSuccess(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0001_x")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0001_x")
 	os.MkdirAll(jobDir, 0o755)
 	brief := filepath.Join(jobDir, "brief.md")
 	os.WriteFile(brief, []byte("# Brief: X\n\nstatus: open\n"), 0o644)
@@ -47,7 +47,7 @@ func TestEditorDoneMsgSuccess(t *testing.T) {
 // an existing file, just starting from a placeholder instead.
 func TestEditorDoneMsgCreatesMissingFile(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0003_z")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0003_z")
 	os.MkdirAll(jobDir, 0o755)
 	// No brief.md written yet — job.Discover/ReadJob tolerate that (see
 	// job.ReadJob's docs), returning defaults.
@@ -88,7 +88,7 @@ func TestEditorDoneMsgCreatesMissingFile(t *testing.T) {
 // launch errors use, rather than a bespoke message.
 func TestEditorDoneMsgError(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0001_x")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0001_x")
 	os.MkdirAll(jobDir, 0o755)
 	os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: X\n\nstatus: open\n"), 0o644)
 

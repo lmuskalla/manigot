@@ -275,13 +275,13 @@ in `your-project/docs/agents/`. Project agents take precedence over global ones.
 
 ## Job workflow
 
-Each piece of work gets its own directory under `docs/processes/`,
+Each piece of work gets its own directory under `docs/jobs/`,
 named with a 6-character random ID and a slugified title. A git branch is
 created automatically with the same ID.
 
 ```bash
 sc-job "add image gallery block"
-# creates: docs/processes/a3f9k2_add-image-gallery-block/
+# creates: docs/jobs/a3f9k2_add-image-gallery-block/
 #   brief.md    ← you fill in: what and why
 #   tasks.md    ← @analyst fills in: atomic task breakdown
 #   implementation.md  ← @developer fills in: what was implemented
@@ -317,7 +317,7 @@ Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug`.
 
 safecode ships an optional terminal UI for browsing jobs and launching agents
 without remembering command syntax. It is **host-side**: it runs on your
-machine, reads a project's `docs/processes/`, and shells out to the `sc`
+machine, reads a project's `docs/jobs/`, and shells out to the `sc`
 and `sc-job` commands. It does **not** run in the container and needs no
 credentials itself. It finds those commands dynamically — see
 [Installing without symlinks](#installing-without-symlinks) if they are not on

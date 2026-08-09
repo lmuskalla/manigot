@@ -104,18 +104,18 @@ AGENT_FLAG=()
 JOB_PROMPT=""
 
 if [[ -n "$JOB" ]]; then
-    JOB_DIR="$PROJECT_ROOT/docs/processes/$JOB"
+    JOB_DIR="$PROJECT_ROOT/docs/jobs/$JOB"
     if [[ ! -d "$JOB_DIR" ]]; then
-        MATCH=$(find "$PROJECT_ROOT/docs/processes" -maxdepth 1 -type d -name "${JOB}*" 2>/dev/null | head -1 || true)
+        MATCH=$(find "$PROJECT_ROOT/docs/jobs" -maxdepth 1 -type d -name "${JOB}*" 2>/dev/null | head -1 || true)
         if [[ -n "$MATCH" ]]; then
             JOB_DIR="$MATCH"
             JOB="$(basename "$MATCH")"
         else
-            echo "Error: job '$JOB' not found under docs/processes/"
+            echo "Error: job '$JOB' not found under docs/jobs/"
             exit 1
         fi
     fi
-    CONTAINER_JOB_DIR="/workspace/docs/processes/$JOB"
+    CONTAINER_JOB_DIR="/workspace/docs/jobs/$JOB"
     JOB_PROMPT="Please work on the job at ${CONTAINER_JOB_DIR} — start by reading brief.md"
 fi
 

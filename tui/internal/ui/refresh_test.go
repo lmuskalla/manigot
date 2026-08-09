@@ -13,7 +13,7 @@ import (
 // view's files after an agent edits them on disk.
 func TestRefreshPicksUpFileEdits(t *testing.T) {
 	root := t.TempDir()
-	jobDir := filepath.Join(root, "docs", "processes", "ab0001_x")
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0001_x")
 	os.MkdirAll(jobDir, 0o755)
 	brief := filepath.Join(jobDir, "brief.md")
 	os.WriteFile(brief, []byte("# Brief: X\n\nstatus: open\n"), 0o644)
@@ -44,7 +44,7 @@ func TestRefreshPicksUpFileEdits(t *testing.T) {
 func TestRefreshClampsCursor(t *testing.T) {
 	root := t.TempDir()
 	mkJob := func(name string) {
-		dir := filepath.Join(root, "docs", "processes", name)
+		dir := filepath.Join(root, "docs", "jobs", name)
 		os.MkdirAll(dir, 0o755)
 		os.WriteFile(filepath.Join(dir, "brief.md"),
 			[]byte("# Brief: "+name+"\n\nstatus: open\ndate: 2026-01-01\n"), 0o644)
@@ -57,7 +57,7 @@ func TestRefreshClampsCursor(t *testing.T) {
 	a.cursor = len(a.jobs) - 1 // point at the last job
 
 	// Remove the job under the cursor (simulate archiving).
-	os.RemoveAll(filepath.Join(root, "docs", "processes", "bb0002_b"))
+	os.RemoveAll(filepath.Join(root, "docs", "jobs", "bb0002_b"))
 
 	a.refresh()
 	if a.cursor >= len(a.jobs) {

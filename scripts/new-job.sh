@@ -9,7 +9,7 @@ set -euo pipefail
 # Installed as `sc-job`. See `make install`.
 
 # ── Configuration ───────────────────────────────────────────────────────────────
-PROCESSES_DIR="docs/processes"
+JOBS_DIR="docs/jobs"
 DEFAULT_TYPE="feature"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ fi
 # ── Generate job ID and directory ───────────────────────────────────────────────
 ID=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 6 || true)
 SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
-JOB_DIR="$PROJECT_ROOT/$PROCESSES_DIR/${ID}_${SLUG}"
+JOB_DIR="$PROJECT_ROOT/$JOBS_DIR/${ID}_${SLUG}"
 DATE=$(date '+%Y-%m-%d')
 AUTHOR=$(git config user.name 2>/dev/null || echo "unknown")
 
