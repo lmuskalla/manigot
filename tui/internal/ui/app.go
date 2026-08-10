@@ -82,15 +82,51 @@ type App struct {
 	// TUI re-observing an already-stopped job isn't a new event worth
 	// alerting on. Reset (empty) on every TUI restart — in-memory only, no
 	// new event-streaming subsystem or persisted state.
+	//
+	// jdiAlreadyRunning's launch-block guard (TASK-1 of the "multiple jdi
+	// instances" job) also falls back to this same map when no on-disk
+	// sidecar exists yet — see jdiSeenAt below for why that fallback has its
+	// own expiry, independent of this dedup's own (unrelated) purpose.
 	jdiSeen map[string]job.JDIState
+
+	// jdiSeenAt records when each jdiSeen entry was last written, so
+	// jdiAlreadyRunning's fallback to jdiSeen (used only while no on-disk
+	// sidecar exists) can expire it after jdiSeenFallbackTTL rather than
+	// trusting it forever. Without this, a "j" press whose mg-jdi process
+	// then crashed or was killed before ever writing its first status file
+	// left a JDIRunning entry in jdiSeen with nothing to ever clear it —
+	// permanently blocking a re-launch for the rest of the TUI session, with
+	// no visible indicator anywhere (the sidecar-driven badges correctly show
+	// nothing running) explaining why. Keyed the same as jdiSeen.
+	jdiSeenAt map[string]time.Time
 }
+
+// jdiSeenFallbackTTL bounds how long jdiAlreadyRunning trusts a jdiSeen
+// JDIRunning entry that has no corroborating on-disk sidecar file at all.
+// It exists to bridge the real race this fallback is for — the gap between
+// launch.Jdi's Start() returning and mg-jdi's own first WriteJDIStatus call,
+// which per cmd/jdi/main.go happens before it invokes its first agent, so
+// normally within seconds (a git checkout, not a full agent run) — while
+// still being short enough that a launch whose mg-jdi process crashed or was
+// killed before ever writing that first status file recovers on its own
+// within the same TUI session, rather than requiring a restart. Deliberately
+// much shorter than jdiRunningStaleAfter (job.ReadJDIStatus's own 30-minute
+// staleness window for a sidecar file that *does* exist): that window has to
+// stay generous enough not to mistake one long agent call for a killed
+// process, but this one only has to survive process startup, not an entire
+// agent invocation.
+const jdiSeenFallbackTTL = 2 * time.Minute
+
+// jdiNow is time.Now, indirected so tests can simulate the passage of time
+// for jdiSeenFallbackTTL without an actual sleep.
+var jdiNow = time.Now
 
 // NewApp builds the root model from a discovered job list. Settings are
 // loaded from disk (see config.Load); a load failure (e.g. a corrupt
 // tui-settings.json) is non-fatal — the app starts with default settings and
 // surfaces the error in the footer instead.
 func NewApp(root string, jobs []job.Job) *App {
-	a := &App{root: root, jobs: jobs, state: stateList, jdiSeen: map[string]job.JDIState{}}
+	a := &App{root: root, jobs: jobs, state: stateList, jdiSeen: map[string]job.JDIState{}, jdiSeenAt: map[string]time.Time{}}
 	a.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
 	a.refreshRecentCommits()
 	settings, err := config.Load()
@@ -460,6 +496,7 @@ func (a *App) pollJDIBell() {
 		}
 		prev, seen := a.jdiSeen[j.Name]
 		a.jdiSeen[j.Name] = st.State
+		a.jdiSeenAt[j.Name] = jdiNow()
 		if !seen {
 			continue
 		}
@@ -472,6 +509,34 @@ func (a *App) pollJDIBell() {
 // isJDIStopped reports whether s is one of the two terminal mg-jdi states.
 func isJDIStopped(s job.JDIState) bool {
 	return s == job.JDIStoppedFinished || s == job.JDIStoppedNeedsHuman
+}
+
+// jdiAlreadyRunning reports whether j already has an mg-jdi run in progress,
+// for the "j" key's launch-block guard (TASK-1 of the "multiple jdi
+// instances" brief). The on-disk sidecar (job.ReadJDIStatus) is the source
+// of truth once mg-jdi has written it — a JDIStoppedFinished/
+// JDIStoppedNeedsHuman status there always wins, even if a.jdiSeen still
+// remembers this same session having launched it earlier, so a job is never
+// permanently blocked after mg-jdi actually stops.
+//
+// The gap the sidecar alone can't cover is the brief moment between
+// launch.Jdi's Start() returning and mg-jdi's own first WriteJDIStatus call
+// (see job/jdistatus.go): nothing has been written yet, so
+// job.ReadJDIStatus reports ok=false. Only in that no-sidecar-yet case does
+// this fall back to a.jdiSeen, which updateDetail's "j" handler itself seeds
+// to job.JDIRunning the instant launch.Jdi succeeds — catching a second
+// press that lands in that same narrow window. That fallback entry is only
+// trusted for jdiSeenFallbackTTL (see its own doc): once it's older than
+// that, mg-jdi almost certainly crashed or was killed before ever writing a
+// sidecar, and this reports "not running" rather than blocking forever.
+func (a *App) jdiAlreadyRunning(j job.Job) (job.JDIStatus, bool) {
+	if st, ok := job.ReadJDIStatus(a.root, j.Name); ok {
+		return st, st.State == job.JDIRunning
+	}
+	if a.jdiSeen[j.Name] == job.JDIRunning && jdiNow().Sub(a.jdiSeenAt[j.Name]) <= jdiSeenFallbackTTL {
+		return job.JDIStatus{State: job.JDIRunning}, true
+	}
+	return job.JDIStatus{}, false
 }
 
 // ringBell writes a bare terminal bell character. A BEL byte reaches the
@@ -665,6 +730,20 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if _, blocked := a.branchGuard(); blocked {
 			return a, a.blockedByBranchCmd()
 		}
+		// Block a second concurrent launch against the same job — the brief
+		// this job exists for ("press j ... multiple times" spawns several
+		// processes with no indication). jdiAlreadyRunning combines the
+		// on-disk sidecar with the in-session dedup map so a press landing
+		// before mg-jdi has written its very first status file is caught
+		// too.
+		if st, running := a.jdiAlreadyRunning(a.detail.job); running {
+			label := "mg-jdi is already running for this job"
+			if st.Agent != "" {
+				label += " @" + st.Agent
+			}
+			a.detail.setStatus(label)
+			return a, nil
+		}
 		if err := launch.Jdi(a.detail.job.ID, a.root); err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 		} else {
@@ -674,6 +753,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// look like a first-ever observation of an already-stopped job
 			// and never ring.
 			a.jdiSeen[a.detail.job.Name] = job.JDIRunning
+			a.jdiSeenAt[a.detail.job.Name] = jdiNow()
 			a.detail.setStatus("→ mg-jdi started in the background — see the log tab or list badge")
 		}
 		return a, nil

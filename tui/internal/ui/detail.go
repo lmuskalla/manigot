@@ -612,6 +612,19 @@ func (d *detailView) renderActionBar() string {
 	stageLine.WriteString(accentStyle.Render("[j]"))
 	stageLine.WriteString(" ")
 	stageLine.WriteString(accentStyle.Render("mg-jdi"))
+	// A live running/stopped indicator right next to the button that starts
+	// it (TASK-2 of the "multiple jdi instances" job): reuses the same
+	// job.ReadJDIStatus-backed jdiStatusBadge formatting the job-list row
+	// already renders, so a user sitting in the detail view — exactly where
+	// "j" is pressed, and where TASK-1's block message appears — can see at
+	// a glance whether mg-jdi is still going, not only from the list. Like
+	// the list badge, this has no polling timer of its own: it reads the
+	// sidecar fresh on every render() call, so it updates whenever Bubble
+	// Tea next re-renders (any keypress), not continuously.
+	if badge := jdiStatusBadge(d.job.Root, d.job); badge != "" {
+		stageLine.WriteString(sep)
+		stageLine.WriteString(badge)
+	}
 
 	return agentsLine.String() + "\n" + stageLine.String()
 }
