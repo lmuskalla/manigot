@@ -50,7 +50,7 @@ notes: specific file, line, and reason if not PASS
 
 End with overall: APPROVED / NEEDS WORK / REJECTED and a clear list of what must change before this can be merged. Everything here is a blocker — if it's not a blocker, don't list it.
 
-Commit `verdict.md` once it is written — an uncommitted verdict blocks `mg-done`:
+Commit `verdict.md` once it is written — an uncommitted verdict blocks `mg done`:
 ```
 git add verdict.md
 git commit -m "[ID] verdict: <one-line summary>"

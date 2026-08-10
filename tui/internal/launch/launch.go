@@ -114,7 +114,7 @@ func Jdi(jobID, projectRoot string) error {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start mg-jdi: %w", err)
+		return fmt.Errorf("start mg jdi: %w", err)
 	}
 	if cmd.Process != nil {
 		go func() { _ = cmd.Wait() }()

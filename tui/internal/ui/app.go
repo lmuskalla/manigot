@@ -737,7 +737,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// before mg-jdi has written its very first status file is caught
 		// too.
 		if st, running := a.jdiAlreadyRunning(a.detail.job); running {
-			label := "mg-jdi is already running for this job"
+			label := "mg jdi is already running for this job"
 			if st.Agent != "" {
 				label += " @" + st.Agent
 			}
@@ -754,7 +754,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// and never ring.
 			a.jdiSeen[a.detail.job.Name] = job.JDIRunning
 			a.jdiSeenAt[a.detail.job.Name] = jdiNow()
-			a.detail.setStatus("→ mg-jdi started in the background — see the log tab or list badge")
+			a.detail.setStatus("→ mg jdi started in the background — see the log tab or list badge")
 		}
 		return a, nil
 	case "delete", "x":
@@ -1093,7 +1093,7 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	return dimStyle.Render("  ") + line
 }
 
-// jdiStatusBadge renders a short "[mg-jdi: ...]" tag for a job's list row
+// jdiStatusBadge renders a short "[mg jdi: ...]" tag for a job's list row
 // when an autonomous run has something to report (Decision 4/4a/TASK-8):
 // running (naming the active agent), or one of the two stop reasons.
 // Renders "" when there's nothing to show — no sidecar status file for this
@@ -1109,15 +1109,15 @@ func jdiStatusBadge(root string, j job.Job) string {
 	}
 	switch st.State {
 	case job.JDIRunning:
-		label := "mg-jdi: running"
+		label := "mg jdi: running"
 		if st.Agent != "" {
 			label += " @" + st.Agent
 		}
 		return accentStyle.Render("[" + label + "]")
 	case job.JDIStoppedFinished:
-		return statusDoneStyle.Render("[mg-jdi: finished]")
+		return statusDoneStyle.Render("[mg jdi: finished]")
 	case job.JDIStoppedNeedsHuman:
-		return warnStyle.Render("[mg-jdi: needs human]")
+		return warnStyle.Render("[mg jdi: needs human]")
 	default:
 		return ""
 	}

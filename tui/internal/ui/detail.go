@@ -160,11 +160,11 @@ func (d *detailView) loadTab(i int) {
 			t.exists = true
 			t.content = text
 			if t.content == "" {
-				t.content = "_run.log is empty — mg-jdi may still be starting its first invocation._"
+				t.content = "_run.log is empty — mg jdi may still be starting its first invocation._"
 			}
 		} else {
 			t.exists = false
-			t.content = "_no mg-jdi run has happened for this job yet._"
+			t.content = "_no mg jdi run has happened for this job yet._"
 		}
 		if i == d.cur {
 			t.viewer.SetContent(t.content)
@@ -611,7 +611,7 @@ func (d *detailView) renderActionBar() string {
 	stageLine.WriteString(sep)
 	stageLine.WriteString(accentStyle.Render("[j]"))
 	stageLine.WriteString(" ")
-	stageLine.WriteString(accentStyle.Render("mg-jdi"))
+	stageLine.WriteString(accentStyle.Render("mg jdi"))
 	// A live running/stopped indicator right next to the button that starts
 	// it (TASK-2 of the "multiple jdi instances" job): reuses the same
 	// job.ReadJDIStatus-backed jdiStatusBadge formatting the job-list row
@@ -719,7 +719,7 @@ func (d *detailView) renderFooter() string {
 		// checked-out branch — scoped the same way "e edit" is above.
 		hint += " · b switch branch"
 	}
-	hint += " · agent keys above · D mark done · j run mg-jdi · x/del remove job · ctrl+r refresh · esc back · q quit"
+	hint += " · agent keys above · D mark done · j run mg jdi · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {

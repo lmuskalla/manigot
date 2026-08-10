@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── Usage ───────────────────────────────────────────────────────────────────────
+# mg                              # start a session (today's run.sh behavior)
+# mg --tool opencode              # ...with flags, unchanged
+# mg --agent analyst --job <id>
+# mg job "title" [--type ...]     # today's new-job.sh
+# mg tui                          # today's tui.sh
+# mg jdi --job <id>               # today's jdi.sh
+# mg done <id>                    # today's finish-job.sh
+# mg delete <id>                  # today's delete-job.sh
+#
+# Single dispatcher: the only script `make install` symlinks onto PATH as
+# `mg`. It inspects $1 — if it exactly matches one of the five subcommand
+# names above, it execs the matching sibling script with the remaining args
+# unchanged; anything else (no args at all, or any other first token,
+# including run.sh's own --agent/--job/--tool/--print flags) falls through
+# to run.sh with all original args untouched. None of the underlying
+# scripts change their own logic, flags, or behavior — see
+# docs/jobs/9pze1x_better-cli-syntax/brief.md.
+
+# ── Resolve repo ────────────────────────────────────────────────────────────────
+# Follow symlinks to the real script location — this is installed as a
+# PATH symlink (make install), and `dirname "${BASH_SOURCE[0]}"` alone would
+# resolve to the symlink's directory (e.g. /usr/local/bin), not the checkout.
+resolve_script_dir() {
+    local src="${BASH_SOURCE[0]}" dir
+    while [[ -h "$src" ]]; do
+        dir="$(cd -P "$(dirname "$src")" && pwd)"
+        src="$(readlink "$src")"
+        [[ "$src" != /* ]] && src="$dir/$src"
+    done
+    cd -P "$(dirname "$src")" && pwd
+}
+SCRIPT_DIR="$(resolve_script_dir)"
+
+# ── Dispatch ────────────────────────────────────────────────────────────────────
+case "${1:-}" in
+    job)
+        shift
+        exec "$SCRIPT_DIR/new-job.sh" "$@"
+        ;;
+    tui)
+        shift
+        exec "$SCRIPT_DIR/tui.sh" "$@"
+        ;;
+    jdi)
+        shift
+        exec "$SCRIPT_DIR/jdi.sh" "$@"
+        ;;
+    done)
+        shift
+        exec "$SCRIPT_DIR/finish-job.sh" "$@"
+        ;;
+    delete)
+        shift
+        exec "$SCRIPT_DIR/delete-job.sh" "$@"
+        ;;
+    *)
+        exec "$SCRIPT_DIR/run.sh" "$@"
+        ;;
+esac

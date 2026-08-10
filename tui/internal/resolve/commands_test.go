@@ -6,8 +6,11 @@ import (
 )
 
 // The settled naming decision, spelled out so a rename cannot happen by
-// accident: sc/mg-job/mg-done/mg-delete are each the sole candidate name —
-// no short alias, no legacy fallback.
+// accident: mg-job/mg-done/mg-delete are each the sole candidate Names entry
+// — no short alias, no legacy fallback. Label is the human-facing "mg
+// <subcommand>" phrasing (scripts/mg.sh dispatches these via `make install`'s
+// single `mg` symlink); Names/Script/EnvVar still target the old standalone
+// script names, which remain valid, untried-by-default $PATH candidates.
 func TestCommandSpecs(t *testing.T) {
 	cases := []struct {
 		spec   Spec
@@ -17,10 +20,10 @@ func TestCommandSpecs(t *testing.T) {
 		script string
 	}{
 		{Manigot(), "mg", "MANIGOT_BIN", []string{"mg"}, "scripts/run.sh"},
-		{Job(), "mg-job", "MANIGOT_JOB_BIN", []string{"mg-job"}, "scripts/new-job.sh"},
-		{Done(), "mg-done", "MANIGOT_DONE_BIN", []string{"mg-done"}, "scripts/finish-job.sh"},
-		{Delete(), "mg-delete", "MANIGOT_DELETE_BIN", []string{"mg-delete"}, "scripts/delete-job.sh"},
-		{Jdi(), "mg-jdi", "MANIGOT_JDI_BIN", []string{"mg-jdi"}, "scripts/jdi.sh"},
+		{Job(), "mg job", "MANIGOT_JOB_BIN", []string{"mg-job"}, "scripts/new-job.sh"},
+		{Done(), "mg done", "MANIGOT_DONE_BIN", []string{"mg-done"}, "scripts/finish-job.sh"},
+		{Delete(), "mg delete", "MANIGOT_DELETE_BIN", []string{"mg-delete"}, "scripts/delete-job.sh"},
+		{Jdi(), "mg jdi", "MANIGOT_JDI_BIN", []string{"mg-jdi"}, "scripts/jdi.sh"},
 	}
 	for _, c := range cases {
 		if c.spec.Label != c.label {

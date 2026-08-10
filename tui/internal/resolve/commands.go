@@ -4,11 +4,15 @@ package resolve
 // to. They are functions rather than package-level variables so a caller cannot
 // mutate the shared candidate list by accident.
 //
-// mg/mg-job/mg-done/mg-delete/mg-tui/mg-jdi are the only supported install
-// names. Earlier naming (manigot, manigot-job, manigot-done, and the
-// standalone new-job / finish-job commands) is not carried forward as a
-// legacy fallback — a stale install must be re-run through `make install`
-// rather than resolved around.
+// `mg` is the only command `make install` puts on PATH today, dispatching to
+// `mg job`/`mg done`/`mg delete`/`mg tui`/`mg jdi` — see scripts/mg.sh. The
+// Names/Script/EnvVar fields below still target the old standalone
+// mg-job/mg-done/mg-delete/mg-tui/mg-jdi names as a harmless, always-tried-
+// first $PATH candidate (see Resolve); only the Label fields, shown to a
+// human, are updated to the new `mg <subcommand>` phrasing. Earlier naming
+// (manigot, manigot-job, manigot-done, and the standalone new-job /
+// finish-job commands) is not carried forward as a legacy fallback — a stale
+// install must be re-run through `make install` rather than resolved around.
 
 // Manigot describes the manigot launcher itself (scripts/run.sh).
 func Manigot() Spec {
@@ -23,7 +27,7 @@ func Manigot() Spec {
 // Job describes the command that scaffolds a new job (scripts/new-job.sh).
 func Job() Spec {
 	return Spec{
-		Label:  "mg-job",
+		Label:  "mg job",
 		EnvVar: EnvJob,
 		Names:  []string{"mg-job"},
 		Script: "scripts/new-job.sh",
@@ -34,7 +38,7 @@ func Job() Spec {
 // by hostcmd.DoneCommand for the job detail view's "mark done" (capital D) key.
 func Done() Spec {
 	return Spec{
-		Label:  "mg-done",
+		Label:  "mg done",
 		EnvVar: EnvDone,
 		Names:  []string{"mg-done"},
 		Script: "scripts/finish-job.sh",
@@ -46,7 +50,7 @@ func Done() Spec {
 // view's "delete" (del) key.
 func Delete() Spec {
 	return Spec{
-		Label:  "mg-delete",
+		Label:  "mg delete",
 		EnvVar: EnvDelete,
 		Names:  []string{"mg-delete"},
 		Script: "scripts/delete-job.sh",
@@ -54,10 +58,10 @@ func Delete() Spec {
 }
 
 // Jdi describes the autonomous-mode command (scripts/jdi.sh). Used by
-// launch.Jdi for the job detail view's "run mg-jdi" (capital J) key.
+// launch.Jdi for the job detail view's "run mg jdi" (capital J) key.
 func Jdi() Spec {
 	return Spec{
-		Label:  "mg-jdi",
+		Label:  "mg jdi",
 		EnvVar: EnvJdi,
 		Names:  []string{"mg-jdi"},
 		Script: "scripts/jdi.sh",

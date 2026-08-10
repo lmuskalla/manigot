@@ -43,10 +43,10 @@ var version = "0.1.0-dev"
 func main() {
 	jobArg := flag.String("job", "", "job ID or directory name to drive (required)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "mg-jdi %s\n\n", version)
+		fmt.Fprintf(os.Stderr, "mg jdi %s\n\n", version)
 		fmt.Fprintf(os.Stderr, "Drives a job's @analyst -> @developer -> @reviewer sequence end to end.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n")
-		fmt.Fprintf(os.Stderr, "  mg-jdi --job <id-or-name>\n\n")
+		fmt.Fprintf(os.Stderr, "  mg jdi --job <id-or-name>\n\n")
 		fmt.Fprintf(os.Stderr, "Run from anywhere inside a project that has a docs/ directory.\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
@@ -56,42 +56,42 @@ func main() {
 	resolve.SeedHome()
 
 	if strings.TrimSpace(*jobArg) == "" {
-		fmt.Fprintln(os.Stderr, "mg-jdi: --job is required")
+		fmt.Fprintln(os.Stderr, "mg jdi: --job is required")
 		flag.Usage()
 		os.Exit(2)
 	}
 
 	root, err := job.FindProjectRoot()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg-jdi: cannot read working directory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg jdi: cannot read working directory: %v\n", err)
 		os.Exit(1)
 	}
 	if root == "" {
-		fmt.Fprintln(os.Stderr, "mg-jdi: could not find a docs/ directory in this or any parent directory")
+		fmt.Fprintln(os.Stderr, "mg jdi: could not find a docs/ directory in this or any parent directory")
 		os.Exit(1)
 	}
 
 	j, err := resolveJob(root, *jobArg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg-jdi: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg jdi: %v\n", err)
 		os.Exit(1)
 	}
 
 	j, err = ensureOnBranch(root, j)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg-jdi: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg jdi: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Best-effort: see ensureSidecarIgnored's own doc for why a failure here
 	// does not abort the run.
 	if err := ensureSidecarIgnored(root); err != nil {
-		fmt.Fprintf(os.Stderr, "mg-jdi: warning: could not exclude the status sidecar from git: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg jdi: warning: could not exclude the status sidecar from git: %v\n", err)
 	}
 
 	runner, err := newCommandAgentRunner(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg-jdi: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg jdi: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -105,7 +105,7 @@ func main() {
 	// a file descriptor whether or not anything is reading it.
 	logDest := io.Writer(os.Stdout)
 	if logFile, ferr := openRunLog(root, j.Name); ferr != nil {
-		fmt.Fprintf(os.Stderr, "mg-jdi: warning: could not open run log, continuing with stdout only: %v\n", ferr)
+		fmt.Fprintf(os.Stderr, "mg jdi: warning: could not open run log, continuing with stdout only: %v\n", ferr)
 	} else {
 		defer logFile.Close()
 		logDest = io.MultiWriter(os.Stdout, logFile)
@@ -118,12 +118,12 @@ func main() {
 	// human watching directly either way.
 	statusFn := func(state job.JDIState, agent string) {
 		if err := job.WriteJDIStatus(root, j.Name, state, agent); err != nil {
-			fmt.Fprintf(os.Stderr, "mg-jdi: warning: could not write status sidecar: %v\n", err)
+			fmt.Fprintf(os.Stderr, "mg jdi: warning: could not write status sidecar: %v\n", err)
 		}
 	}
 
 	result := Run(root, j, runner, logDest, statusFn)
-	fmt.Printf("\nmg-jdi: %s — %s\n", result.Kind, result.Reason)
+	fmt.Printf("\nmg jdi: %s — %s\n", result.Kind, result.Reason)
 
 	// Stop notification, CLI path (Decision 5/7a): ring the terminal bell
 	// at both loop-exit points (finished, needs human) — this process is

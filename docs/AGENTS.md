@@ -9,37 +9,47 @@ session with `mg --tool claude-code|opencode`.
 ## Stack
 - Runtime: Docker (single image, built from `Dockerfile`)
 - Agent CLIs: Claude Code (`claude`) and OpenCode (`opencode`), both installed in the image
-- Orchestration: Bash scripts in `scripts/` (`run.sh`, `new-job.sh`, `finish-job.sh`,
-  `tui.sh`, `jdi.sh`, `entrypoint.sh`)
+- Orchestration: Bash scripts in `scripts/` (`mg.sh`, `run.sh`, `new-job.sh`,
+  `finish-job.sh`, `delete-job.sh`, `tui.sh`, `jdi.sh`, `entrypoint.sh`)
 - Build/CLI: `Makefile` (`make build`, `make rebuild`, `make install`, `make tui`, `make jdi`)
 - Host-side TUI: Go, in `tui/` — built with `make tui`, never runs in the container
 - Autonomous mode: Go, in `tui/cmd/jdi` (same module as the TUI) — built with
-  `make jdi` into `mg-jdi`, also host-side, never runs in the container
+  `make jdi` into the binary `mg jdi` runs, also host-side, never runs in the container
 - Agent definitions: Markdown files in `agents/`, baked into the image at build time
 
 ## Architecture
 - `Dockerfile` — builds the image; installs both agent CLIs. Rebuild after a
   Claude Code or OpenCode update via `make rebuild`.
-- `scripts/run.sh` — container launcher, symlinked as `mg` in PATH. Mounts
-  the current project's `docs/` into the container; nothing else on the host
-  is reachable from inside. Mount target depends on the tool:
-  `/workspace/.claude` for Claude Code, `/workspace/.opencode` for OpenCode.
-  Validates auth per tool and passes the choice on as `manigot_TOOL`.
-- `scripts/new-job.sh` — installed as `mg-job`. Creates a new job directory
+- `scripts/mg.sh` — the single dispatcher, symlinked as `mg` in PATH. Inspects
+  its first argument and execs the matching sibling script unchanged
+  (`job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`, `done`→`finish-job.sh`,
+  `delete`→`delete-job.sh`); anything else (no args, or any other first
+  token, including `run.sh`'s own `--agent`/`--job`/`--tool`/`--print` flags)
+  falls through to `run.sh` with all original args untouched.
+- `scripts/run.sh` — container launcher, reached via bare `mg` (no
+  subcommand). Mounts the current project's `docs/` into the container;
+  nothing else on the host is reachable from inside. Mount target depends on
+  the tool: `/workspace/.claude` for Claude Code, `/workspace/.opencode` for
+  OpenCode. Validates auth per tool and passes the choice on as
+  `manigot_TOOL`.
+- `scripts/new-job.sh` — reached via `mg job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
   `main` (regardless of the branch the user is currently on).
-- `scripts/finish-job.sh` — installed as `mg-done`. Archives a finished job.
-- `scripts/tui.sh` — installed as `mg-tui`; wrapper around
+- `scripts/finish-job.sh` — reached via `mg done`. Archives a finished job.
+- `scripts/delete-job.sh` — reached via `mg delete`. Permanently deletes a
+  job: its directory under `docs/jobs/` and, when the job has a branch, the
+  branch itself (`git branch -D` — no merge, unlike `mg done`).
+- `scripts/tui.sh` — reached via `mg tui`; wrapper around
   `bin/manigot-tui` that exports `manigot_HOME` so the TUI can find the scripts.
-- `scripts/jdi.sh` — installed as `mg-jdi`; wrapper around `bin/manigot-jdi`,
+- `scripts/jdi.sh` — reached via `mg jdi`; wrapper around `bin/manigot-jdi`,
   mirroring `tui.sh` exactly.
 - `tui/internal/resolve` — locates the host commands for the TUI (and
-  `mg-jdi`, which shares this package): env override (`manigot_BIN`,
+  `mg jdi`, which shares this package): env override (`manigot_BIN`,
   `manigot_JOB_BIN`, `manigot_DONE_BIN`, `manigot_DELETE_BIN`,
   `manigot_JDI_BIN`) → canonical name on `$PATH` → `$manigot_HOME/scripts/*.sh`.
   Nothing in the TUI may hardcode a command name; shell aliases are
   unreachable from it.
-- `tui/cmd/jdi` — `mg-jdi` ("just do it"), fully autonomous mode: drives a
+- `tui/cmd/jdi` — `mg jdi` ("just do it"), fully autonomous mode: drives a
   job's fixed `@analyst` → `@developer` → `@reviewer` sequence end to end via
   `scripts/run.sh`'s non-interactive `--print` flag (see below), stopping at
   `verdict.md`'s `## Overall` saying APPROVED, a `NEEDS-HUMAN-INPUT:` marker,
@@ -52,10 +62,10 @@ session with `mg --tool claude-code|opencode`.
   it can never be swept into an agent's `git add -A`: `status` (polled by
   the TUI's list-row badge) and `run.log` (polled by the TUI's detail-view
   log tab). This directory lives in the *target project*, not manigot's own
-  checkout, so `mg-jdi` also ensures that project's own `.git/info/exclude`
+  checkout, so `mg jdi` also ensures that project's own `.git/info/exclude`
   excludes it (idempotent, at startup) rather than assuming its tracked
   `.gitignore` already does — manigot's own `.gitignore` entry for this path
-  only covers manigot's own repo. A direct `mg-jdi --job <id>` run streams that same
+  only covers manigot's own repo. A direct `mg jdi --job <id>` run streams that same
   output live to its own terminal and rings the terminal bell (`\a`) when it
   stops; a TUI-launched run (`j` in the detail view) has no terminal of its
   own at all — it starts fully detached, with the status badge and log tab as
@@ -74,7 +84,7 @@ session with `mg --tool claude-code|opencode`.
   `--dangerously-skip-permissions`; or checks for a provider API key and execs
   `opencode`.
 - `scripts/run.sh`'s `--print` flag — non-interactive invocation (used by
-  automated/unattended runs, e.g. `mg-jdi`, not by a human's own `mg`/TUI
+  automated/unattended runs, e.g. `mg jdi`, not by a human's own `mg`/TUI
   session) that appends one extra sentence to the job prompt defining the
   `NEEDS-HUMAN-INPUT:` marker: an agent that cannot proceed without a human
   decision stops and prints a line starting with exactly that string instead
@@ -108,16 +118,17 @@ session with `mg --tool claude-code|opencode`.
 ## Commands
 - `make build` — build the image (skips if already built)
 - `make rebuild` — force rebuild with no cache, after a Claude Code / OpenCode update
-- `make install` / `make uninstall` — symlink the launchers (`mg`, `mg-job`,
-  `mg-done`, `mg-tui`, `mg-jdi`) into `PREFIX/bin` (default `/usr/local`)
+- `make install` / `make uninstall` — symlink the single `mg` dispatcher into
+  `PREFIX/bin` (default `/usr/local`)
 - `make tui` — build the host-side TUI into `bin/manigot-tui`
 - `make jdi` — build the host-side autonomous-mode binary into `bin/manigot-jdi`
 - `mg` — start a session from inside a project directory
 - `mg --tool opencode` — same, but running OpenCode instead of Claude Code
-- `mg-job "<title>" [--type fix|chore]` — create a job dir + branch
-- `mg-done <id>` — archive a finished job
-- `mg-tui` — host-side terminal UI for browsing jobs and firing agents
-- `mg-jdi --job <id>` — drive a job's `@analyst` → `@developer` → `@reviewer`
+- `mg job "<title>" [--type fix|chore]` — create a job dir + branch
+- `mg done <id>` — archive a finished job
+- `mg delete <id>` — permanently delete a job (directory + branch, no merge)
+- `mg tui` — host-side terminal UI for browsing jobs and firing agents
+- `mg jdi --job <id>` — drive a job's `@analyst` → `@developer` → `@reviewer`
   sequence end to end, unattended (Claude Code only for v1 — see Job workflow)
 
 ## Job workflow
@@ -126,13 +137,13 @@ Each job lives in `docs/jobs/<id>_<slug>/` with four files:
 `implementation.md` (`@developer`), `verdict.md` (`@reviewer` / `@security`).
 A branch `feature|fix|chore/<id>_<slug>` is created alongside it.
 
-Typical feature flow: `mg-job` → fill `brief.md` → `@product-owner` →
+Typical feature flow: `mg job` → fill `brief.md` → `@product-owner` →
 `@analyst` → review `tasks.md` → `@developer` per task → `@reviewer` →
 `@security` → fix and re-review → merge → mark `brief.md` status `done`.
 Bug fixes skip the `@product-owner`/`@analyst` steps and go straight to
 `@developer`.
 
-`mg-jdi` automates the middle of that flow — `@analyst` → `@developer` →
+`mg jdi` automates the middle of that flow — `@analyst` → `@developer` →
 `@reviewer`, the same fixed sequence for every job `type` — without a human
 manually triggering each stage. `@product-owner` and `@security` are not
 part of it; both remain ordinary manually-launched agents, unaffected. It

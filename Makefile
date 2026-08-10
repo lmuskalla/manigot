@@ -47,10 +47,11 @@ jdi: ## Build the host-side mg-jdi binary into bin/
 	@echo "Install:  make install   (or: make install PREFIX=\$$HOME/.local)"
 
 # ── Install ─────────────────────────────────────────────────────────────────────
-# Symlinks the launchers into PREFIX/bin under their canonical sc- names.
-# Symlinks (not copies) so a `git pull` updates the installed commands too.
-# Never a prerequisite of another target — this is the only thing here that
-# writes outside the repo.
+# Symlinks the single `mg` dispatcher into PREFIX/bin. `mg` itself execs the
+# matching sibling script (job/tui/jdi/done/delete, or run.sh by default) —
+# see scripts/mg.sh. Symlink (not a copy) so a `git pull` updates the
+# installed command too. Never a prerequisite of another target — this is
+# the only thing here that writes outside the repo.
 #
 #   make install                      → /usr/local/bin (may need sudo)
 #   make install PREFIX=$HOME/.local  → ~/.local/bin, no sudo needed
@@ -60,12 +61,7 @@ BINDIR  := $(PREFIX)/bin
 
 # <installed name>:<script>.
 LINKS := \
-	mg:run.sh \
-	mg-tui:tui.sh \
-	mg-jdi:jdi.sh \
-	mg-job:new-job.sh \
-	mg-done:finish-job.sh \
-	mg-delete:delete-job.sh
+	mg:mg.sh
 
 install: ## Symlink the manigot launchers into PREFIX/bin (default /usr/local)
 	@mkdir -p "$(BINDIR)"
@@ -77,8 +73,8 @@ install: ## Symlink the manigot launchers into PREFIX/bin (default /usr/local)
 	@echo "Installed into $(BINDIR)."
 	@case ":$$PATH:" in *":$(BINDIR):"*) ;; \
 		*) echo "Warning: $(BINDIR) is not on your PATH." ;; esac
-	@test -x "$(TUI_BIN)" || echo "Note: run 'make tui' to build the TUI binary mg-tui needs."
-	@test -x "$(JDI_BIN)" || echo "Note: run 'make jdi' to build the binary mg-jdi needs."
+	@test -x "$(TUI_BIN)" || echo "Note: run 'make tui' to build the TUI binary 'mg tui' needs."
+	@test -x "$(JDI_BIN)" || echo "Note: run 'make jdi' to build the binary 'mg jdi' needs."
 
 uninstall: ## Remove the symlinks created by `make install`
 	@for pair in $(LINKS); do \

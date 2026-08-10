@@ -665,7 +665,7 @@ func TestDetailViewLogTabPlaceholderWhenNoRun(t *testing.T) {
 	if d.tabs[4].exists {
 		t.Error("log tab exists=true with no run.log at all, want false")
 	}
-	if !strings.Contains(d.tabs[4].content, "no mg-jdi run has happened") {
+	if !strings.Contains(d.tabs[4].content, "no mg jdi run has happened") {
 		t.Errorf("log tab placeholder = %q, want it to explain no run has happened yet", d.tabs[4].content)
 	}
 }
@@ -786,8 +786,8 @@ func TestDetailVimKeysAreInert(t *testing.T) {
 // jdi instances" job) -----------------------------------------------------
 
 // TestDetailActionBarShowsJDIRunningBadge confirms the detail view's action
-// bar renders the same "[mg-jdi: running @<agent>]" badge the job-list row
-// already shows, right alongside the "[j] mg-jdi" button, when the sidecar
+// bar renders the same "[mg jdi: running @<agent>]" badge the job-list row
+// already shows, right alongside the "[j] mg jdi" button, when the sidecar
 // reports job.JDIRunning.
 func TestDetailActionBarShowsJDIRunningBadge(t *testing.T) {
 	root := t.TempDir()
@@ -799,7 +799,7 @@ func TestDetailActionBarShowsJDIRunningBadge(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if !strings.Contains(bar, "mg-jdi: running @developer") {
+	if !strings.Contains(bar, "mg jdi: running @developer") {
 		t.Errorf("action bar missing the running badge:\n%s", bar)
 	}
 }
@@ -816,7 +816,7 @@ func TestDetailActionBarShowsJDIFinishedBadge(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if !strings.Contains(bar, "mg-jdi: finished") {
+	if !strings.Contains(bar, "mg jdi: finished") {
 		t.Errorf("action bar missing the finished badge:\n%s", bar)
 	}
 }
@@ -833,15 +833,15 @@ func TestDetailActionBarShowsJDINeedsHumanBadge(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if !strings.Contains(bar, "mg-jdi: needs human") {
+	if !strings.Contains(bar, "mg jdi: needs human") {
 		t.Errorf("action bar missing the needs-human badge:\n%s", bar)
 	}
 }
 
 // TestDetailActionBarOmitsJDIBadgeWhenNoStatus confirms there is no badge at
 // all — not even an empty one — when there is no sidecar status file yet for
-// the job. The plain "[j] mg-jdi" button label (no colon) is expected to
-// still be present; only the colon-bearing "mg-jdi:" badge text must be
+// the job. The plain "[j] mg jdi" button label (no colon) is expected to
+// still be present; only the colon-bearing "mg jdi:" badge text must be
 // absent.
 func TestDetailActionBarOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 	root := t.TempDir()
@@ -849,11 +849,11 @@ func TestDetailActionBarOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if strings.Contains(bar, "mg-jdi:") {
-		t.Errorf("action bar should not mention mg-jdi: with no status sidecar:\n%s", bar)
+	if strings.Contains(bar, "mg jdi:") {
+		t.Errorf("action bar should not mention mg jdi: with no status sidecar:\n%s", bar)
 	}
-	if !strings.Contains(bar, "mg-jdi") {
-		t.Errorf("action bar should still show the [j] mg-jdi button itself:\n%s", bar)
+	if !strings.Contains(bar, "mg jdi") {
+		t.Errorf("action bar should still show the [j] mg jdi button itself:\n%s", bar)
 	}
 }
 

@@ -58,7 +58,7 @@ When working on a job, make sure you are on its branch before reviewing: read th
 
 Write your findings to `quality.md` in the job directory if working on a job, or state your findings clearly if reviewing a specific area.
 
-When you write `quality.md`, commit it — an uncommitted review note blocks `mg-done`:
+When you write `quality.md`, commit it — an uncommitted review note blocks `mg done`:
 ```
 git add quality.md
 git commit -m "[ID] quality: <one-line summary>"

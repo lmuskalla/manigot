@@ -3,8 +3,8 @@
 // The manigot TUI is a host-side terminal interface for managing manigot
 // jobs and launching agents without remembering command syntax. It runs on the
 // user's machine (NOT inside the manigot container), reads a project's
-// docs/jobs/ directories, and shells out to the host commands sc and
-// mg-job. See docs/jobs/archive/irw320_tui/ for the full design.
+// docs/jobs/ directories, and shells out to the host commands mg and
+// mg job. See docs/jobs/archive/irw320_tui/ for the full design.
 //
 // Run from the repository root:
 //
@@ -30,10 +30,10 @@ var version = "0.1.0-dev"
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "mg-tui %s\n\n", version)
+		fmt.Fprintf(os.Stderr, "mg tui %s\n\n", version)
 		fmt.Fprintf(os.Stderr, "Terminal UI for managing manigot jobs.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n")
-		fmt.Fprintf(os.Stderr, "  mg-tui [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "  mg tui [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Run from anywhere inside a project that has a docs/ directory.\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
@@ -47,18 +47,18 @@ func main() {
 
 	root, err := job.FindProjectRoot()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg-tui: cannot read working directory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg tui: cannot read working directory: %v\n", err)
 		os.Exit(1)
 	}
 	if root == "" {
-		fmt.Fprintln(os.Stderr, "mg-tui: not inside a manigot project (no docs/ directory found in this or any parent).")
+		fmt.Fprintln(os.Stderr, "mg tui: not inside a manigot project (no docs/ directory found in this or any parent).")
 		fmt.Fprintln(os.Stderr, "Run from inside a project that has a docs/ directory.")
 		os.Exit(1)
 	}
 
 	jobs, err := job.Discover(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg-tui: cannot read jobs: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg tui: cannot read jobs: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -70,7 +70,7 @@ func main() {
 
 	p := tea.NewProgram(ui.NewApp(root, jobs), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "mg-tui: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mg tui: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -1,5 +1,5 @@
 // Package resolve locates the manigot host commands that the TUI shells out
-// to (sc, mg-job, mg-done, mg-delete, mg-jdi).
+// to (mg, mg job, mg done, mg delete, mg jdi).
 //
 // The TUI must not assume a particular installation method. Users may symlink
 // the launchers into /usr/local/bin under their canonical names, or not

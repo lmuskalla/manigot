@@ -1,4 +1,4 @@
-// Package hostcmd runs the existing manigot host commands (mg-job, etc.)
+// Package hostcmd runs the existing manigot host commands (mg job, etc.)
 // rather than reimplementing them, so the TUI stays in step with the scripts.
 //
 // Commands are located through the resolve package, never by a hardcoded name,

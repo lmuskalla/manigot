@@ -44,8 +44,8 @@ func TestJdiKeyLaunchesDetachedAndSeedsBellDedup(t *testing.T) {
 	if cmd != nil {
 		t.Errorf("updateDetail(j) returned a non-nil cmd, want nil (Jdi runs synchronously to Start(), no tea.Cmd needed)")
 	}
-	if !strings.Contains(a.detail.status, "mg-jdi") {
-		t.Errorf("status = %q, want it to mention mg-jdi starting", a.detail.status)
+	if !strings.Contains(a.detail.status, "mg jdi") {
+		t.Errorf("status = %q, want it to mention mg jdi starting", a.detail.status)
 	}
 	if got := a.jdiSeen[jobs[0].Name]; got != job.JDIRunning {
 		t.Errorf("jdiSeen[%q] = %q, want %q (seeded immediately on launch)", jobs[0].Name, got, job.JDIRunning)

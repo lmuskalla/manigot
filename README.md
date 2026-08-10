@@ -21,15 +21,16 @@ manigot/
   Dockerfile              ← build once, rebuild on Claude Code / OpenCode updates
   Makefile                ← build / rebuild / install / make tui / make jdi
   scripts/                ← launcher and utility scripts
-    run.sh                ← container launcher      → 'mg'
-    new-job.sh            ← job generator           → 'mg-job'
-    finish-job.sh         ← job archiver            → 'mg-done'
-    delete-job.sh         ← job deleter             → 'mg-delete'
-    tui.sh                ← TUI launcher            → 'mg-tui'
-    jdi.sh                ← autonomous-mode launcher → 'mg-jdi'
+    mg.sh                 ← dispatcher              → 'mg' (the only symlink)
+    run.sh                ← container launcher      → 'mg' (no subcommand)
+    new-job.sh            ← job generator           → 'mg job'
+    finish-job.sh         ← job archiver            → 'mg done'
+    delete-job.sh         ← job deleter             → 'mg delete'
+    tui.sh                ← TUI launcher            → 'mg tui'
+    jdi.sh                ← autonomous-mode launcher → 'mg jdi'
     entrypoint.sh         ← runs inside the container before the agent CLI starts
   tui/                    ← host-side TUI source (Go); `make tui` builds bin/manigot-tui
-                             tui/cmd/jdi/ is mg-jdi, same module; `make jdi` builds bin/manigot-jdi
+                             tui/cmd/jdi/ is what 'mg jdi' runs, same module; `make jdi` builds bin/manigot-jdi
   bin/                    ← built binaries (gitignored)
   .env                    ← your credentials (gitignored, never committed)
   .gitignore
@@ -144,19 +145,20 @@ allowed, because there it is the normal way to authenticate.
 
 ### The installed commands
 
-`make install` puts six commands on your `PATH`:
+`make install` puts a single command, `mg`, on your `PATH`. It dispatches on
+its first argument:
 
 | command | does |
 |---|---|
 | `mg` | start a session in the current project |
-| `mg-job` | create a job directory + branch (off `main`) |
-| `mg-done` | archive a finished job |
-| `mg-delete` | permanently delete a job (directory + branch, no merge) |
-| `mg-tui` | the terminal UI (needs `make tui` first) |
-| `mg-jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first) |
+| `mg job` | create a job directory + branch (off `main`) |
+| `mg done` | archive a finished job |
+| `mg delete` | permanently delete a job (directory + branch, no merge) |
+| `mg tui` | the terminal UI (needs `make tui` first) |
+| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first) |
 
-They are symlinks back into the repo, so `git pull` updates them. `make
-uninstall` removes them again.
+`mg` is a symlink back into the repo, so `git pull` updates it. `make
+uninstall` removes it again.
 
 ### Installing without symlinks
 
@@ -164,12 +166,7 @@ If you would rather not write to `/usr/local/bin`, define shell aliases instead:
 
 ```bash
 # ~/.zshrc or ~/.bashrc
-alias mg='~/code/manigot/scripts/run.sh'
-alias mg-job='~/code/manigot/scripts/new-job.sh'
-alias mg-done='~/code/manigot/scripts/finish-job.sh'
-alias mg-delete='~/code/manigot/scripts/delete-job.sh'
-alias m,g-tui='~/code/manigot/scripts/tui.sh'
-alias mg-jdi='~/code/manigot/scripts/jdi.sh'
+alias mg='~/code/manigot/scripts/mg.sh'
 ```
 
 One catch: aliases only exist inside your interactive shell, so the TUI cannot
@@ -226,15 +223,15 @@ mg --agent analyst
 mg --tool opencode --job a3f9k2
 
 # Create a new job
-mg-job "add image gallery block"
-mg-job "fix tenant isolation on media uploads" --type fix
-mg-job "upgrade dependencies" --type chore
+mg job "add image gallery block"
+mg job "fix tenant isolation on media uploads" --type fix
+mg job "upgrade dependencies" --type chore
 
 # Archive a finished job
-mg-done a3f9k2
+mg done a3f9k2
 
 # Drive a job unattended: @analyst -> @developer -> @reviewer, end to end
-mg-jdi --job a3f9k2
+mg jdi --job a3f9k2
 ```
 
 ---
@@ -254,7 +251,7 @@ mg-jdi --job a3f9k2
 | `docs/AGENTS.md` mounted at | `/workspace/.claude/CLAUDE.md` | `/workspace/AGENTS.md` |
 | Initial job prompt | positional argument | `--prompt` |
 | Billing | your Claude subscription | per token, on your provider key |
-| Non-interactive (`--print` / `mg-jdi`) | supported | not supported in v1 — rejected with an error |
+| Non-interactive (`--print` / `mg jdi`) | supported | not supported in v1 — rejected with an error |
 
 Both tools get the same `agents/*.md` files baked in at build time. The
 OpenCode copies are generated from the same sources with the `name` and `tools`
@@ -297,7 +294,7 @@ named with a 6-character random ID and a slugified title. A git branch is
 created automatically with the same ID.
 
 ```bash
-mg-job "add image gallery block"
+mg job "add image gallery block"
 # creates: docs/jobs/a3f9k2_add-image-gallery-block/
 #   brief.md    ← you fill in: what and why
 #   tasks.md    ← @analyst fills in: atomic task breakdown
@@ -309,7 +306,7 @@ mg-job "add image gallery block"
 **Typical flow for a feature:**
 
 ```
-1.  mg-job "feature name"               → creates dir + branch
+1.  mg job "feature name"               → creates dir + branch
 2.  Fill in brief.md
 3.  @product-owner                      → SHIP / REVISIT / REJECT
 4.  @analyst                            → writes tasks.md
@@ -328,13 +325,13 @@ mg-job "add image gallery block"
 Job types: `feature` (default), `fix`, `chore`.
 Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug`.
 
-### Autonomous mode (`mg-jdi`)
+### Autonomous mode (`mg jdi`)
 
 Steps 4–8 above — `@analyst` → `@developer` → `@reviewer` — can run
 unattended instead of one agent at a time:
 
 ```bash
-mg-jdi --job a3f9k2
+mg jdi --job a3f9k2
 ```
 
 It drives that fixed sequence, the same one regardless of job `type`, in a
@@ -348,18 +345,18 @@ yourself — when:
   the re-review still isn't APPROVED — no further retries, or
 - an agent decides it's blocked and can't proceed without you: it prints a
   line starting with exactly `NEEDS-HUMAN-INPUT:` followed by why (a
-  convention only `--print`/`mg-jdi` invocations ask for — an ordinary
+  convention only `--print`/`mg jdi` invocations ask for — an ordinary
   interactive session never sees this instruction and just asks its
   question in conversation, since you're right there to answer it), or
 - the same agent makes no progress on two consecutive runs (a stall
   backstop, independent of the marker above).
 
-`@product-owner` and `@security` are not part of the sequence `mg-jdi`
+`@product-owner` and `@security` are not part of the sequence `mg jdi`
 drives — both stay available as ordinary agents, unaffected. **v1 is Claude
 Code only** — `mg --print --tool opencode` is rejected with a clear error;
 OpenCode's non-interactive invocation is unverified.
 
-**Watching a run.** A direct `mg-jdi --job <id>` run streams each agent's
+**Watching a run.** A direct `mg jdi --job <id>` run streams each agent's
 output to its own terminal as each invocation completes, and rings the
 terminal bell when it stops. One honesty note: `claude --print` returns an
 agent's *final response text* per invocation, not a blow-by-blow of every
@@ -375,7 +372,7 @@ log tab are how you watch it there instead.
 manigot ships an optional terminal UI for browsing jobs and launching agents
 without remembering command syntax. It is **host-side**: it runs on your
 machine, reads a project's `docs/jobs/`, and shells out to the `mg`,
-`mg-job`, and `mg-jdi` commands. It does **not** run in the container and
+`mg job`, and `mg jdi` commands. It does **not** run in the container and
 needs no credentials itself. It finds those commands dynamically — see
 [Installing without symlinks](#installing-without-symlinks) if they are not on
 your `PATH`.
@@ -410,23 +407,24 @@ Windows is not supported in this version.
 ```bash
 cd manigot/
 make tui        # builds bin/manigot-tui
-make jdi        # builds bin/manigot-jdi (needed for the TUI's "j" key and mg-jdi itself)
-make install    # puts mg-tui, mg-jdi (and the other launchers) on your PATH
+make jdi        # builds bin/manigot-jdi (needed for the TUI's "j" key and mg jdi itself)
+make install    # puts the single mg dispatcher (covering mg tui, mg jdi, ...) on your PATH
 ```
 
 `make tui`/`make jdi` each build a single static binary, `bin/manigot-tui`
 and `bin/manigot-jdi` (requires Go 1.23+ and network access the first time,
-to fetch the Charm modules — `mg-jdi` itself doesn't use them, but shares the
-module and its cache with the TUI). `make install` symlinks
-`scripts/tui.sh`/`scripts/jdi.sh` onto your `PATH` alongside `mg` and
-`mg-job`; those wrappers also tell the binaries where this checkout is, so
-they can find the scripts even when nothing else is installed.
+to fetch the Charm modules — `mg jdi` itself doesn't use them, but shares the
+module and its cache with the TUI). `make install` symlinks the single `mg`
+dispatcher onto your `PATH`; `mg tui`/`mg jdi` shell out to
+`scripts/tui.sh`/`scripts/jdi.sh`, which tell the binaries where this
+checkout is, so they can find the scripts even when nothing else is
+installed.
 
 ### Run
 
 ```bash
 cd your-project/
-mg-tui                # from anywhere inside a project that has a docs/
+mg tui                # from anywhere inside a project that has a docs/
 ```
 
 ### Keybindings
@@ -438,7 +436,7 @@ List view:
 | `↑`/`↓` or `k`/`j` | move selection |
 | `enter` | open the job's detail view |
 | `o` | launch a quick manigot session (no agent, no job) |
-| `n` | create a new job (runs the host `mg-job`) |
+| `n` | create a new job (runs the host `mg job`) |
 | `s` | open settings (editor, agent tool) |
 | `ctrl+r` | refresh — re-read job files from disk |
 | `q` | quit |
@@ -450,17 +448,17 @@ Detail view:
 | `tab` / `1`-`5` | switch tab: brief · tasks · implementation · verdict · log |
 | `pgup`/`pgdn`, `g`/`G` | scroll |
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
-| `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log are agent- or mg-jdi-written) |
-| `D` | mark the job done (runs the host `mg-done`, in the foreground so its confirmation prompts work) |
-| `j` | run `mg-jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg-jdi status & log](#mg-jdi-status--log) below) |
-| `x` / `del` | permanently delete the job (runs the host `mg-delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
+| `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log are agent- or mg jdi-written) |
+| `D` | mark the job done (runs the host `mg done`, in the foreground so its confirmation prompts work) |
+| `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
+| `x` / `del` | permanently delete the job (runs the host `mg delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`j`/`x`/agent keys work on a job that isn't on the current branch |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
-The **log** tab shows `mg-jdi`'s `run.log` for this job — one section per
+The **log** tab shows `mg jdi`'s `run.log` for this job — one section per
 agent invocation, with a timestamp/agent/attempt header. It reads
-"_no mg-jdi run has happened for this job yet_" until the first `mg-jdi` run
+"_no mg jdi run has happened for this job yet_" until the first `mg jdi` run
 against it; large files are tailed, not loaded in full. Never editable.
 
 `e` resolves the editor to run as: the settings screen's Editor field (see
@@ -505,38 +503,38 @@ straight to `@developer`) isn't blocked by the TUI.
 | review | `implementation.md` written, `verdict.md` not yet |
 | finished | `verdict.md` written and its `## Overall` verdict is APPROVED |
 
-A file counts as "written" once it has real content beyond its `mg-job`
+A file counts as "written" once it has real content beyond its `mg job`
 scaffold (template comments, empty headings, and frontmatter don't count). A
 verdict that's written but not approved (REJECTED, NEEDS WORK, or anything
 else) bounces the stage back to implement rather than resolving to review or
 finished — the job needs more work before it goes through review again.
 
-Press `D` from the detail view at any point to run the host `mg-done`
+Press `D` from the detail view at any point to run the host `mg done`
 (`scripts/finish-job.sh`) and mark the job done — it squash-merges the job
 branch into the default branch, archives the job directory under
 `docs/jobs/archive/`, and sets `status: done`. This runs in the foreground
-(suspending the TUI, like `e`) because `mg-done` asks for interactive
+(suspending the TUI, like `e`) because `mg done` asks for interactive
 confirmation along the way; per its own behavior, it warns rather than blocks
 on a missing or unapproved verdict, so this is available from any stage too.
 
-### mg-jdi status & log
+### mg jdi status & log
 
-Press `j` in the detail view to start [`mg-jdi`](#autonomous-mode-mg-jdi)
+Press `j` in the detail view to start [`mg jdi`](#autonomous-mode-mg-jdi)
 against that job. Unlike the agent-launch keys above, this opens **no
-terminal window at all** — `mg-jdi` has no interactive session for a human
+terminal window at all** — `mg jdi` has no interactive session for a human
 or a subprocess to attach to, so it runs fully detached in the background.
 Two places show you what it's doing instead, both polled the same
 refresh-triggered way as everything else in the TUI (pressing `ctrl+r`,
 returning to the list, etc. — no separate live-streaming subsystem):
 
-- **List-row badge** — a `[mg-jdi: running @<agent>]`,
-  `[mg-jdi: finished]`, or `[mg-jdi: needs human]` tag next to a job's row,
+- **List-row badge** — a `[mg jdi: running @<agent>]`,
+  `[mg jdi: finished]`, or `[mg jdi: needs human]` tag next to a job's row,
   next to its branch tag. Shown only while there's something live or recent
-  to report; a stale status left behind by a killed `mg-jdi` process is
+  to report; a stale status left behind by a killed `mg jdi` process is
   never shown as if it were current.
 - **Log tab** — see [Keybindings](#keybindings) above.
 
-**Notification.** A direct `mg-jdi --job <id>` run rings the terminal bell
+**Notification.** A direct `mg jdi --job <id>` run rings the terminal bell
 itself when it stops (see [Autonomous mode](#autonomous-mode-mg-jdi)). A
 `j`-launched run has no terminal to ring into, so the TUI rings it instead,
 on its own next poll, the first time it notices that job's status turn into
