@@ -23,6 +23,7 @@ manigot/
   scripts/                ← launcher and utility scripts
     mg.sh                 ← dispatcher              → 'mg' (the only symlink)
     run.sh                ← container launcher      → 'mg' (no subcommand)
+    agents.sh             ← agent picker            → 'mg agents'
     new-job.sh            ← job generator           → 'mg job'
     finish-job.sh         ← job archiver            → 'mg done'
     delete-job.sh         ← job deleter             → 'mg delete'
@@ -160,6 +161,7 @@ its first argument:
 | command | does |
 |---|---|
 | `mg` | start a session in the current project (works with or without `docs/` — see above) |
+| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job directory + branch (off `main`); needs `docs/` |
 | `mg done` | archive a finished job; needs `docs/` |
@@ -315,7 +317,8 @@ enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
 ## Agents
 
 Eight agents are available globally in every project. Call them with `@name` in
-your session.
+your session, or run `mg agents` from the host to list them (with any
+`docs/agents/` overrides) and pick one to start straight into.
 
 | Agent | Role | Tools (Claude Code) |
 |---|---|---|

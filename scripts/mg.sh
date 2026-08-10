@@ -5,6 +5,7 @@ set -euo pipefail
 # mg                              # start a session (today's run.sh behavior)
 # mg --tool opencode              # ...with flags, unchanged
 # mg --agent analyst --job <id>
+# mg agents                       # today's agents.sh — pick an agent, then run.sh
 # mg job "title" [--type ...]     # today's new-job.sh
 # mg tui                          # today's tui.sh
 # mg jdi --job <id>               # today's jdi.sh
@@ -16,7 +17,7 @@ set -euo pipefail
 # Single dispatcher: the only script `make install` symlinks onto PATH as
 # `mg`. It inspects $1 — if it's -h/--help/help, prints usage and exits
 # (before any subcommand runs, so it needs no docker/auth setup); if it
-# exactly matches one of the six subcommand names above, it execs the
+# exactly matches one of the seven subcommand names above, it execs the
 # matching sibling script with the remaining args unchanged; anything else
 # (no args at all, or any other first token, including run.sh's own
 # --agent/--job/--tool/--print flags) falls through to run.sh with all
@@ -52,6 +53,7 @@ Usage:
   mg --agent <name> --job <id>    Combine the two
 
 Commands:
+  mg agents                       List available agents and pick one to start
   mg init [--tool claude-code|opencode]
                                    Bootstrap this project for the job workflow
   mg job "<title>" [--type feature|fix|chore]
@@ -75,6 +77,10 @@ case "${1:-}" in
     -h|--help|help)
         print_help
         exit 0
+        ;;
+    agents)
+        shift
+        exec "$SCRIPT_DIR/agents.sh" "$@"
         ;;
     job)
         shift

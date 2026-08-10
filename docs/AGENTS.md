@@ -9,8 +9,9 @@ session with `mg --tool claude-code|opencode`.
 ## Stack
 - Runtime: Docker (single image, built from `Dockerfile`)
 - Agent CLIs: Claude Code (`claude`) and OpenCode (`opencode`), both installed in the image
-- Orchestration: Bash scripts in `scripts/` (`mg.sh`, `run.sh`, `new-job.sh`,
-  `finish-job.sh`, `delete-job.sh`, `tui.sh`, `jdi.sh`, `init.sh`, `entrypoint.sh`)
+- Orchestration: Bash scripts in `scripts/` (`mg.sh`, `run.sh`, `agents.sh`,
+  `new-job.sh`, `finish-job.sh`, `delete-job.sh`, `tui.sh`, `jdi.sh`, `init.sh`,
+  `entrypoint.sh`)
 - Build/CLI: `Makefile` (`make build`, `make rebuild`, `make install`, `make tui`, `make jdi`)
 - Host-side TUI: Go, in `tui/` — built with `make tui`, never runs in the container
 - Autonomous mode: Go, in `tui/cmd/jdi` (same module as the TUI) — built with
@@ -22,12 +23,12 @@ session with `mg --tool claude-code|opencode`.
   Claude Code or OpenCode update via `make rebuild`.
 - `scripts/mg.sh` — the single dispatcher, symlinked as `mg` in PATH. Inspects
   its first argument: `-h`/`--help`/`help` prints usage and exits immediately
-  (no docker/auth setup touched); one of the six subcommand names
-  (`job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`, `done`→`finish-job.sh`,
-  `delete`→`delete-job.sh`, `init`→`init.sh`) execs the matching sibling
-  script unchanged; anything else (no args, or any other first token,
-  including `run.sh`'s own `--agent`/`--job`/`--tool`/`--print` flags) falls
-  through to `run.sh` with all original args untouched.
+  (no docker/auth setup touched); one of the seven subcommand names
+  (`agents`→`agents.sh`, `job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`,
+  `done`→`finish-job.sh`, `delete`→`delete-job.sh`, `init`→`init.sh`) execs
+  the matching sibling script unchanged; anything else (no args, or any other
+  first token, including `run.sh`'s own `--agent`/`--job`/`--tool`/`--print`
+  flags) falls through to `run.sh` with all original args untouched.
 - `scripts/run.sh` — container launcher, reached via bare `mg` (no
   subcommand). Mounts the current project root into the container at
   `/workspace`; nothing outside it on the host is reachable from inside. A
@@ -40,6 +41,12 @@ session with `mg --tool claude-code|opencode`.
   like `mg job`/`mg jdi` still require it). When no `docs/` is found, the
   container boundary falls back to the git root, else `$PWD`. Validates auth
   per tool and passes the choice on as `manigot_TOOL`.
+- `scripts/agents.sh` — reached via `mg agents`. Lists every agent available
+  to the current project — the global `agents/*.md` files, each swapped for
+  its `docs/agents/` override when one exists, plus any project-only
+  additions — prompts for a numbered selection, then execs `run.sh --agent
+  <name>` with any other args (e.g. `--tool`) passed through. Works without
+  `docs/` too, same as bare `mg` — it just has no overrides to show.
 - `scripts/new-job.sh` — reached via `mg job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
   `main` (regardless of the branch the user is currently on).
@@ -143,6 +150,8 @@ session with `mg --tool claude-code|opencode`.
   is optional (see `scripts/run.sh` above) — without it you still get a
   plain agent session, just no project context or job workflow
 - `mg --tool opencode` — same, but running OpenCode instead of Claude Code
+- `mg agents` — list available agents (global + any `docs/agents/`
+  overrides/additions) and pick one interactively to start a session in
 - `mg init [--tool claude-code|opencode]` — bootstrap a project for the job
   workflow (creates `docs/` if absent, optionally hands off to `@prompter`);
   the only job-workflow command that works without an existing `docs/`
