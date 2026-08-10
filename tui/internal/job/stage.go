@@ -150,16 +150,25 @@ func verdictOverallSection(body string) string {
 // FileIsWritten reports whether the file at path has real content beyond its
 // scaffold template.
 //
-// "Written" rule (pinned here for TASK-7; the brief leaves "written"
-// undefined): a job markdown file is scaffolded by new-job.sh with a title
-// heading, loose key:value frontmatter, HTML-comment guidance, and bare
-// section headers — all of which we ignore. The file is "written" when, after
-// stripping HTML comments, the remaining body has at least two substantive
-// lines (a line of ≥8 chars that is not a heading, not frontmatter, and not a
-// TASK- marker) OR at least one TASK-... entry outside comments.
+// "Written" rule (pinned here for TASK-7, corrected by TASK-2 of the "jdi
+// does not work" job; the brief leaves "written" undefined): a job markdown
+// file is scaffolded by new-job.sh with a title heading, loose key:value
+// frontmatter, HTML-comment guidance, and bare section headers — all of
+// which we ignore. The file is "written" when, after stripping HTML
+// comments, the remaining body has at least one substantive line (a line of
+// ≥8 chars that is not a heading, not frontmatter, and not a TASK- marker)
+// OR at least one TASK-... entry outside comments.
 //
-// This correctly classifies the new-job.sh templates as unwritten and the
-// analyst/developer/reviewer-filled versions as written.
+// One substantive line is enough: real usage regularly produces a brief with
+// only a single filled-in section (typically "## What", one paragraph on one
+// line) while every other scaffold section is left as its HTML-comment
+// placeholder — every substantive sentence in it collapses to one line
+// unless the author happens to hit Enter. Requiring two lines misclassified
+// that common, genuinely-written case as unwritten (see the "jdi does not
+// work" job), which made mg jdi stop immediately with "brief.md is not
+// written yet" before ever invoking an agent. One line still correctly
+// rejects every new-job.sh scaffold template below, since those have zero
+// substantive lines at all — only HTML comments, headings, and frontmatter.
 //
 // FileIsWritten reads from disk; isWritten is the bytes-only core, used by
 // Job.fileWritten for off-branch jobs whose contents arrive via git show.
@@ -190,14 +199,21 @@ func isWritten(data []byte) bool {
 			hasTask = true
 			continue
 		}
-		if key, _, ok := splitKV(line); ok && frontmatterKeys[key] {
-			continue // loose frontmatter key: value
+		if key, value, ok := splitKV(line); ok && (frontmatterKeys[key] || value == "") {
+			// Either a recognised frontmatter key: value, or a bare "key:"
+			// with nothing filled in yet (e.g. new-job.sh's unfilled
+			// "analyst:" / "developer:" / "reviewer:" attribution lines) —
+			// neither carries substantive content. Once such a field is
+			// actually filled in (value != ""), it's no longer skipped here
+			// and falls through to the length check below like any other
+			// line.
+			continue
 		}
 		if len(line) >= 8 {
 			substantive++
 		}
 	}
-	return substantive >= 2 || hasTask
+	return substantive >= 1 || hasTask
 }
 
 // stripHTMLComments removes <!-- … --> spans (including multi-line comments)

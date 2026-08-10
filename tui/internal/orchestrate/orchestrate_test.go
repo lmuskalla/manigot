@@ -1,6 +1,8 @@
 package orchestrate
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lmuskalla/manigot/tui/internal/job"
@@ -130,6 +132,57 @@ func TestNextStagesCoverEveryDefinedStage(t *testing.T) {
 		if !covered[s] {
 			t.Errorf("job.Stages contains %q, which orchestrate_test.go's coverage map doesn't know about — add a case", s)
 		}
+	}
+}
+
+// TestNextRealButTerseBriefRunsAnalyst confirms the fix for the "jdi does
+// not work" job holds at the orchestration layer, not just in
+// job.FileIsWritten directly: a job whose brief.md has one filled section
+// (mirroring real usage — and specifically this job's own brief.md, see
+// job.TestTerseRealBriefIsWritten) and no tasks.md yet must make Next
+// return RunAgent("analyst"), not StopNeedsHuman. Before the fix, mg jdi
+// stopped immediately on a job exactly like this, before ever invoking an
+// agent.
+func TestNextRealButTerseBriefRunsAnalyst(t *testing.T) {
+	terseRealBrief := "# Brief: jdi does not work\n\n" +
+		"status: open\n" +
+		"type: feature\n" +
+		"id: 4i5tcx\n" +
+		"branch: feature/4i5tcx_jdi-does-not-work\n" +
+		"date: 2026-08-10\n" +
+		"author: Leander Muskalla\n\n" +
+		"## What\n\n" +
+		"jdi gets immediately stuck. I've tried it for an easy job, but it immediately " +
+		"said \"needs human\" after a few seconds. run.log is empty and status just says " +
+		"\"stopped:needs-human\". I'm pretty sure the LLM wasn't even fast enough to come " +
+		"to that conclusion in the time it already stopped. So something is amiss on our side.\n\n" +
+		"## Why\n\n" +
+		"<!-- Why does this need to exist? What problem does it solve for the user? -->\n\n" +
+		"## Out of scope\n\n" +
+		"<!-- What are we explicitly NOT doing in this job? -->\n\n" +
+		"## Notes\n\n" +
+		"<!-- Anything the analyst or developer should know before starting. -->\n"
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "brief.md"), []byte(terseRealBrief), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No tasks.md yet.
+
+	j, err := job.ReadJob(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.OnCurrentBranch = true
+
+	stage := j.Stage()
+	if stage != job.StagePlan {
+		t.Fatalf("terse-but-real brief.md job stage = %s, want plan", stage)
+	}
+
+	got := Next(stage, 0, false)
+	if got.Kind != RunAgent || got.Agent != "analyst" {
+		t.Errorf("Next(%v, 0, false) = {Kind: %v, Agent: %q}, want {Kind: RunAgent, Agent: \"analyst\"}", stage, got.Kind, got.Agent)
 	}
 }
 

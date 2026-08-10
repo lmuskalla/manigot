@@ -73,6 +73,60 @@ const filledTasks = "# Tasks: X\n\nid: abc123\n\n## Task breakdown\n\nTASK-1: re
 const filledImplementation = "# Implementation: X\n\nid: abc123\n\n## Summary\n\n" +
 	"Real prose line one here.\nMore real prose line two.\n"
 
+// terseRealBrief mirrors real-world usage: exactly one section ("## What")
+// filled in with genuine prose, while the rest of new-job.sh's scaffold
+// sections ("## Why", "## Out of scope", "## Notes") are left untouched as
+// their HTML-comment placeholders — shaped after this job's own brief.md
+// (docs/jobs/4i5tcx_jdi-does-not-work/brief.md). A brief like this is
+// "written" by any human standard, but only produces a single substantive
+// line, which is what TASK-1 is regression-testing against isWritten's old
+// "≥2 substantive lines" rule.
+const terseRealBrief = "# Brief: jdi does not work\n\n" +
+	"status: open\n" +
+	"type: feature\n" +
+	"id: 4i5tcx\n" +
+	"branch: feature/4i5tcx_jdi-does-not-work\n" +
+	"date: 2026-08-10\n" +
+	"author: Leander Muskalla\n\n" +
+	"## What\n\n" +
+	"jdi gets immediately stuck. I've tried it for an easy job, but it immediately " +
+	"said \"needs human\" after a few seconds. run.log is empty and status just says " +
+	"\"stopped:needs-human\". I'm pretty sure the LLM wasn't even fast enough to come " +
+	"to that conclusion in the time it already stopped. So something is amiss on our side.\n\n" +
+	"## Why\n\n" +
+	"<!-- Why does this need to exist? What problem does it solve for the user? -->\n\n" +
+	"## Out of scope\n\n" +
+	"<!-- What are we explicitly NOT doing in this job? -->\n\n" +
+	"## Notes\n\n" +
+	"<!-- Anything the analyst or developer should know before starting. -->\n"
+
+// TestTerseRealBriefIsWritten reproduces the "jdi does not work" bug: a real
+// brief with only one filled section must be classified as written, and a
+// job built from it must report StagePlan (ready for @analyst), not
+// StageDefine. This fails against the pre-fix "≥2 substantive lines" rule in
+// isWritten, confirming the diagnosis before TASK-2's fix lands.
+func TestTerseRealBriefIsWritten(t *testing.T) {
+	path := writeTempFile(t, "brief.md", terseRealBrief)
+	if !FileIsWritten(path) {
+		t.Error("terse-but-real brief.md classified as unwritten")
+	}
+}
+
+func TestTerseRealBriefJobStageIsPlan(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "brief.md"), []byte(terseRealBrief), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	j, err := ReadJob(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.OnCurrentBranch = true
+	if got := j.Stage(); got != StagePlan {
+		t.Errorf("terse-but-real brief.md job stage = %s, want plan", got)
+	}
+}
+
 func writeTempFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()

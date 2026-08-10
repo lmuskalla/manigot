@@ -303,6 +303,7 @@ func jdiTerminalState(k orchestrate.Kind) job.JDIState {
 func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status StatusFunc) LoopResult {
 	var lastAgent string
 	var lastNoChange bool
+	var agentEverRan bool
 
 	report := func(state job.JDIState, agent string) {
 		if status != nil {
@@ -321,6 +322,14 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		decision := orchestrate.Next(stageBefore, rounds, tipIsVerdict)
 
 		if decision.Kind != orchestrate.RunAgent {
+			if !agentEverRan {
+				// No agent has run yet this whole loop (typically the very
+				// first iteration, e.g. an unwritten brief.md) — logInvocation
+				// never gets a chance to run for this stop, which otherwise
+				// leaves run.log at 0 bytes for a case that has just as much
+				// reason to explain itself there as any agent invocation does.
+				logImmediateStop(log, decision.Reason)
+			}
 			return finish(decision.Kind, decision.Reason)
 		}
 
@@ -328,6 +337,7 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		headBefore, _ := git.HeadCommit(root, j.Branch)
 
 		out, runErr := runner.Run(decision.Agent, j)
+		agentEverRan = true
 		// Fan-out (Decision 7/TASK-7): log gets the same formatted section
 		// regardless of whether it's os.Stdout, the sidecar run.log, or (in
 		// tests) an in-memory buffer — see main()'s io.MultiWriter and

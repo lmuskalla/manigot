@@ -307,6 +307,42 @@ func TestRunStopsOnRunnerError(t *testing.T) {
 	}
 }
 
+// TestRunLogsImmediateStopReason confirms an immediate stop — Next()
+// returning a Stop* decision before any agent has ever run, e.g. a
+// genuinely-unwritten brief.md — writes its Reason to the log, not just to
+// mg jdi's own return value. Before this fix, this case left the log at 0
+// bytes, which read as "mg jdi didn't do anything at all" rather than "mg
+// jdi correctly stopped immediately, here's why".
+func TestRunLogsImmediateStopReason(t *testing.T) {
+	root, j := initTestRepo(t)
+	// Overwrite brief.md with the genuinely-unwritten scaffold shape (no
+	// substantive content at all) so Stage() reports StageDefine and Next
+	// stops before ever invoking an agent.
+	writeJobFile(t, j, "brief.md", "# Brief: test job\n\nstatus: open\ntype: feature\nid: aaaa01\n\n"+
+		"## What\n\n<!-- placeholder -->\n")
+	commit(t, root, "[aaaa01] brief: reset to scaffold")
+
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		t.Fatal("no agent should have been invoked for an immediate stop")
+		return nil
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopNeedsHuman {
+		t.Fatalf("Run.Kind = %v, want StopNeedsHuman (reason: %s)", got.Kind, got.Reason)
+	}
+	if len(r.calls) != 0 {
+		t.Fatalf("calls = %v, want no invocations (immediate stop)", r.calls)
+	}
+	if log.Len() == 0 {
+		t.Fatal("run.log is empty, want it to contain the immediate-stop reason")
+	}
+	if !strings.Contains(log.String(), got.Reason) {
+		t.Errorf("log = %q, want it to contain the stop reason %q", log.String(), got.Reason)
+	}
+}
+
 type errRunner struct{}
 
 func (errRunner) Run(agent string, j job.Job) ([]byte, error) {

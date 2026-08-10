@@ -124,3 +124,16 @@ func logInvocation(w io.Writer, agent string, attempt int, raw []byte) {
 	}
 	fmt.Fprint(w, text)
 }
+
+// logImmediateStop writes an "immediate stop" note to w — orchestrate.Next
+// returning a Stop* decision before any agent has ever been invoked (e.g.
+// job.StageDefine with an unwritten brief.md), the one case logInvocation
+// never runs for. Without this, run.log would be left at 0 bytes for that
+// stop, itself confusing (see the "jdi does not work" job's own complaint)
+// independent of whether the stop was the correct call. Mirrors
+// logInvocation's "=== ... ===" header shape so both look consistent in the
+// same log, but names the stop instead of an agent/attempt.
+func logImmediateStop(w io.Writer, reason string) {
+	fmt.Fprintf(w, "=== %s mg jdi stopped before running any agent ===\n", time.Now().Format(time.RFC3339))
+	fmt.Fprintln(w, reason)
+}
