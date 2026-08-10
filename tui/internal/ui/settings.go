@@ -84,7 +84,7 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 	switch msg.String() {
 	case "esc":
 		return stCancel
-	case "tab":
+	case "tab", "shift+tab":
 		v.focus = 1 - v.focus
 		if v.focus == 0 {
 			v.editor.Focus()
@@ -160,9 +160,9 @@ func (v *settingsView) render() string {
 	if v.status != "" {
 		b.WriteString(statusStyle.Render(v.status))
 	} else if v.focus == 1 {
-		b.WriteString(dimStyle.Render("←/→ change tool · tab editor · enter save · esc cancel"))
+		b.WriteString(dimStyle.Render("←/→ change tool · tab/shift+tab editor · enter save · esc cancel"))
 	} else {
-		b.WriteString(dimStyle.Render("tab tool · enter save · esc cancel"))
+		b.WriteString(dimStyle.Render("tab/shift+tab tool · enter save · esc cancel"))
 	}
 	return b.String()
 }

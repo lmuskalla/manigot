@@ -69,7 +69,7 @@ func (v *newJobView) update(msg tea.KeyMsg) njAction {
 	switch msg.String() {
 	case "esc":
 		return njCancel
-	case "tab":
+	case "tab", "shift+tab":
 		v.focus = 1 - v.focus
 		if v.focus == 0 {
 			v.title.Focus()
@@ -137,9 +137,9 @@ func (v *newJobView) render() string {
 	if v.status != "" {
 		b.WriteString(statusStyle.Render(v.status))
 	} else if v.focus == 1 {
-		b.WriteString(dimStyle.Render("←/→ change type · tab title · enter create · esc cancel"))
+		b.WriteString(dimStyle.Render("←/→ change type · tab/shift+tab title · enter create · esc cancel"))
 	} else {
-		b.WriteString(dimStyle.Render("tab type · enter create · esc cancel"))
+		b.WriteString(dimStyle.Render("tab/shift+tab type · enter create · esc cancel"))
 	}
 	return b.String()
 }

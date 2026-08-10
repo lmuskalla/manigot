@@ -46,6 +46,21 @@ func TestNewJobTabTogglesFocus(t *testing.T) {
 	}
 }
 
+func TestNewJobShiftTabTogglesFocusBackward(t *testing.T) {
+	v := newNewJobView(80, 24)
+	if v.focus != 0 {
+		t.Fatal("expected initial focus title")
+	}
+	v.update(keyMsg("shift+tab"))
+	if v.focus != 1 {
+		t.Errorf("after shift+tab, focus = %d, want 1 (type)", v.focus)
+	}
+	v.update(keyMsg("shift+tab"))
+	if v.focus != 0 {
+		t.Errorf("after second shift+tab, focus = %d, want 0 (title)", v.focus)
+	}
+}
+
 func TestNewJobTypeCycleOnlyWhenTypeFocused(t *testing.T) {
 	v := newNewJobView(80, 24)
 	// focus on title: left/right must not change the type.
