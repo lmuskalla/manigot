@@ -10,15 +10,17 @@ set -euo pipefail
 # mg jdi --job <id>               # today's jdi.sh
 # mg done <id>                    # today's finish-job.sh
 # mg delete <id>                  # today's delete-job.sh
+# mg -h | --help | help           # print_help below, no subcommand exec'd
 #
 # Single dispatcher: the only script `make install` symlinks onto PATH as
-# `mg`. It inspects $1 — if it exactly matches one of the five subcommand
-# names above, it execs the matching sibling script with the remaining args
-# unchanged; anything else (no args at all, or any other first token,
-# including run.sh's own --agent/--job/--tool/--print flags) falls through
-# to run.sh with all original args untouched. None of the underlying
-# scripts change their own logic, flags, or behavior — see
-# docs/jobs/9pze1x_better-cli-syntax/brief.md.
+# `mg`. It inspects $1 — if it's -h/--help/help, prints usage and exits
+# (before any subcommand runs, so it needs no docker/auth setup); if it
+# exactly matches one of the five subcommand names above, it execs the
+# matching sibling script with the remaining args unchanged; anything else
+# (no args at all, or any other first token, including run.sh's own
+# --agent/--job/--tool/--print flags) falls through to run.sh with all
+# original args untouched. None of the underlying scripts change their own
+# logic, flags, or behavior — see docs/jobs/9pze1x_better-cli-syntax/brief.md.
 
 # ── Resolve repo ────────────────────────────────────────────────────────────────
 # Follow symlinks to the real script location — this is installed as a
@@ -35,8 +37,40 @@ resolve_script_dir() {
 }
 SCRIPT_DIR="$(resolve_script_dir)"
 
+print_help() {
+    cat <<'EOF'
+mg — isolated agent environment per project (Claude Code or OpenCode, sandboxed in Docker)
+
+Usage:
+  mg                              Start a session in the current project
+  mg --tool opencode              ...with OpenCode instead of Claude Code
+  mg --agent <name>               Start straight in an agent (e.g. analyst)
+  mg --job <id>                   Start with a job's brief.md as the prompt
+  mg --agent <name> --job <id>    Combine the two
+
+Commands:
+  mg job "<title>" [--type feature|fix|chore]
+                                   Create a job directory + branch (off main)
+  mg done <id>                    Archive a finished job
+  mg delete <id>                  Permanently delete a job (dir + branch, no merge)
+  mg tui                          Terminal UI for browsing jobs and firing agents
+  mg jdi --job <id>                Drive a job's analyst -> developer ->
+                                   reviewer sequence unattended (Claude Code only)
+
+  mg -h, --help, help             Show this help
+
+A bare `mg` works in any project — no setup required. Project context and the
+job workflow (mg job/tui/jdi) additionally need a docs/ directory; see
+'Per-project setup' in the manigot README to add one.
+EOF
+}
+
 # ── Dispatch ────────────────────────────────────────────────────────────────────
 case "${1:-}" in
+    -h|--help|help)
+        print_help
+        exit 0
+        ;;
     job)
         shift
         exec "$SCRIPT_DIR/new-job.sh" "$@"

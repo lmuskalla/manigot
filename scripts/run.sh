@@ -80,6 +80,12 @@ else
 fi
 
 # ── Resolve project root ────────────────────────────────────────────────────────
+# A docs/ directory (walking up from $PWD) marks an initialized project — the
+# job workflow, project context, and project-level agent overrides only exist
+# there. Its absence is not an error: mg still starts a plain, isolated agent
+# session, so it can replace calling `claude`/`opencode` directly in any
+# project. The container boundary then falls back to the git root, if any,
+# else $PWD.
 find_project_root() {
     local dir="$PWD"
     while [[ "$dir" != "/" ]]; do
@@ -92,12 +98,13 @@ find_project_root() {
     echo ""
 }
 
+DOCS_INITIALIZED="true"
 PROJECT_ROOT="$(find_project_root)"
 
 if [[ -z "$PROJECT_ROOT" ]]; then
-    echo "Error: could not find a '$CLAUDE_DIR_NAME/' directory in this or any parent directory."
-    echo "Add a docs/ directory to your project root — see the manigot README."
-    exit 1
+    DOCS_INITIALIZED="false"
+    PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    [[ -z "$PROJECT_ROOT" ]] && PROJECT_ROOT="$PWD"
 fi
 
 PROJECT_ROOT="${PROJECT_ROOT%/}"
@@ -132,8 +139,19 @@ if [[ -n "$CONTEXT_FILE" ]]; then
         CONTEXT_TARGET="/workspace/.claude/CLAUDE.md"
     fi
     CONTEXT_MOUNT=(-v "$CONTEXT_FILE:$CONTEXT_TARGET:ro")
-else
+elif [[ "$DOCS_INITIALIZED" == "true" ]]; then
     echo "Warning: no $CLAUDE_DIR_NAME/AGENTS.md found — the agent will start without project context." >&3
+else
+    echo "Note: no $CLAUDE_DIR_NAME/ directory — starting a plain session with no project context or job workflow." >&3
+    echo "      See 'Per-project setup' in the manigot README to enable them." >&3
+fi
+
+# docs/ itself is only mounted into the container when it exists — an absent
+# host path would otherwise make docker silently create an empty directory
+# there.
+DOCS_MOUNT=()
+if [[ -d "$PROJECT_DOCS_DIR" ]]; then
+    DOCS_MOUNT=(-v "$PROJECT_DOCS_DIR:$DOCS_MOUNT_TARGET:z")
 fi
 
 # ── Resolve job directory ───────────────────────────────────────────────────────
@@ -141,6 +159,11 @@ AGENT_FLAG=()
 JOB_PROMPT=""
 
 if [[ -n "$JOB" ]]; then
+    if [[ "$DOCS_INITIALIZED" != "true" ]]; then
+        echo "Error: --job requires an initialized project (no docs/ found)."
+        echo "See 'Per-project setup' in the manigot README, then 'mg job' to create one."
+        exit 1
+    fi
     JOB_DIR="$PROJECT_ROOT/docs/jobs/$JOB"
     if [[ ! -d "$JOB_DIR" ]]; then
         MATCH=$(find "$PROJECT_ROOT/docs/jobs" -maxdepth 1 -type d -name "${JOB}*" 2>/dev/null | head -1 || true)
@@ -248,7 +271,11 @@ echo "║           manigot                   ║" >&3
 echo "╠══════════════════════════════════════╣" >&3
 echo "║  Project : $(basename "$PROJECT_ROOT")" >&3
 echo "║  Root    : $PROJECT_ROOT" >&3
-echo "║  Docs    : $PROJECT_DOCS_DIR" >&3
+if [[ "$DOCS_INITIALIZED" == "true" ]]; then
+    echo "║  Docs    : $PROJECT_DOCS_DIR" >&3
+else
+    echo "║  Docs    : (none — job workflow unavailable)" >&3
+fi
 [[ -n "$CONTEXT_FILE" ]] && echo "║  Context : $CONTEXT_FILE → $CONTEXT_TARGET" >&3
 [[ -n "$TOOL"  ]] && echo "║  Tool    : $TOOL" >&3
 [[ -n "$AGENT" ]] && echo "║  Agent   : $AGENT" >&3
@@ -271,7 +298,7 @@ docker run "${DOCKER_TTY_FLAGS[@]+"${DOCKER_TTY_FLAGS[@]}"}" --rm \
     --name "manigot-$(basename "$PROJECT_ROOT")-$$" \
     --user "$(id -u):$(id -g)" \
     -v "$PROJECT_ROOT:/workspace:z" \
-    -v "$PROJECT_DOCS_DIR:$DOCS_MOUNT_TARGET:z" \
+    "${DOCS_MOUNT[@]+"${DOCS_MOUNT[@]}"}" \
     "${CONTEXT_MOUNT[@]+"${CONTEXT_MOUNT[@]}"}" \
     "${ENV_MOUNTS[@]+"${ENV_MOUNTS[@]}"}" \
     "${KEY_ENV_ARGS[@]+"${KEY_ENV_ARGS[@]}"}" \

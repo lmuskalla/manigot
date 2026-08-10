@@ -79,6 +79,12 @@ The agent can only see your project directory. SSH keys, `.env` files,
 other projects — not mounted, not reachable. `.env` files inside the project
 are shadowed with `/dev/null` at container start — host files are never touched.
 
+`docs/` is optional. Run `mg` in a project with no `docs/` directory and you
+still get a fully isolated, sandboxed session — just without project context
+or the job workflow. Add `docs/` (see [Per-project setup](#per-project-setup))
+whenever you want those too. This makes `mg` a drop-in replacement for
+running `claude`/`opencode` directly, in any project, initialized or not.
+
 ---
 
 ## Setup (once)
@@ -150,12 +156,13 @@ its first argument:
 
 | command | does |
 |---|---|
-| `mg` | start a session in the current project |
-| `mg job` | create a job directory + branch (off `main`) |
-| `mg done` | archive a finished job |
-| `mg delete` | permanently delete a job (directory + branch, no merge) |
-| `mg tui` | the terminal UI (needs `make tui` first) |
-| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first) |
+| `mg` | start a session in the current project (works with or without `docs/` — see above) |
+| `mg job` | create a job directory + branch (off `main`); needs `docs/` |
+| `mg done` | archive a finished job; needs `docs/` |
+| `mg delete` | permanently delete a job (directory + branch, no merge); needs `docs/` |
+| `mg tui` | the terminal UI (needs `make tui` first); needs `docs/` |
+| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first); needs `docs/` |
+| `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
 uninstall` removes it again.
@@ -213,10 +220,13 @@ used as a fallback when `docs/AGENTS.md` is absent.
 ## Usage
 
 ```bash
-# Start a manigot session (run from anywhere inside your project)
+# Start a manigot session (run from anywhere, in any project — docs/ optional)
 cd your-project/
 mg                        # Claude Code (default)
 mg --tool opencode        # OpenCode
+
+# List all commands
+mg --help
 
 # Start straight in an agent, or on a job
 mg --agent analyst

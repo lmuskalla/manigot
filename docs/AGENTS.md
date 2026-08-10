@@ -21,17 +21,25 @@ session with `mg --tool claude-code|opencode`.
 - `Dockerfile` — builds the image; installs both agent CLIs. Rebuild after a
   Claude Code or OpenCode update via `make rebuild`.
 - `scripts/mg.sh` — the single dispatcher, symlinked as `mg` in PATH. Inspects
-  its first argument and execs the matching sibling script unchanged
+  its first argument: `-h`/`--help`/`help` prints usage and exits immediately
+  (no docker/auth setup touched); one of the five subcommand names
   (`job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`, `done`→`finish-job.sh`,
-  `delete`→`delete-job.sh`); anything else (no args, or any other first
-  token, including `run.sh`'s own `--agent`/`--job`/`--tool`/`--print` flags)
-  falls through to `run.sh` with all original args untouched.
+  `delete`→`delete-job.sh`) execs the matching sibling script unchanged;
+  anything else (no args, or any other first token, including `run.sh`'s own
+  `--agent`/`--job`/`--tool`/`--print` flags) falls through to `run.sh` with
+  all original args untouched.
 - `scripts/run.sh` — container launcher, reached via bare `mg` (no
-  subcommand). Mounts the current project's `docs/` into the container;
-  nothing else on the host is reachable from inside. Mount target depends on
-  the tool: `/workspace/.claude` for Claude Code, `/workspace/.opencode` for
-  OpenCode. Validates auth per tool and passes the choice on as
-  `manigot_TOOL`.
+  subcommand). Mounts the current project root into the container at
+  `/workspace`; nothing outside it on the host is reachable from inside. A
+  `docs/` directory (walked up from `$PWD`) marks the project as
+  *initialized*: when present, it's additionally mounted at
+  `/workspace/.claude` (Claude Code) or `/workspace/.opencode` (OpenCode),
+  giving access to project context and the job workflow. `docs/` is optional
+  — its absence doesn't block `mg`, it just runs a plain isolated session
+  with no project context and no job workflow (job-workflow subcommands
+  like `mg job`/`mg jdi` still require it). When no `docs/` is found, the
+  container boundary falls back to the git root, else `$PWD`. Validates auth
+  per tool and passes the choice on as `manigot_TOOL`.
 - `scripts/new-job.sh` — reached via `mg job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
   `main` (regardless of the branch the user is currently on).
@@ -116,13 +124,16 @@ session with `mg --tool claude-code|opencode`.
   committed. Project-level `.env` files are shadowed with `/dev/null` at container start.
 
 ## Commands
+- `mg -h` / `mg --help` / `mg help` — print usage and exit (no docker/auth setup touched)
 - `make build` — build the image (skips if already built)
 - `make rebuild` — force rebuild with no cache, after a Claude Code / OpenCode update
 - `make install` / `make uninstall` — symlink the single `mg` dispatcher into
   `PREFIX/bin` (default `/usr/local`)
 - `make tui` — build the host-side TUI into `bin/manigot-tui`
 - `make jdi` — build the host-side autonomous-mode binary into `bin/manigot-jdi`
-- `mg` — start a session from inside a project directory
+- `mg` — start an isolated session from inside any project directory; `docs/`
+  is optional (see `scripts/run.sh` above) — without it you still get a
+  plain agent session, just no project context or job workflow
 - `mg --tool opencode` — same, but running OpenCode instead of Claude Code
 - `mg job "<title>" [--type fix|chore]` — create a job dir + branch
 - `mg done <id>` — archive a finished job
