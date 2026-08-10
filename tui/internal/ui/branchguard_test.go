@@ -93,11 +93,11 @@ func TestBranchGuardBlocksAgentLaunch(t *testing.T) {
 	assertBlocked(t, a, cmd)
 }
 
-// TestBranchGuardBlocksJdi verifies "J" refuses to launch mg-jdi against an
+// TestBranchGuardBlocksJdi verifies "j" refuses to launch mg-jdi against an
 // off-branch job's working tree, the same as the five single-agent keys.
 func TestBranchGuardBlocksJdi(t *testing.T) {
 	a := mkOffBranchApp(t)
-	_, cmd := a.updateDetail(keyMsg("J"))
+	_, cmd := a.updateDetail(keyMsg("j"))
 	assertBlocked(t, a, cmd)
 }
 

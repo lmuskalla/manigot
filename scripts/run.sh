@@ -269,6 +269,7 @@ fi
 
 docker run "${DOCKER_TTY_FLAGS[@]+"${DOCKER_TTY_FLAGS[@]}"}" --rm \
     --name "manigot-$(basename "$PROJECT_ROOT")-$$" \
+    --user "$(id -u):$(id -g)" \
     -v "$PROJECT_ROOT:/workspace:z" \
     -v "$PROJECT_DOCS_DIR:$DOCS_MOUNT_TARGET:z" \
     "${CONTEXT_MOUNT[@]+"${CONTEXT_MOUNT[@]}"}" \

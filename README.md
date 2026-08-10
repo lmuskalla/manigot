@@ -410,7 +410,7 @@ Windows is not supported in this version.
 ```bash
 cd manigot/
 make tui        # builds bin/manigot-tui
-make jdi        # builds bin/manigot-jdi (needed for the TUI's "J" key and mg-jdi itself)
+make jdi        # builds bin/manigot-jdi (needed for the TUI's "j" key and mg-jdi itself)
 make install    # puts mg-tui, mg-jdi (and the other launchers) on your PATH
 ```
 
@@ -448,13 +448,13 @@ Detail view:
 | key | action |
 |---|---|
 | `tab` / `1`-`5` | switch tab: brief · tasks · implementation · verdict · log |
-| `j`/`k`, `pgup`/`pgdn`, `g`/`G` | scroll |
+| `pgup`/`pgdn`, `g`/`G` | scroll |
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log are agent- or mg-jdi-written) |
 | `D` | mark the job done (runs the host `mg-done`, in the foreground so its confirmation prompts work) |
-| `J` | run `mg-jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg-jdi status & log](#mg-jdi-status--log) below) |
+| `j` | run `mg-jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg-jdi status & log](#mg-jdi-status--log) below) |
 | `x` / `del` | permanently delete the job (runs the host `mg-delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
-| `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`J`/`x`/agent keys work on a job that isn't on the current branch |
+| `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`j`/`x`/agent keys work on a job that isn't on the current branch |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
@@ -521,7 +521,7 @@ on a missing or unapproved verdict, so this is available from any stage too.
 
 ### mg-jdi status & log
 
-Press `J` in the detail view to start [`mg-jdi`](#autonomous-mode-mg-jdi)
+Press `j` in the detail view to start [`mg-jdi`](#autonomous-mode-mg-jdi)
 against that job. Unlike the agent-launch keys above, this opens **no
 terminal window at all** — `mg-jdi` has no interactive session for a human
 or a subprocess to attach to, so it runs fully detached in the background.
@@ -538,7 +538,7 @@ returning to the list, etc. — no separate live-streaming subsystem):
 
 **Notification.** A direct `mg-jdi --job <id>` run rings the terminal bell
 itself when it stops (see [Autonomous mode](#autonomous-mode-mg-jdi)). A
-`J`-launched run has no terminal to ring into, so the TUI rings it instead,
+`j`-launched run has no terminal to ring into, so the TUI rings it instead,
 on its own next poll, the first time it notices that job's status turn into
 `finished` or `needs human` — once per fresh stop, not on every poll while
 it stays stopped, and never for a job that was already stopped before this

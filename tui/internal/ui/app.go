@@ -652,7 +652,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, cmd
-	case "J":
+	case "j":
 		// Run mg-jdi (TASK-12): a bigger, composite action like "D", not a
 		// single-agent launch, so it's handled here rather than through
 		// agentForKey. Unlike launch.Agent, this starts detached in the

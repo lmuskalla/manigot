@@ -9,7 +9,7 @@ import (
 	"github.com/lmuskalla/manigot/tui/internal/job"
 )
 
-// TestJdiKeyLaunchesDetachedAndSeedsBellDedup exercises the full "J" flow on
+// TestJdiKeyLaunchesDetachedAndSeedsBellDedup exercises the full "j" flow on
 // a current-branch job: it resolves and starts the stub mg-jdi (no spawned
 // terminal — Decision 7a), reports a status message, and seeds a.jdiSeen so
 // the stop-notification dedup (TASK-11) starts at "running" immediately
@@ -25,7 +25,7 @@ func TestJdiKeyLaunchesDetachedAndSeedsBellDedup(t *testing.T) {
 
 	// Stub mg-jdi so no real container/process is spawned. PATH is left
 	// alone (unlike hostcmd's isolate() pattern) — branchGuard shells out to
-	// the real git binary as part of this same "J" flow, and the env-var
+	// the real git binary as part of this same "j" flow, and the env-var
 	// override below wins resolution regardless of what's on PATH anyway.
 	t.Setenv("MANIGOT_HOME", "")
 	stub := filepath.Join(t.TempDir(), "stub.sh")
@@ -39,9 +39,9 @@ func TestJdiKeyLaunchesDetachedAndSeedsBellDedup(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
-	_, cmd := a.updateDetail(keyMsg("J"))
+	_, cmd := a.updateDetail(keyMsg("j"))
 	if cmd != nil {
-		t.Errorf("updateDetail(J) returned a non-nil cmd, want nil (Jdi runs synchronously to Start(), no tea.Cmd needed)")
+		t.Errorf("updateDetail(j) returned a non-nil cmd, want nil (Jdi runs synchronously to Start(), no tea.Cmd needed)")
 	}
 	if !strings.Contains(a.detail.status, "mg-jdi") {
 		t.Errorf("status = %q, want it to mention mg-jdi starting", a.detail.status)
@@ -74,7 +74,7 @@ func TestJdiKeyReportsResolutionFailure(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
-	a.updateDetail(keyMsg("J"))
+	a.updateDetail(keyMsg("j"))
 	if !strings.Contains(a.detail.status, "not found") {
 		t.Errorf("status = %q, want it to explain mg-jdi could not be resolved", a.detail.status)
 	}

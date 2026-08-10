@@ -53,6 +53,11 @@ RUN npm install -g opencode-ai
 RUN usermod -l claude -d /home/claude -m node \
     && groupmod -n claude node
 
+# HOME must resolve for whatever UID actually runs the container (see below) —
+# Docker doesn't derive it from /etc/passwd for an unrecognized UID, it just
+# leaves it unset/"/".
+ENV HOME=/home/claude
+
 # Global agents — baked into the image, available in every project.
 # Project-level agents (mounted at runtime) override these if same name.
 COPY --chown=claude:claude agents/ /home/claude/.claude/agents/
@@ -81,6 +86,13 @@ USER claude
 # instructions if you'd rather rely on the container having network.
 COPY --chown=claude:claude tui/go.mod tui/go.sum /tmp/tui/
 RUN cd /tmp/tui && go mod download && rm -rf /tmp/tui
+
+# scripts/run.sh runs the container with --user "$(id -u):$(id -g)" (the
+# invoking host user) so the bind-mounted /workspace keeps host file
+# ownership and stays writable. That means this UID almost never matches the
+# baked-in claude (1000), so open up $HOME to any UID — nothing sensitive
+# lives here, just agent configs and the Go module cache.
+RUN chmod -R o+rwX /home/claude
 
 WORKDIR /workspace
 

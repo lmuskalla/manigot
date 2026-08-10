@@ -57,7 +57,7 @@ session with `mg --tool claude-code|opencode`.
   `.gitignore` already does — manigot's own `.gitignore` entry for this path
   only covers manigot's own repo. A direct `mg-jdi --job <id>` run streams that same
   output live to its own terminal and rings the terminal bell (`\a`) when it
-  stops; a TUI-launched run (`J` in the detail view) has no terminal of its
+  stops; a TUI-launched run (`j` in the detail view) has no terminal of its
   own at all — it starts fully detached, with the status badge and log tab as
   its only visibility, and the TUI itself rings the bell on its next poll
   when it notices the status transition into a stopped state.

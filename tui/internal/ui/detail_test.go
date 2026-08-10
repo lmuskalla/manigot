@@ -710,6 +710,78 @@ func TestDetailViewLogTabKeyBindingSwitchesTab(t *testing.T) {
 	}
 }
 
+// --- vim keybindings removed (TASK-5) ---------------------------------------
+
+// TestDetailVimKeysAreInert confirms j/k/h/l no longer do anything in the
+// file body/tab context — no scroll, no tab switch — now that TASK-1 has
+// dropped them as aliases for down/up/tab-right/tab-left. up/down/left/right/
+// tab/shift+tab are asserted alongside as the contrasting "these still work"
+// case, so a regression that broke real navigation wouldn't be masked by only
+// checking the vim keys are gone.
+func TestDetailVimKeysAreInert(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0030_vim")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	sb.WriteString("# Brief: Vim\n\nstatus: open\n\n")
+	for i := 0; i < 200; i++ {
+		sb.WriteString("line of body text to force scrolling\n")
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte(sb.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "tasks.md"), []byte("# Tasks: Vim\n\nstatus: open\n\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := job.Discover(root)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: %v jobs=%d", err, len(jobs))
+	}
+
+	d := newDetailView(jobs[0], 80, 24)
+	d.update(keyMsg("down")) // move off the top so ScrollUp/j vs k are distinguishable
+	d.update(keyMsg("down"))
+
+	wantPos := d.current().viewer.Position()
+	wantCur := d.cur
+
+	for _, k := range []string{"j", "k", "h", "l"} {
+		d.update(keyMsg(k))
+		if got := d.current().viewer.Position(); got != wantPos {
+			t.Errorf("after key %q, scroll position = %q, want unchanged %q", k, got, wantPos)
+		}
+		if d.cur != wantCur {
+			t.Errorf("after key %q, d.cur = %d, want unchanged %d", k, d.cur, wantCur)
+		}
+	}
+
+	// Contrasting case: the real bindings still work.
+	d.update(keyMsg("up"))
+	if got := d.current().viewer.Position(); got == wantPos {
+		t.Errorf("\"up\" should have changed the scroll position, still %q", got)
+	}
+
+	d.update(keyMsg("tab"))
+	if d.cur != wantCur+1 {
+		t.Errorf("\"tab\" should switch to the next tab: cur = %d, want %d", d.cur, wantCur+1)
+	}
+	d.update(keyMsg("shift+tab"))
+	if d.cur != wantCur {
+		t.Errorf("\"shift+tab\" should switch back: cur = %d, want %d", d.cur, wantCur)
+	}
+	d.update(keyMsg("right"))
+	if d.cur != wantCur+1 {
+		t.Errorf("\"right\" should switch to the next tab: cur = %d, want %d", d.cur, wantCur+1)
+	}
+	d.update(keyMsg("left"))
+	if d.cur != wantCur {
+		t.Errorf("\"left\" should switch back: cur = %d, want %d", d.cur, wantCur)
+	}
+}
+
 // TestStripLeadingFrontmatterLeavesNonScaffoldContentAlone confirms a file
 // that doesn't start with an H1, or whose line right after it isn't
 // frontmatter-shaped, is returned unchanged rather than guessed at.

@@ -361,11 +361,11 @@ func (d *detailView) ensureCurrentSized() {
 // update handles detail-view keys: file switching and scrolling.
 func (d *detailView) update(msg tea.KeyMsg) {
 	switch msg.String() {
-	case "tab", "l", "right":
+	case "tab", "right":
 		if d.cur < len(d.tabs)-1 {
 			d.cur++
 		}
-	case "shift+tab", "h", "left":
+	case "shift+tab", "left":
 		if d.cur > 0 {
 			d.cur--
 		}
@@ -394,9 +394,9 @@ func (d *detailView) active() *fileTab { return d.current() }
 // scroll routes scroll keys to the active viewer.
 func (t *fileTab) scroll(msg tea.KeyMsg) {
 	switch msg.String() {
-	case "down", "j":
+	case "down":
 		t.viewer.ScrollDown(1)
-	case "up", "k":
+	case "up":
 		t.viewer.ScrollUp(1)
 	case "pgdown", " ":
 		t.viewer.PageDown()
@@ -531,7 +531,7 @@ type actionButton struct {
 // stage — app.go's agentForKey is not stage-gated either), each in a
 // consistent "[key] Label" format; then, on its own line beneath, the stage
 // timeline (see renderStageTimeline) alongside the "[D] Done" mark-done
-// button and "[J] mg-jdi" (TASK-12) — a bigger, composite action like Done,
+// button and "[j] mg-jdi" (TASK-12) — a bigger, composite action like Done,
 // not a single-agent launch, hence its own key rather than living in
 // agentOrder.
 //
@@ -609,7 +609,7 @@ func (d *detailView) renderActionBar() string {
 	stageLine.WriteString(" ")
 	stageLine.WriteString(statusDoneStyle.Render("Done"))
 	stageLine.WriteString(sep)
-	stageLine.WriteString(accentStyle.Render("[J]"))
+	stageLine.WriteString(accentStyle.Render("[j]"))
 	stageLine.WriteString(" ")
 	stageLine.WriteString(accentStyle.Render("mg-jdi"))
 
@@ -695,7 +695,7 @@ func (d *detailView) renderTabs(width int) string {
 // keeps replacing the hint entirely, same as before.
 func (d *detailView) renderFooter() string {
 	pos := d.current().viewer.Position()
-	hint := "tab/1-5 files · j/k scroll"
+	hint := "tab/1-5 files"
 	if d.current().editable {
 		// "e" only does anything on editable tabs (brief.md today), so the
 		// hint is scoped to when it would actually work.
@@ -706,7 +706,7 @@ func (d *detailView) renderFooter() string {
 		// checked-out branch — scoped the same way "e edit" is above.
 		hint += " · b switch branch"
 	}
-	hint += " · agent keys above · D mark done · J run mg-jdi · x/del remove job · ctrl+r refresh · esc back · q quit"
+	hint += " · agent keys above · D mark done · j run mg-jdi · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {
