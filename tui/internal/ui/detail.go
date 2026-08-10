@@ -529,11 +529,11 @@ type actionButton struct {
 // renderActionBar draws the two-line action bar: an "agents:" line listing
 // the five agents in agentOrder (always shown regardless of the job's
 // stage — app.go's agentForKey is not stage-gated either), each in a
-// consistent "[key] Label" format; then, on its own line beneath, the stage
-// timeline (see renderStageTimeline) alongside the "[D] Done" mark-done
-// button and "[j] mg-jdi" (TASK-12) — a bigger, composite action like Done,
-// not a single-agent launch, hence its own key rather than living in
-// agentOrder.
+// consistent "[key] Label" format; then, on its own line beneath, a "stage:"
+// label (mirroring "docs:" and "agents:") followed by the stage timeline
+// (see renderStageTimeline) alongside the "[D] Done" mark-done button and
+// "[j] mg-jdi" (TASK-12) — a bigger, composite action like Done, not a
+// single-agent launch, hence its own key rather than living in agentOrder.
 //
 // The stage timeline stays purely informational: an at-a-glance sense of
 // where the job's files say it is in the ideal workflow, and how far it has
@@ -603,6 +603,8 @@ func (d *detailView) renderActionBar() string {
 	}
 
 	var stageLine strings.Builder
+	stageLine.WriteString(dimStyle.Render("stage:"))
+	stageLine.WriteString(sep)
 	stageLine.WriteString(renderStageTimeline(d.job.Stage()))
 	stageLine.WriteString(sep)
 	stageLine.WriteString(statusDoneStyle.Render("[D]"))
