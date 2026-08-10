@@ -98,8 +98,8 @@ fi
 # whatever values we have available.
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
-GIT_NAME="${GIT_AUTHOR_NAME_CFG:-${CLAUDE_EMAIL:-manigot}}"
-GIT_EMAIL="${GIT_AUTHOR_EMAIL_CFG:-${CLAUDE_EMAIL:-manigot@localhost}}"
+GIT_NAME="${GIT_AUTHOR_NAME_CFG:-manigot}"
+GIT_EMAIL="${GIT_AUTHOR_EMAIL_CFG:-manigot@localhost}"
 
 git config --global user.name  "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"

@@ -112,6 +112,19 @@ fi
 PROJECT_ROOT="${PROJECT_ROOT%/}"
 PROJECT_DOCS_DIR="$PROJECT_ROOT/$CLAUDE_DIR_NAME"
 
+# ── Git identity ─────────────────────────────────────────────────────────────────
+# Commits made inside the container (e.g. the TUI's brief.md auto-commit) should
+# be authored as the host user's actual git identity — not CLAUDE_EMAIL, which is
+# the Claude account's OAuth email from .env and has nothing to do with git.
+# GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL host env vars (git's own override mechanism)
+# win if set; otherwise fall back to this project's git config (local overrides
+# global, matching normal git behavior).
+GIT_AUTHOR_NAME_CFG="${GIT_AUTHOR_NAME:-$(git -C "$PROJECT_ROOT" config user.name 2>/dev/null || true)}"
+GIT_AUTHOR_EMAIL_CFG="${GIT_AUTHOR_EMAIL:-$(git -C "$PROJECT_ROOT" config user.email 2>/dev/null || true)}"
+if [[ -z "$GIT_AUTHOR_NAME_CFG" || -z "$GIT_AUTHOR_EMAIL_CFG" ]]; then
+    echo "Warning: no git user.name/user.email configured for this project — container commits will fall back to a generic 'manigot' identity." >&3
+fi
+
 # Each tool looks for its project-level config (agents, etc.) in its own directory.
 if [[ "$TOOL" == "opencode" ]]; then
     DOCS_MOUNT_TARGET="/workspace/.opencode"
@@ -316,8 +329,8 @@ docker run "${DOCKER_TTY_FLAGS[@]+"${DOCKER_TTY_FLAGS[@]}"}" --rm \
     -e CLAUDE_ACCOUNT_UUID="${CLAUDE_ACCOUNT_UUID:-}" \
     -e CLAUDE_EMAIL="${CLAUDE_EMAIL:-}" \
     -e CLAUDE_ORG_UUID="${CLAUDE_ORG_UUID:-}" \
-    -e GIT_AUTHOR_NAME_CFG="${GIT_AUTHOR_NAME:-}" \
-    -e GIT_AUTHOR_EMAIL_CFG="${GIT_AUTHOR_EMAIL:-}" \
+    -e GIT_AUTHOR_NAME_CFG="$GIT_AUTHOR_NAME_CFG" \
+    -e GIT_AUTHOR_EMAIL_CFG="$GIT_AUTHOR_EMAIL_CFG" \
     -e MANIGOT_TOOL="$TOOL" \
     -e MANIGOT_PRINT="$PRINT" \
     --network=bridge \
