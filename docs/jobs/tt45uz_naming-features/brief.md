@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-<!-- What needs to be done? Be specific. -->
+Read docs/NAMING_FEATURES.md for details.
 
 ## Why
 
