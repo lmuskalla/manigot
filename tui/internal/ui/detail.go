@@ -721,7 +721,7 @@ func (d *detailView) renderFooter() string {
 		// checked-out branch — scoped the same way "e edit" is above.
 		hint += " · b switch branch"
 	}
-	hint += " · agent keys above · D mark done · j run mg jdi · x/del remove job · ctrl+r refresh · esc back · q quit"
+	hint += " · agent keys above · D mark done · j run mg jdi · P push to origin · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {

@@ -505,6 +505,7 @@ Detail view:
 | `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
 | `x` / `del` | permanently delete the job (runs the host `mg delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`j`/`x`/agent keys work on a job that isn't on the current branch |
+| `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull`; unlike `b`/`e`/`D`/`j`/`x`, this works regardless of which branch is currently checked out |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 

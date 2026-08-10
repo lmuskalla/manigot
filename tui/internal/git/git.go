@@ -51,6 +51,19 @@ func run(root string, args ...string) ([]byte, string, error) {
 	return out, stderr.String(), err
 }
 
+// runEnv is run's env-aware counterpart: it executes `git -C root <args>` with
+// extraEnv appended to the child process's inherited environment. Kept
+// separate from run (rather than adding a variadic env parameter there) so
+// every existing call site — none of which need custom env — is untouched.
+func runEnv(root string, extraEnv []string, args ...string) ([]byte, string, error) {
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd.Env = append(os.Environ(), extraEnv...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	return out, stderr.String(), err
+}
+
 // notARepo reports whether a git failure is the not-a-repo or git-missing case
 // (as opposed to a real, recoverable error like a missing path). The git binary
 // being absent surfaces as exec.ErrNotFound; a real directory that isn't a
@@ -422,4 +435,33 @@ func HeadCommit(root, branch string) (string, error) {
 		return "", nil
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// Push pushes branch (short name from LocalBranches) to origin, via
+// `git push -u origin <branch>`. It is the host-side mutation behind the
+// TUI detail view's "P" push-to-origin action: a quick way to make a job's
+// branch visible on another host via a plain git push/pull, without needing
+// that branch checked out in the working tree first (unlike Checkout,
+// CommitFile and the other mutating actions, Push operates on the named
+// branch ref directly).
+//
+// The -u sets upstream tracking on first push; a later push against an
+// already-tracking branch is then a plain fast-forward push. This never
+// force-pushes, so a diverged remote (someone else pushed to the same branch
+// in the meantime) surfaces as a normal rejected-push error rather than
+// silently overwriting it.
+//
+// GIT_TERMINAL_PROMPT=0 is set on the child process so a missing/invalid
+// credential never blocks on an interactive prompt the TUI has no terminal
+// to render into — that failure mode instead surfaces as a wrapped error,
+// same as a missing origin remote or a rejected push.
+func Push(root, branch string) error {
+	_, stderr, err := runEnv(root, []string{"GIT_TERMINAL_PROMPT=0"}, "push", "-u", "origin", branch)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return ErrNotARepo
+		}
+		return wrapErr("git push origin "+branch, err, stderr)
+	}
+	return nil
 }
