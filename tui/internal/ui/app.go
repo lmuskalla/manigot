@@ -167,6 +167,12 @@ type checkoutMsg struct {
 	err    error
 }
 
+// commitMsg reports the outcome of the auto-commit that follows a successful
+// brief.md edit (see editorDoneMsg and commitBriefCmd).
+type commitMsg struct {
+	err error
+}
+
 // branchFlashDuration is how long the off-branch hint's blink (see
 // detailView.blockedByBranch) lasts before automatically clearing — long
 // enough to register as a reaction to the just-blocked key, short enough not
@@ -212,6 +218,24 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				a.detail.reloadCurrent()
 				a.detail.setStatus("edited " + filepath.Base(msg.path))
+				// brief.md is the one editable tab (jobFiles) and the one
+				// file the job workflow expects to always be committed —
+				// auto-commit it so an edit never lingers as an uncommitted
+				// change the way finish-job.sh's clean-tree check would
+				// otherwise reject. Any other future editable tab is left
+				// alone, same as before this behavior existed.
+				if filepath.Base(msg.path) == "brief.md" {
+					return a, a.commitBriefCmd()
+				}
+			}
+		}
+		return a, nil
+	case commitMsg:
+		if a.detail != nil {
+			if msg.err != nil {
+				a.detail.setStatus(cmdErrorText(msg.err))
+			} else {
+				a.detail.setStatus("edited and committed brief.md")
 			}
 		}
 		return a, nil
@@ -915,6 +939,27 @@ func (a *App) checkoutCmd(branch string) tea.Cmd {
 	return func() tea.Msg {
 		err := git.Checkout(root, branch)
 		return checkoutMsg{branch: branch, err: err}
+	}
+}
+
+// commitBriefCmd returns the tea.Cmd that auto-commits brief.md right after a
+// successful "e" edit (see the editorDoneMsg case above), following the same
+// "[ID] <type>: <summary>" subject convention every agent's own commits use
+// (agents/developer.md, agents/reviewer.md, agents/quality.md). Like
+// checkoutCmd, this is a plain git call off the UI goroutine — no interactive
+// terminal is needed. The path is rebuilt from a.detail.job rather than
+// threaded through editorDoneMsg since only brief.md ever reaches here.
+func (a *App) commitBriefCmd() tea.Cmd {
+	root := a.root
+	id := a.detail.job.ID
+	path := filepath.Join(a.detail.job.Dir, "brief.md")
+	return func() tea.Msg {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return commitMsg{err: err}
+		}
+		err = git.CommitFile(root, rel, fmt.Sprintf("[%s] brief: edit via TUI", id))
+		return commitMsg{err: err}
 	}
 }
 

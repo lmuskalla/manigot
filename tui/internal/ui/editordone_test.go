@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,9 +29,6 @@ func TestEditorDoneMsgSuccess(t *testing.T) {
 	os.WriteFile(brief, []byte("# Brief: X\n\nstatus: open\n\nedited by nano\n"), 0o644)
 
 	model, cmd := a.Update(editorDoneMsg{path: brief, err: nil})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
-	}
 	got := model.(*App)
 
 	if got.detail.status != "edited brief.md" {
@@ -38,6 +36,67 @@ func TestEditorDoneMsgSuccess(t *testing.T) {
 	}
 	if !strings.Contains(got.detail.tabs[0].viewer.View(), "edited by nano") {
 		t.Errorf("tab was not reloaded after the editor exited")
+	}
+	if cmd == nil {
+		t.Fatal("expected a follow-up auto-commit cmd for brief.md, got nil")
+	}
+}
+
+// TestEditorDoneMsgAutoCommitsBrief verifies that a successful brief.md edit
+// (root is a real git repo) is committed automatically, with a subject
+// following the same "[ID] <type>: <summary>" convention every agent's own
+// commits use, so a job's brief never lingers as an uncommitted change the
+// way finish-job.sh's clean-tree check would otherwise reject.
+func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	gitCommitJob(t, dir, "ab0001_x", "# Brief: X\n\nstatus: open\nid: ab0001\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%d", err, len(jobs))
+	}
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.detail = newDetailView(jobs[0], 80, 24)
+
+	brief := filepath.Join(dir, "docs", "jobs", "ab0001_x", "brief.md")
+	os.WriteFile(brief, []byte("# Brief: X\n\nstatus: open\nid: ab0001\n\nedited by nano\n"), 0o644)
+
+	_, cmd := a.Update(editorDoneMsg{path: brief, err: nil})
+	if cmd == nil {
+		t.Fatal("expected a follow-up auto-commit cmd, got nil")
+	}
+
+	msg := cmd()
+	commitM, ok := msg.(commitMsg)
+	if !ok {
+		t.Fatalf("expected commitMsg, got %T", msg)
+	}
+	if commitM.err != nil {
+		t.Fatalf("auto-commit failed: %v", commitM.err)
+	}
+
+	model, _ := a.Update(commitM)
+	got := model.(*App)
+	if got.detail.status != "edited and committed brief.md" {
+		t.Errorf("status = %q, want %q", got.detail.status, "edited and committed brief.md")
+	}
+
+	out, err := exec.Command("git", "-C", dir, "log", "-1", "--format=%s").Output()
+	if err != nil {
+		t.Fatalf("git log: %v", err)
+	}
+	if subject := strings.TrimSpace(string(out)); subject != "[ab0001] brief: edit via TUI" {
+		t.Errorf("commit subject = %q, want %q", subject, "[ab0001] brief: edit via TUI")
+	}
+
+	statusOut, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	if err != nil {
+		t.Fatalf("git status: %v", err)
+	}
+	if len(statusOut) != 0 {
+		t.Errorf("expected a clean working tree after auto-commit, got:\n%s", statusOut)
 	}
 }
 

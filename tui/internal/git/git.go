@@ -296,6 +296,37 @@ func Checkout(root, branch string) error {
 	return nil
 }
 
+// CommitFile stages path (relative to root) and commits it with message, via
+// `git add` followed by `git commit -- path`. Used by the TUI's "e" edit
+// action to auto-commit brief.md right after a successful edit, so a job's
+// brief never lingers as an uncommitted change the way finish-job.sh's
+// clean-tree check would otherwise reject.
+//
+// A save that left the file unchanged (nothing staged) is not an error —
+// `git commit` on a clean pathspec exits non-zero with "nothing to commit" on
+// stdout, which this treats as a successful no-op rather than surfacing an
+// error to the user for simply opening and closing the editor. Any other
+// commit failure returns the wrapped error including git's stderr.
+func CommitFile(root, path, message string) error {
+	if _, stderr, err := run(root, "add", "--", path); err != nil {
+		if notARepo(stderr, err) {
+			return ErrNotARepo
+		}
+		return wrapErr("git add "+path, err, stderr)
+	}
+	out, stderr, err := run(root, "commit", "-m", message, "--", path)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return ErrNotARepo
+		}
+		if strings.Contains(string(out), "nothing to commit") {
+			return nil
+		}
+		return wrapErr("git commit "+path, err, stderr)
+	}
+	return nil
+}
+
 // verdictCommitPattern matches a commit subject following @reviewer's own
 // convention (agents/reviewer.md): "[<jobID>] verdict: <summary>". Anchored
 // at the start of the subject and exact on jobID (via regexp.QuoteMeta), so
