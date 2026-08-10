@@ -9,39 +9,22 @@ CLAUDE_DIR_NAME="docs"
 AGENT=""
 JOB=""
 INITIAL_PROMPT=""
-TOOL="claude-code"
+TOOL=""
+PROFILE=""
 PRINT="false"
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --agent)  AGENT="$2";  shift 2 ;;
-        --job)    JOB="$2";    shift 2 ;;
-        --prompt) INITIAL_PROMPT="$2"; shift 2 ;;
-        --tool)   TOOL="$2";   shift 2 ;;
-        --print)  PRINT="true"; shift ;;
-        *)        PASSTHROUGH+=("$1"); shift ;;
+        --agent)   AGENT="$2";  shift 2 ;;
+        --job)     JOB="$2";    shift 2 ;;
+        --prompt)  INITIAL_PROMPT="$2"; shift 2 ;;
+        --tool)    TOOL="$2";   shift 2 ;;
+        --profile) PROFILE="$2"; shift 2 ;;
+        --print)   PRINT="true"; shift ;;
+        *)         PASSTHROUGH+=("$1"); shift ;;
     esac
 done
-
-case "$TOOL" in
-    claude-code|opencode) ;;
-    *)
-        echo "Error: --tool must be 'claude-code' or 'opencode' (got '$TOOL')."
-        exit 1
-        ;;
-esac
-
-# --print is a non-interactive, one-shot invocation (see scripts/entrypoint.sh)
-# built for automated/unattended callers like mg-jdi, not for a human's own
-# session. It is Claude Code only for v1 — OpenCode's non-interactive
-# equivalent is unverified (see docs/backlog.md) — so reject the combination
-# with a clear error rather than silently falling back to an interactive run.
-if [[ "$PRINT" == "true" && "$TOOL" == "opencode" ]]; then
-    echo "Error: --print is only supported with --tool claude-code."
-    echo "OpenCode's non-interactive invocation is unverified for v1 — see docs/backlog.md."
-    exit 1
-fi
 
 # ── Diagnostic output redirection ────────────────────────────────────────────
 # --print callers expect a clean stdout carrying only the agent's own output
@@ -79,6 +62,98 @@ if [[ -f "$ENV_FILE" ]]; then
     set +a
 else
     echo "Warning: no .env found at $ENV_FILE" >&3
+fi
+
+# ── Resolve profile ─────────────────────────────────────────────────────────────
+# A profile bundles {agent CLI, credentials, model} so a session runs against
+# exactly one of your subscriptions:
+#   claude-pro    Claude Code, billed to your Claude Pro/Max subscription
+#   zai           OpenCode, billed to your Z.AI Coding Plan
+#   opencode-go   OpenCode, billed to the OpenCode Go subscription
+# Keep this table in sync with tui/internal/config/config.go.
+#
+# Precedence: --profile (explicit) > --tool (legacy alias) > $MANIGOT_PROFILE
+# (the default set by `mg profiles`, read from .env) > claude-pro.
+# --tool remains accepted for backward compatibility: `--tool claude-code`
+# behaves exactly like `--profile claude-pro`, and `--tool opencode` keeps its
+# legacy behavior of forwarding every configured opencode key and using
+# OPENCODE_MODEL unchanged.
+VALID_PROFILES="claude-pro|zai|opencode-go"
+
+if [[ -n "$PROFILE" ]]; then
+    case "$PROFILE" in
+        claude-pro|zai|opencode-go) ;;
+        *)
+            echo "Error: --profile must be one of: $VALID_PROFILES (got '$PROFILE')."
+            exit 1
+            ;;
+    esac
+elif [[ -n "$TOOL" ]]; then
+    case "$TOOL" in
+        claude-code) PROFILE="claude-pro" ;;
+        opencode)    PROFILE="" ;;  # legacy opencode mode, handled below
+        *)
+            echo "Error: --tool must be 'claude-code' or 'opencode' (got '$TOOL')."
+            exit 1
+            ;;
+    esac
+else
+    PROFILE="${MANIGOT_PROFILE:-claude-pro}"
+    case "$PROFILE" in
+        claude-pro|zai|opencode-go) ;;
+        *)
+            echo "Error: MANIGOT_PROFILE in $ENV_FILE is not a valid profile (got '$MANIGOT_PROFILE')."
+            echo "Valid profiles: $VALID_PROFILES"
+            exit 1
+            ;;
+    esac
+fi
+
+# Map the profile to the agent CLI it runs, the opencode provider keys it
+# forwards, and the model it defaults to (exposed as OPENCODE_MODEL, which
+# scripts/entrypoint.sh writes into the opencode config). The empty-profile
+# case is the legacy `--tool opencode` path: forward every configured opencode
+# key and leave OPENCODE_MODEL as .env set it.
+case "$PROFILE" in
+    claude-pro)
+        TOOL="claude-code"
+        ;;
+    zai)
+        TOOL="opencode"
+        OPENCODE_KEY_VARS=(ZHIPU_API_KEY)
+        OPENCODE_MODEL="${OPENCODE_ZAI_MODEL:-zai-coding-plan/glm-5.2}"
+        ;;
+    opencode-go)
+        TOOL="opencode"
+        OPENCODE_KEY_VARS=(OPENCODE_API_KEY)
+        OPENCODE_MODEL="${OPENCODE_GO_MODEL:-opencode-go/glm-5.2}"
+        ;;
+    "")
+        TOOL="opencode"
+        # Keep this list in sync with the one in scripts/entrypoint.sh.
+        OPENCODE_KEY_VARS=(
+            ANTHROPIC_API_KEY
+            OPENAI_API_KEY
+            OPENROUTER_API_KEY
+            GOOGLE_GENERATIVE_AI_API_KEY
+            GROQ_API_KEY
+            XAI_API_KEY
+            DEEPSEEK_API_KEY
+            OPENCODE_API_KEY
+            ZHIPU_API_KEY
+        )
+        ;;
+esac
+
+# --print is a non-interactive, one-shot invocation (see scripts/entrypoint.sh)
+# built for automated/unattended callers like mg-jdi, not for a human's own
+# session. It is Claude Code only for v1 — OpenCode's non-interactive
+# equivalent is unverified (see docs/backlog.md) — so reject the combination
+# with a clear error rather than silently falling back to an interactive run.
+if [[ "$PRINT" == "true" && "$TOOL" == "opencode" ]]; then
+    echo "Error: --print is only supported with the claude-pro profile (Claude Code)." >&3
+    echo "OpenCode's non-interactive invocation is unverified for v1 — see docs/backlog.md." >&3
+    exit 1
 fi
 
 # ── Resolve project root ────────────────────────────────────────────────────────
@@ -227,26 +302,15 @@ if [[ -n "$INITIAL_PROMPT_TEXT" ]]; then
 fi
 
 # ── Auth checks ─────────────────────────────────────────────────────────────────
-# OpenCode is multi-provider: any one of these keys is enough to start it.
-# Keep this list in sync with the one in scripts/entrypoint.sh.
-OPENCODE_KEY_VARS=(
-    ANTHROPIC_API_KEY
-    OPENAI_API_KEY
-    OPENROUTER_API_KEY
-    GOOGLE_GENERATIVE_AI_API_KEY
-    GROQ_API_KEY
-    XAI_API_KEY
-    DEEPSEEK_API_KEY
-    OPENCODE_API_KEY
-    ZHIPU_API_KEY
-)
-
+# OpenCode is multi-provider: a profile forwards exactly the provider key(s)
+# its subscription is billed against (see the profile resolution above), and
+# any one of those is enough to start it.
 KEY_ENV_ARGS=()
 
 if [[ "$TOOL" == "claude-code" ]]; then
     if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
         echo "Error: CLAUDE_CODE_OAUTH_TOKEN is not set."
-        echo "Add it to $ENV_FILE:"
+        echo "Add it to $ENV_FILE, or run 'mg setup claude-pro' for help:"
         echo "  CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..."
         exit 1
     fi
@@ -255,7 +319,7 @@ if [[ "$TOOL" == "claude-code" ]]; then
     # would override the mounted OAuth credentials and bill per token.
     if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
         echo "Error: ANTHROPIC_API_KEY is set — this overrides your subscription and bills per token."
-        echo "Remove it from your environment before running mg with --tool claude-code."
+        echo "Remove it from your environment before running mg with the claude-pro profile."
         exit 1
     fi
 else
@@ -264,14 +328,24 @@ else
     done
 
     if [[ ${#KEY_ENV_ARGS[@]} -eq 0 ]]; then
-        echo "Error: --tool opencode needs at least one provider API key."
-        echo "Add one of these to $ENV_FILE:"
+        if [[ -n "$PROFILE" ]]; then
+            echo "Error: profile '$PROFILE' is missing its API key."
+            echo "Add it to $ENV_FILE, or run 'mg setup $PROFILE' for help:"
+        else
+            echo "Error: --tool opencode needs at least one provider API key."
+            echo "Add one of these to $ENV_FILE:"
+        fi
         printf '  %s\n' "${OPENCODE_KEY_VARS[@]}"
         exit 1
     fi
 
-    # Optional: which model OpenCode should start with, as provider/model.
-    [[ -n "${OPENCODE_MODEL:-}" ]] && KEY_ENV_ARGS+=(-e "OPENCODE_MODEL=$OPENCODE_MODEL")
+    # The model each profile defaults to, as provider/model — consumed by
+    # scripts/entrypoint.sh via the {env:OPENCODE_MODEL} config substitution.
+    # For profile runs the mapping above already set OPENCODE_MODEL; for the
+    # legacy --tool opencode path this forwards .env's OPENCODE_MODEL as-is.
+    if [[ -n "${OPENCODE_MODEL:-}" ]]; then
+        KEY_ENV_ARGS+=(-e "OPENCODE_MODEL=$OPENCODE_MODEL")
+    fi
 fi
 
 # ── Shadow .env files with /dev/null mounts ─────────────────────────────────────
@@ -300,6 +374,7 @@ else
     echo "║  Docs    : (none — job workflow unavailable)" >&3
 fi
 [[ -n "$CONTEXT_FILE" ]] && echo "║  Context : $CONTEXT_FILE → $CONTEXT_TARGET" >&3
+[[ -n "$PROFILE" ]] && echo "║  Profile : $PROFILE" >&3
 [[ -n "$TOOL"  ]] && echo "║  Tool    : $TOOL" >&3
 [[ -n "$AGENT" ]] && echo "║  Agent   : $AGENT" >&3
 [[ -n "$JOB"   ]] && echo "║  Job     : $JOB" >&3

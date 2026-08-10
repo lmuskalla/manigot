@@ -9,8 +9,8 @@ import (
 )
 
 func TestShellCommandFormat(t *testing.T) {
-	got := shellCommand("/usr/local/bin/manigot", "developer", "irw320", "/home/me/proj", "claude-code")
-	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --tool 'claude-code' --agent 'developer' --job 'irw320'"
+	got := shellCommand("/usr/local/bin/manigot", "developer", "irw320", "/home/me/proj", "claude-pro")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --profile 'claude-pro' --agent 'developer' --job 'irw320'"
 	if !strings.HasPrefix(got, wantInner) {
 		t.Errorf("shellCommand =\n %q\nwant prefix\n %q", got, wantInner)
 	}
@@ -24,8 +24,8 @@ func TestShellCommandFormat(t *testing.T) {
 // --- quick (bare-session) launcher ------------------------------------------
 
 func TestQuickShellCommandFormat(t *testing.T) {
-	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-code")
-	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --tool 'claude-code'"
+	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-pro")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --profile 'claude-pro'"
 	if !strings.HasPrefix(got, wantInner) {
 		t.Errorf("quickShellCommand =\n %q\nwant prefix\n %q", got, wantInner)
 	}
@@ -38,7 +38,7 @@ func TestQuickShellCommandFormat(t *testing.T) {
 // A bare session must never carry --agent or --job — that's the whole point of
 // the quick launch path.
 func TestQuickShellCommandOmitsAgentAndJob(t *testing.T) {
-	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-code")
+	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-pro")
 	if strings.Contains(got, "--agent") {
 		t.Errorf("quickShellCommand unexpectedly contains --agent: %q", got)
 	}
@@ -47,44 +47,44 @@ func TestQuickShellCommandOmitsAgentAndJob(t *testing.T) {
 	}
 }
 
-// An empty tool must default to claude-code, mirroring the agent path and
+// An empty profile must default to claude-pro, mirroring the agent path and
 // scripts/run.sh's own default.
-func TestQuickShellCommandDefaultsEmptyTool(t *testing.T) {
+func TestQuickShellCommandDefaultsEmptyProfile(t *testing.T) {
 	got := quickShellCommand("/bin/manigot", "/home/me/proj", "")
-	if !strings.Contains(got, "--tool 'claude-code'") {
-		t.Errorf("quickShellCommand with empty tool = %q, want it to default to claude-code", got)
+	if !strings.Contains(got, "--profile 'claude-pro'") {
+		t.Errorf("quickShellCommand with empty profile = %q, want it to default to claude-pro", got)
 	}
 }
 
-func TestQuickShellCommandPassesOpencodeTool(t *testing.T) {
-	got := quickShellCommand("/bin/manigot", "/home/me/proj", "opencode")
-	if !strings.Contains(got, "--tool 'opencode'") {
-		t.Errorf("quickShellCommand with opencode tool = %q, want --tool 'opencode'", got)
+func TestQuickShellCommandPassesZAIProfile(t *testing.T) {
+	got := quickShellCommand("/bin/manigot", "/home/me/proj", "zai")
+	if !strings.Contains(got, "--profile 'zai'") {
+		t.Errorf("quickShellCommand with zai profile = %q, want --profile 'zai'", got)
 	}
 }
 
 // A checkout in a directory with spaces must still produce a single word for
 // the manigot path, since the string is re-parsed by osascript / bash -lc.
 func TestQuickShellCommandQuotesPathWithSpaces(t *testing.T) {
-	got := quickShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "/tmp/p", "claude-code")
+	got := quickShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "/tmp/p", "claude-pro")
 	if !strings.Contains(got, `'/Users/me/My Projects/manigot/scripts/run.sh'`) {
 		t.Errorf("manigot path not quoted as one word in %q", got)
 	}
 }
 
-// An empty tool must default to claude-code, matching scripts/run.sh's own
-// default, rather than passing an empty --tool value through.
-func TestShellCommandDefaultsEmptyTool(t *testing.T) {
+// An empty profile must default to claude-pro, matching scripts/run.sh's own
+// default, rather than passing an empty --profile value through.
+func TestShellCommandDefaultsEmptyProfile(t *testing.T) {
 	got := shellCommand("/bin/manigot", "developer", "irw320", "/home/me/proj", "")
-	if !strings.Contains(got, "--tool 'claude-code'") {
-		t.Errorf("shellCommand with empty tool = %q, want it to default to claude-code", got)
+	if !strings.Contains(got, "--profile 'claude-pro'") {
+		t.Errorf("shellCommand with empty profile = %q, want it to default to claude-pro", got)
 	}
 }
 
-func TestShellCommandPassesOpencodeTool(t *testing.T) {
-	got := shellCommand("/bin/manigot", "developer", "irw320", "/home/me/proj", "opencode")
-	if !strings.Contains(got, "--tool 'opencode'") {
-		t.Errorf("shellCommand with opencode tool = %q, want --tool 'opencode'", got)
+func TestShellCommandPassesZAIProfile(t *testing.T) {
+	got := shellCommand("/bin/manigot", "developer", "irw320", "/home/me/proj", "zai")
+	if !strings.Contains(got, "--profile 'zai'") {
+		t.Errorf("shellCommand with zai profile = %q, want --profile 'zai'", got)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestShellQuoteNeutralizesInjection(t *testing.T) {
 
 func TestShellCommandQuoteEscape(t *testing.T) {
 	// A projectRoot with a quote still ends up as one safe argument.
-	got := shellCommand("/bin/manigot", "a", "b", "/path/with'quote", "claude-code")
+	got := shellCommand("/bin/manigot", "a", "b", "/path/with'quote", "claude-pro")
 	// The root must appear escaped, not as a raw close-quote.
 	if !strings.Contains(got, `'/path/with'\''quote'`) {
 		t.Errorf("root quote not escaped in %q", got)

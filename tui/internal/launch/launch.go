@@ -27,12 +27,13 @@ import (
 	"github.com/lmuskalla/manigot/tui/internal/resolve"
 )
 
-// Agent opens a new terminal that runs manigot with `--tool <tool> --agent
-// <agent> --job <jobID>` in projectRoot. tool is one of config.ToolClaudeCode
-// or config.ToolOpenCode; an empty value defaults to config.ToolClaudeCode,
-// matching scripts/run.sh's own default. It returns a short human description
-// of where it opened (e.g. "tmux window", "Terminal.app", "gnome-terminal")
-// so the caller can surface it in a status line.
+// Agent opens a new terminal that runs manigot with `--profile <profile>
+// --agent <agent> --job <jobID>` in projectRoot. profile is one of the
+// subscription profiles in config.Profiles; an empty value defaults to
+// config.ProfileClaudePro, matching scripts/run.sh's own default. It returns
+// a short human description of where it opened (e.g. "tmux window",
+// "Terminal.app", "gnome-terminal") so the caller can surface it in a status
+// line.
 //
 // The launcher process is detached: its stdio is discarded so it cannot
 // corrupt the TUI's alt screen, and it is reaped asynchronously.
@@ -52,32 +53,32 @@ import (
 // already covers the failure mode the brief actually reports (the inner `sc
 // --agent` command failing fast); a launcher-binary-itself failure is a
 // narrower, rarer case left uncovered rather than risk reintroducing UI lag.
-func Agent(agent, jobID, projectRoot, tool string) (string, error) {
+func Agent(agent, jobID, projectRoot, profile string) (string, error) {
 	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
-	inner := shellCommand(found.Path, agent, jobID, projectRoot, tool)
+	inner := shellCommand(found.Path, agent, jobID, projectRoot, profile)
 	return launchDetached(inner)
 }
 
-// Quick opens a new terminal that runs manigot with just `--tool <tool>` (no
-// --agent, no --job) in projectRoot — a bare session for an ad-hoc change that
-// doesn't belong to any specific job/agent workflow. tool is one of
-// config.ToolClaudeCode or config.ToolOpenCode; an empty value defaults to
-// config.ToolClaudeCode, matching Agent. It returns the same short human
+// Quick opens a new terminal that runs manigot with just `--profile <profile>`
+// (no --agent, no --job) in projectRoot — a bare session for an ad-hoc change
+// that doesn't belong to any specific job/agent workflow. profile is one of
+// the subscription profiles in config.Profiles; an empty value defaults to
+// config.ProfileClaudePro, matching Agent. It returns the same short human
 // description of where it opened so the caller can surface it in a status line.
 //
 // scripts/run.sh already treats --agent and --job as optional, so a bare `sc
-// --tool <tool>` simply runs claude/opencode against the current project with
-// no agent flag and no job prompt — no container-side changes were needed to
-// support this.
-func Quick(projectRoot, tool string) (string, error) {
+// --profile <profile>` simply runs claude/opencode against the current project
+// with no agent flag and no job prompt — no container-side changes were needed
+// to support this.
+func Quick(projectRoot, profile string) (string, error) {
 	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
-	inner := quickShellCommand(found.Path, projectRoot, tool)
+	inner := quickShellCommand(found.Path, projectRoot, profile)
 	return launchDetached(inner)
 }
 
@@ -151,14 +152,14 @@ func launchDetached(inner string) (string, error) {
 
 // shellCommand builds the shell string executed inside the new terminal:
 //
-//	cd '<projectRoot>' && '<manigot>' --tool '<tool>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
+//	cd '<projectRoot>' && '<manigot>' --profile '<profile>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
 //
 // cd-ing first matters because manigot finds the project root from $PWD (see
 // scripts/run.sh find_project_root). manigotPath is the absolute path from the
 // resolve package; it is quoted like every other value, so a checkout in a
 // directory with spaces survives both osascript and `bash -lc`. Arguments are
 // single-quoted and embedded single quotes are escaped, so no value can break
-// out of its quotes. An empty tool defaults to config.ToolClaudeCode so the
+// out of its quotes. An empty profile defaults to config.ProfileClaudePro so the
 // flag is always passed explicitly, regardless of what scripts/run.sh's own
 // default happens to be.
 //
@@ -172,33 +173,33 @@ func launchDetached(inner string) (string, error) {
 // window flashes and disappears before its output can be read — this is the
 // brief's "a window appears and it immediately closes again". The result is
 // wrapped in holdOnFailure (TASK-6) so a non-zero exit pauses instead.
-func shellCommand(manigotPath, agent, jobID, projectRoot, tool string) string {
-	if tool == "" {
-		tool = config.ToolClaudeCode
+func shellCommand(manigotPath, agent, jobID, projectRoot, profile string) string {
+	if profile == "" {
+		profile = config.ProfileClaudePro
 	}
-	inner := fmt.Sprintf("cd %s && %s --tool %s --agent %s --job %s",
-		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(tool), shellQuote(agent), shellQuote(jobID))
+	inner := fmt.Sprintf("cd %s && %s --profile %s --agent %s --job %s",
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile), shellQuote(agent), shellQuote(jobID))
 	return holdOnFailure(inner)
 }
 
 // quickShellCommand builds the shell string for a bare manigot session (no
 // --agent, no --job), executed inside the new terminal:
 //
-//	cd '<projectRoot>' && '<manigot>' --tool '<tool>'; ec=$?; ...
+//	cd '<projectRoot>' && '<manigot>' --profile '<profile>'; ec=$?; ...
 //
 // It is the --agent/--job-less counterpart to shellCommand: same cd-first,
 // shellQuote-everything, holdOnFailure-wrap behavior (so a fast failure of the
 // inner command still holds the window open — TASK-6), just without the
-// agent/job flags. An empty tool defaults to config.ToolClaudeCode for the same
-// reason shellCommand does. It is deliberately a separate function rather than
-// a generalization of shellCommand so the latter's exact-format tests stay
+// agent/job flags. An empty profile defaults to config.ProfileClaudePro for the
+// same reason shellCommand does. It is deliberately a separate function rather
+// than a generalization of shellCommand so the latter's exact-format tests stay
 // unchanged.
-func quickShellCommand(manigotPath, projectRoot, tool string) string {
-	if tool == "" {
-		tool = config.ToolClaudeCode
+func quickShellCommand(manigotPath, projectRoot, profile string) string {
+	if profile == "" {
+		profile = config.ProfileClaudePro
 	}
-	inner := fmt.Sprintf("cd %s && %s --tool %s",
-		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(tool))
+	inner := fmt.Sprintf("cd %s && %s --profile %s",
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile))
 	return holdOnFailure(inner)
 }
 

@@ -56,9 +56,9 @@ type App struct {
 	width  int
 	height int
 
-	// settings holds the persisted TUI preferences (editor, agent tool). It
-	// is loaded once at startup and updated in place whenever the settings
-	// form is submitted.
+	// settings holds the persisted TUI preferences (editor, subscription
+	// profile). It is loaded once at startup and updated in place whenever the
+	// settings form is submitted.
 	settings config.Settings
 
 	// detail is non-nil while state == stateDetail.
@@ -615,7 +615,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.newJob = newNewJobView(a.width, a.height)
 		a.state = stateNewJob
 	case "s":
-		// Edit the persisted TUI settings (editor, agent tool).
+		// Edit the persisted TUI settings (editor, subscription profile).
 		a.settingsView = newSettingsView(a.settings, a.width, a.height)
 		a.state = stateSettings
 	case "o":
@@ -623,7 +623,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// new terminal — a quick ad-hoc change that doesn't belong to any
 		// specific job's workflow. Mirrors updateDetail's agent-launch
 		// reporting so the two launch paths feel consistent in the footer.
-		desc, err := launch.Quick(a.root, a.settings.ToolValue())
+		desc, err := launch.Quick(a.root, a.settings.ProfileValue())
 		if err != nil {
 			a.status = cmdErrorText(err)
 		} else {
@@ -823,7 +823,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if _, blocked := a.branchGuard(); blocked {
 			return a, a.blockedByBranchCmd()
 		}
-		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ToolValue())
+		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ProfileValue())
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 		} else {

@@ -3,13 +3,13 @@ set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
 # mg agents                       # list agents, pick one, start a session in it
-# mg agents --tool opencode       # ...anything else is passed through to run.sh
+# mg agents --profile zai         # ...anything else is passed through to run.sh
 #
 # Reached via `mg agents`. Lists every agent available to the current project —
 # manigot's global `agents/*.md`, with any `docs/agents/` overrides or
 # project-only additions swapped in when the project is initialized — lets you
 # pick one interactively, then hands off to run.sh with `--agent <name>` (all
-# other args, e.g. `--tool`, passed through unchanged).
+# other args, e.g. `--profile`, passed through unchanged).
 
 # ── Resolve repo ────────────────────────────────────────────────────────────────
 # Follow symlinks to the real script location — this is installed as a

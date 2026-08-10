@@ -2,9 +2,10 @@
 
 <!--
 This is your project context, loaded by the agent at the start of every session.
-manigot is vendor-agnostic: it runs Claude Code (`mg`) or OpenCode
-(`mg --tool opencode`) against the same project, and this one file serves
-both — manigot mounts it read-only wherever the selected tool looks for it
+manigot is vendor-agnostic: it runs Claude Code or OpenCode against the same
+project (`mg --profile claude-pro` vs `mg --profile zai`/`--profile
+opencode-go`), and this one file serves both — manigot mounts it read-only
+wherever the selected tool looks for it
 (/workspace/AGENTS.md for OpenCode, /workspace/.claude/CLAUDE.md for Claude
 Code). Those mount paths are read-only: to change this context, edit this
 file (docs/AGENTS.md), never the mount paths.

@@ -29,6 +29,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/lmuskalla/manigot/tui/internal/config"
 	"github.com/lmuskalla/manigot/tui/internal/git"
 	"github.com/lmuskalla/manigot/tui/internal/job"
 	"github.com/lmuskalla/manigot/tui/internal/orchestrate"
@@ -229,19 +230,24 @@ func newCommandAgentRunner(projectRoot string) (*commandAgentRunner, error) {
 	return &commandAgentRunner{manigotPath: found.Path, projectRoot: projectRoot}, nil
 }
 
-// Run invokes `mg --print --agent <agent> --job <j.Name>` synchronously and
-// returns its stdout. scripts/run.sh's --print path keeps stdout clean of
-// its own diagnostics (redirected to fd 3/stderr — see run.sh), so stdout
-// here is exactly the agent's own response. j.Name (the exact job directory
-// name) is passed rather than j.ID to remove any ambiguity in run.sh's own
-// --job resolution.
+// Run invokes `mg --print --profile claude-pro --agent <agent> --job <j.Name>`
+// synchronously and returns its stdout. scripts/run.sh's --print path keeps
+// stdout clean of its own diagnostics (redirected to fd 3/stderr — see
+// run.sh), so stdout here is exactly the agent's own response. j.Name (the
+// exact job directory name) is passed rather than j.ID to remove any ambiguity
+// in run.sh's own --job resolution.
+//
+// The claude-pro profile is pinned explicitly rather than left to run.sh's
+// default: v1 of mg-jdi is Claude Code only (--print is rejected for opencode
+// profiles), and pinning keeps it working even when the user has set a
+// different default profile via `mg profiles`.
 //
 // cmd.Dir and $PWD are both set to projectRoot, the same pattern
 // tui/internal/hostcmd's NewJob/DoneCommand/DeleteCommand use, because
 // run.sh resolves the project root from $PWD via its own find_project_root
 // helper.
 func (r *commandAgentRunner) Run(agent string, j job.Job) ([]byte, error) {
-	cmd := exec.Command(r.manigotPath, "--print", "--agent", agent, "--job", j.Name)
+	cmd := exec.Command(r.manigotPath, "--print", "--profile", config.ProfileClaudePro, "--agent", agent, "--job", j.Name)
 	cmd.Dir = r.projectRoot
 	cmd.Env = append(os.Environ(), "PWD="+r.projectRoot)
 

@@ -3,8 +3,11 @@ set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
 # mg                              # start a session (today's run.sh behavior)
-# mg --tool opencode              # ...with flags, unchanged
+# mg --profile zai                # ...with a specific subscription profile
 # mg --agent analyst --job <id>
+# mg profiles                     # list profiles / set the default profile
+# mg profiles zai                 # ...make bare `mg` use the zai profile
+# mg setup                        # configure credentials for your subscriptions
 # mg agents                       # today's agents.sh — pick an agent, then run.sh
 # mg job "title" [--type ...]     # today's new-job.sh
 # mg tui                          # today's tui.sh
@@ -17,11 +20,11 @@ set -euo pipefail
 # Single dispatcher: the only script `make install` symlinks onto PATH as
 # `mg`. It inspects $1 — if it's -h/--help/help, prints usage and exits
 # (before any subcommand runs, so it needs no docker/auth setup); if it
-# exactly matches one of the seven subcommand names above, it execs the
+# exactly matches one of the subcommand names above, it execs the
 # matching sibling script with the remaining args unchanged; anything else
 # (no args at all, or any other first token, including run.sh's own
-# --agent/--job/--tool/--print flags) falls through to run.sh with all
-# original args untouched. None of the underlying scripts change their own
+# --agent/--job/--tool/--profile/--print flags) falls through to run.sh with
+# all original args untouched. None of the underlying scripts change their own
 # logic, flags, or behavior — see docs/jobs/9pze1x_better-cli-syntax/brief.md.
 # init is the one exception to "needs an initialized project" — it creates
 # docs/, so it deliberately works without one already existing.
@@ -45,17 +48,25 @@ print_help() {
     cat <<'EOF'
 mg — isolated agent environment per project (Claude Code or OpenCode, sandboxed in Docker)
 
+Profiles bundle an agent CLI with one of your subscriptions:
+  claude-pro    Claude Code, billed to your Claude Pro/Max subscription
+  zai           OpenCode, billed to your Z.AI Coding Plan
+  opencode-go   OpenCode, billed to the OpenCode Go subscription
+
 Usage:
   mg                              Start a session in the current project
-  mg --tool opencode              ...with OpenCode instead of Claude Code
+  mg --profile <name>             ...with the given profile (claude-pro|zai|opencode-go)
   mg --agent <name>               Start straight in an agent (e.g. analyst)
   mg --job <id>                   Start with a job's brief.md as the prompt
   mg --agent <name> --job <id>    Combine the two
 
 Commands:
+  mg profiles [name]              List the profiles (and which is the default),
+                                   or set the default used by bare `mg`
+  mg setup [name] [--check]       Configure credentials for your subscriptions,
+                                   interactively, or report status with --check
   mg agents                       List available agents and pick one to start
-  mg init [--tool claude-code|opencode]
-                                   Bootstrap this project for the job workflow
+  mg init [--profile <name>]      Bootstrap this project for the job workflow
   mg job "<title>" [--type feature|fix|chore]
                                    Create a job directory + branch (off main)
   mg done <id>                    Archive a finished job
@@ -77,6 +88,14 @@ case "${1:-}" in
     -h|--help|help)
         print_help
         exit 0
+        ;;
+    profiles)
+        shift
+        exec "$SCRIPT_DIR/profiles.sh" "$@"
+        ;;
+    setup)
+        shift
+        exec "$SCRIPT_DIR/setup.sh" "$@"
         ;;
     agents)
         shift

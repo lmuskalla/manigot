@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Which agent CLI to start — set by run.sh from its --tool flag.
+# Which agent CLI to start — set by run.sh from the resolved session profile
+# (MANIGOT_TOOL: claude-code or opencode).
 TOOL="${MANIGOT_TOOL:-claude-code}"
 
 if [[ "$TOOL" == "claude-code" ]]; then

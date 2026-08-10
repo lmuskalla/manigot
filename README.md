@@ -6,9 +6,12 @@
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
-Runs either **Claude Code** (default, billed against your subscription via
-mounted OAuth credentials) or **OpenCode** (billed per token against whichever
-provider key you give it) — pick per session with `--tool`.
+Runs a session under one of three **subscription profiles** — `claude-pro`
+(Claude Code, billed to your Claude Pro/Max subscription), `zai` (OpenCode,
+billed to your Z.AI Coding Plan), and `opencode-go` (OpenCode, billed to the
+OpenCode Go subscription). Pick per session with `--profile`, set the default
+used by bare `mg` with `mg profiles`, and configure credentials with
+`mg setup`.
 
 ---
 
@@ -23,6 +26,8 @@ manigot/
   scripts/                ← launcher and utility scripts
     mg.sh                 ← dispatcher              → 'mg' (the only symlink)
     run.sh                ← container launcher      → 'mg' (no subcommand)
+    profiles.sh           ← profile list/setter     → 'mg profiles'
+    setup.sh              ← credential wizard       → 'mg setup'
     agents.sh             ← agent picker            → 'mg agents'
     new-job.sh            ← job generator           → 'mg job'
     finish-job.sh         ← job archiver            → 'mg done'
@@ -34,7 +39,7 @@ manigot/
   tui/                    ← host-side TUI source (Go); `make tui` builds bin/manigot-tui
                              tui/cmd/jdi/ is what 'mg jdi' runs, same module; `make jdi` builds bin/manigot-jdi
   bin/                    ← built binaries (gitignored)
-  .env                    ← your credentials (gitignored, never committed)
+  .env                    ← your credentials + default profile (gitignored, never committed)
   .gitignore
   README.md
   agents/                 ← global agents, baked into the image for both tools
@@ -93,7 +98,45 @@ running `claude`/`opencode` directly, in any project, initialized or not.
 
 ## Setup (once)
 
-### Claude Code (default)
+### Profiles
+
+A profile bundles an agent CLI with one of your subscriptions:
+
+| Profile | Agent CLI | Billing | Credential in `.env` |
+|---|---|---|---|
+| `claude-pro` | Claude Code | Claude Pro/Max subscription | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs |
+| `zai` | OpenCode | Z.AI Coding Plan | `ZHIPU_API_KEY` |
+| `opencode-go` | OpenCode | OpenCode Go subscription | `OPENCODE_API_KEY` |
+
+The quickest way to get going:
+
+```bash
+cd manigot/
+make build
+mg setup              # interactive wizard: walks through each profile,
+                      # auto-applying what it can read off your host (e.g.
+                      # your Claude account from ~/.claude.json) and letting
+                      # you paste the rest into manigot/.env
+mg profiles           # see the three profiles, which are ready, and the default
+mg profiles zai       # make bare `mg` use the zai profile
+```
+
+`mg setup <name>` sets up a single profile; `mg setup --check` reports status
+non-interactively. Everything ends up in the same gitignored `manigot/.env`
+that `scripts/run.sh` sources. Manual instructions for each profile, if you'd
+rather fill `.env` by hand:
+
+```bash
+# 1. Build the image
+cd manigot/
+make build
+
+# 2. Put the launchers on your PATH
+make install                            # /usr/local/bin — may need sudo
+# make install PREFIX="$HOME/.local"    # ...or somewhere you own
+```
+
+### `claude-pro` — Claude Code, Claude Pro subscription
 
 ```bash
 # 1. Extract your account info from your host (requires Claude Code installed locally)
@@ -110,48 +153,47 @@ CLAUDE_ACCOUNT_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 CLAUDE_EMAIL=your@email.com
 CLAUDE_ORG_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 EOF
-
-# 3. Build the image
-cd manigot/
-make build
-
-# 4. Put the launchers on your PATH
-make install                            # /usr/local/bin — may need sudo
-# make install PREFIX="$HOME/.local"    # ...or somewhere you own
 ```
 
-### OpenCode
+### `zai` — OpenCode, Z.AI Coding Plan
 
-OpenCode is already in the image — no extra install. It is multi-provider and
-authenticates from environment variables, so add at least one provider key to
-the same `.env`:
+OpenCode is already in the image — no extra install. It authenticates from
+environment variables, so add your Z.AI Coding Plan key to the same `.env`:
 
 ```bash
 cat >> manigot/.env << EOF
-# any one of these is enough
-ANTHROPIC_API_KEY=sk-ant-...
-# OPENAI_API_KEY=sk-...
-# OPENROUTER_API_KEY=sk-or-...
-# GOOGLE_GENERATIVE_AI_API_KEY=...
-# GROQ_API_KEY=...
-# XAI_API_KEY=...
-# DEEPSEEK_API_KEY=...
-# OPENCODE_API_KEY=...            # OpenCode Zen
-# ZHIPU_API_KEY=...               # Z.AI / Z.AI Coding Plan
+ZHIPU_API_KEY=xxxxx.xxxxx      # Z.AI Coding Plan key
 
-# optional: model to start with, as provider/model
-OPENCODE_MODEL=anthropic/claude-sonnet-4-5
+# optional: which model this profile defaults to, as provider/model
+OPENCODE_ZAI_MODEL=zai-coding-plan/glm-5.2
 EOF
 ```
 
-Recognised keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
-`GOOGLE_GENERATIVE_AI_API_KEY`, `GROQ_API_KEY`, `XAI_API_KEY`,
-`DEEPSEEK_API_KEY`, `OPENCODE_API_KEY`, `ZHIPU_API_KEY`. Only the ones you set
-are passed into the container, and only when you run with `--tool opencode`.
+### `opencode-go` — OpenCode, OpenCode Go subscription
 
-Note: `ANTHROPIC_API_KEY` is rejected on the Claude Code path — it would
-override your subscription and bill per token. On the OpenCode path it is
-allowed, because there it is the normal way to authenticate.
+OpenCode Go uses your OpenCode API key from [opencode.ai/auth](https://opencode.ai/auth),
+billed against the Go subscription (the same key works for Zen — billing
+follows your subscription):
+
+```bash
+cat >> manigot/.env << EOF
+OPENCODE_API_KEY=sk-...        # your key from https://opencode.ai/auth
+
+# optional: which model this profile defaults to, as provider/model.
+# Go model ids use the opencode-go/ prefix (e.g. opencode-go/deepseek-v4-flash)
+OPENCODE_GO_MODEL=opencode-go/glm-5.2
+EOF
+```
+
+The `--profile` selector and `mg profiles`/`mg setup` are the supported way to
+manage these. `--tool claude-code|opencode` is still accepted as a legacy
+alias: `--tool claude-code` behaves exactly like `--profile claude-pro`, and
+`--tool opencode` keeps its old behavior of forwarding every configured
+OpenCode key and using `OPENCODE_MODEL` unchanged.
+
+Note: `ANTHROPIC_API_KEY` is rejected on the claude-pro path — it would
+override your subscription and bill per token. On the OpenCode profiles it is
+ignored (only the profile's own key is forwarded).
 
 ### The installed commands
 
@@ -160,7 +202,9 @@ its first argument:
 
 | command | does |
 |---|---|
-| `mg` | start a session in the current project (works with or without `docs/` — see above) |
+| `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
+| `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg` |
+| `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job directory + branch (off `main`); needs `docs/` |
@@ -215,8 +259,8 @@ from `project-template/docs/` into your project (skipping the copy — and
 reporting "already initialized" — if `docs/` already exists), then offers to
 hand off to `@prompter` to read your project and draft a concrete
 `docs/AGENTS.md` for you (`y`/`N`, defaults to no). Run it again any time to
-get that offer without re-copying. Add `--tool opencode` to run the prompter
-hand-off under OpenCode instead of Claude Code.
+get that offer without re-copying. Add `--profile zai` (or any other profile)
+to run the prompter hand-off under that subscription instead of claude-pro.
 
 Equivalent manual steps, if you'd rather not run the prompter or want more
 control:
@@ -248,15 +292,18 @@ cd your-project/
 mg init
 
 # Start a manigot session (run from anywhere, in any project — docs/ optional)
-mg                        # Claude Code (default)
-mg --tool opencode        # OpenCode
+mg                            # the default profile (claude-pro), or whatever `mg profiles` set
+mg --profile zai              # this session on your Z.AI Coding Plan
+mg --profile opencode-go      # this session on your OpenCode Go subscription
+mg profiles                   # list profiles + the current default
+mg setup --check              # which profiles are ready to use
 
 # List all commands
 mg --help
 
 # Start straight in an agent, or on a job
 mg --agent analyst
-mg --tool opencode --job a3f9k2
+mg --profile zai --job a3f9k2
 
 # Start an agent with an ad-hoc initial prompt, outside the job workflow
 mg --agent prompter --prompt "help me write a good project prompt"
@@ -285,21 +332,23 @@ job prompt wins.
 
 ---
 
-## Choosing a tool
+## Choosing a profile
 
-`--tool claude-code` (default) or `--tool opencode`. What differs:
+A profile bundles the agent CLI with the subscription it is billed against.
+`--profile claude-pro` (default), `--profile zai`, or `--profile opencode-go`.
+What differs per profile:
 
-| | `claude-code` | `opencode` |
+| | `claude-pro` | `zai` / `opencode-go` |
 |---|---|---|
 | CLI in container | `claude` | `opencode` |
-| Auth | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs (subscription) | one provider API key |
+| Auth | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs (Claude subscription) | `ZHIPU_API_KEY` / `OPENCODE_API_KEY` |
 | Onboarding | bypassed by writing `~/.claude.json` | nothing to bypass |
 | Global agents | `~/.claude/agents/` | `~/.config/opencode/agents/` |
 | `docs/` mounted at | `/workspace/.claude` | `/workspace/.opencode` |
 | Project agents | `/workspace/.claude/agents/` | `/workspace/.opencode/agents/` |
 | `docs/AGENTS.md` mounted at | `/workspace/.claude/CLAUDE.md` | `/workspace/AGENTS.md` |
 | Initial job prompt | positional argument | `--prompt` |
-| Billing | your Claude subscription | per token, on your provider key |
+| Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go subscription |
 | Non-interactive (`--print` / `mg jdi`) | supported | not supported in v1 — rejected with an error |
 
 Both tools get the same `agents/*.md` files baked in at build time. The
@@ -332,7 +381,7 @@ your session, or run `mg agents` from the host to list them (with any
 | `@prompter` | Crafts and refines prompts for LLMs and agents | read + write |
 
 The Tools column is enforced under Claude Code only — see the caveat under
-[Choosing a tool](#choosing-a-tool).
+[Choosing a profile](#choosing-a-profile).
 
 To override an agent for a specific project, create a file with the same name
 in `your-project/docs/agents/`. Project agents take precedence over global ones.
@@ -405,8 +454,9 @@ yourself — when:
 
 `@product-owner` and `@security` are not part of the sequence `mg jdi`
 drives — both stay available as ordinary agents, unaffected. **v1 is Claude
-Code only** — `mg --print --tool opencode` is rejected with a clear error;
-OpenCode's non-interactive invocation is unverified.
+Code only** — it always runs under the claude-pro profile, and any `--print`
+invocation of an OpenCode profile is rejected with a clear error; OpenCode's
+non-interactive invocation is unverified.
 
 **Watching a run.** A direct `mg jdi --job <id>` run streams each agent's
 output to its own terminal as each invocation completes, and rings the
@@ -439,17 +489,17 @@ brief, launching an agent, or marking it done — those three actions refuse
 
 ### Supported platforms
 
-macOS and Linux. Firing an agent opens `mg --tool <tool> --agent <name> --job
-<id>` in a new terminal (`<tool>` from the settings screen — see below),
-picked in this order:
+macOS and Linux. Firing an agent opens `mg --profile <profile> --agent <name>
+--job <id>` in a new terminal (`<profile>` from the settings screen — see
+below), picked in this order:
 
 1. a new **tmux** window, if the TUI is itself running inside tmux (`$TMUX` set)
 2. **Terminal.app** via `osascript` on macOS
 3. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
    `konsole`, or `xterm`, whichever is found first on `PATH`
 
-The list view's `o` shortcut (see Keybindings) opens a bare `mg --tool <tool>`
-instead — same spawn paths, but with no agent and no job, for a quick ad-hoc
+The list view's `o` shortcut (see Keybindings) opens a bare `mg --profile
+<profile>` instead — same spawn paths, but with no agent and no job, for a quick ad-hoc
 session that isn't tied to a specific job's workflow.
 
 Windows is not supported in this version.
@@ -489,7 +539,7 @@ List view:
 | `enter` | open the job's detail view |
 | `o` | launch a quick manigot session (no agent, no job) |
 | `n` | create a new job (runs the host `mg job`) |
-| `s` | open settings (editor, agent tool) |
+| `s` | open settings (editor, subscription profile) |
 | `ctrl+r` | refresh — re-read job files from disk |
 | `q` | quit |
 
@@ -526,10 +576,13 @@ Press `s` from the job list to open the settings screen:
 
 - **Editor** — the command `e` (in the detail view) runs to open `brief.md`.
   Leave blank to fall back to `$VISUAL`/`$EDITOR`/`nano`/`vi`.
-- **Tool** — `claude-code` or `opencode`, cycled with `←`/`→`. Selects which
-  agent CLI firing an agent from the action bar launches (adds `--tool` to
-  the `mg --agent ... --job ...` command the same way `mg --tool opencode`
-  would on the command line).
+- **Profile** — `claude-pro`, `zai`, or `opencode-go`, cycled with `←`/`→`
+  (the selected profile's tool, model, and billing are shown beneath the list).
+  Selects which subscription firing an agent from the action bar launches
+  (adds `--profile` to the `mg --agent ... --job ...` command the same way
+  `mg --profile zai` would on the command line). This is the TUI's own
+  default — it always passes `--profile` explicitly, independent of the
+  default set by `mg profiles` on the CLI.
 
 `tab` moves between fields, `enter` saves, `esc` discards. Settings persist to
 `config/tui-settings.json` in the manigot checkout (gitignored — it's a

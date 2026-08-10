@@ -10,8 +10,9 @@ import (
 	"github.com/lmuskalla/manigot/tui/internal/config"
 )
 
-// toolOptions mirrors the --tool values accepted by scripts/run.sh.
-var toolOptions = []string{config.ToolClaudeCode, config.ToolOpenCode}
+// profileOptions mirrors the profiles accepted by scripts/run.sh's --profile
+// flag, in cycle order.
+var profileOptions = config.Profiles()
 
 // stAction is what update returns for the App to act on.
 type stAction int
@@ -23,16 +24,16 @@ const (
 )
 
 // settingsView is the "Settings" form: an editor command text input and a
-// cycled tool selector. Like newJobView, it does not persist anything itself
+// cycled profile selector. Like newJobView, it does not persist anything itself
 // — the App calls config.Save on submit so this stays a pure input
 // component.
 type settingsView struct {
-	editor textinput.Model
-	tool   int // index into toolOptions
-	focus  int // 0 = editor, 1 = tool
-	width  int
-	height int
-	status string // validation/save error message
+	editor  textinput.Model
+	profile int // index into profileOptions
+	focus   int // 0 = editor, 1 = profile
+	width   int
+	height  int
+	status  string // validation/save error message
 }
 
 func newSettingsView(s config.Settings, width, height int) *settingsView {
@@ -43,7 +44,7 @@ func newSettingsView(s config.Settings, width, height int) *settingsView {
 	ti.SetValue(s.Editor)
 	ti.Focus()
 	ti.Width = 60
-	v := &settingsView{editor: ti, tool: toolIndex(s.ToolValue()), focus: 0, width: width, height: height}
+	v := &settingsView{editor: ti, profile: profileIndex(s.ProfileValue()), focus: 0, width: width, height: height}
 	if width > 0 {
 		v.editor.Width = width - 12
 		if v.editor.Width < 20 {
@@ -53,11 +54,11 @@ func newSettingsView(s config.Settings, width, height int) *settingsView {
 	return v
 }
 
-// toolIndex finds tool in toolOptions, defaulting to index 0 (claude-code)
+// profileIndex finds id in profileOptions, defaulting to index 0 (claude-pro)
 // for an unrecognized value.
-func toolIndex(tool string) int {
-	for i, t := range toolOptions {
-		if t == tool {
+func profileIndex(id string) int {
+	for i, p := range profileOptions {
+		if p.ID == id {
 			return i
 		}
 	}
@@ -97,12 +98,12 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 	}
 
 	if v.focus == 1 {
-		// Tool selector: cycle with ←/→.
+		// Profile selector: cycle with ←/→.
 		switch msg.String() {
 		case "left":
-			v.tool = (v.tool + len(toolOptions) - 1) % len(toolOptions)
+			v.profile = (v.profile + len(profileOptions) - 1) % len(profileOptions)
 		case "right":
-			v.tool = (v.tool + 1) % len(toolOptions)
+			v.profile = (v.profile + 1) % len(profileOptions)
 		}
 		return stNone
 	}
@@ -117,8 +118,8 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 // to be persisted with config.Save.
 func (v *settingsView) settingsValue() config.Settings {
 	return config.Settings{
-		Editor: strings.TrimSpace(v.editor.Value()),
-		Tool:   toolOptions[v.tool],
+		Editor:  strings.TrimSpace(v.editor.Value()),
+		Profile: profileOptions[v.profile].ID,
 	}
 }
 
@@ -139,30 +140,41 @@ func (v *settingsView) render() string {
 	b.WriteString(dimStyle.Render("           blank = use $VISUAL / $EDITOR / nano / vi"))
 	b.WriteString("\n\n")
 
-	// Tool row.
-	b.WriteString("  Tool:    ")
-	for i, t := range toolOptions {
-		var cell string
-		switch {
-		case i == v.tool && v.focus == 1:
-			cell = accentStyle.Render("▸ " + t)
-		case i == v.tool:
-			cell = lipgloss.NewStyle().Bold(true).Render("● " + t)
-		default:
-			cell = dimStyle.Render("○ " + t)
+	// Profile row: one line per profile, the selected one highlighted.
+	b.WriteString("  Profile:\n")
+	for i, p := range profileOptions {
+		var mark, id, rest string
+		if i == v.profile && v.focus == 1 {
+			mark = accentStyle.Render("▸ ")
+			id = accentStyle.Render(p.ID)
+		} else if i == v.profile {
+			mark = lipgloss.NewStyle().Bold(true).Render("● ")
+			id = lipgloss.NewStyle().Bold(true).Render(p.ID)
+		} else {
+			mark = "  "
+			id = dimStyle.Render(p.ID)
 		}
-		b.WriteString(cell)
-		b.WriteString("    ")
+		rest = "  " + dimStyle.Render(p.Label)
+		b.WriteString("    " + mark + id + rest)
+		b.WriteString("\n")
 	}
+	// Describe the selected profile: tool, model, and what it bills against.
+	sel := profileOptions[v.profile]
+	selDesc := "tool: " + sel.Tool
+	if sel.Model != "" {
+		selDesc += " · model: " + sel.Model
+	}
+	selDesc += " · billed via " + sel.Auth
+	b.WriteString(dimStyle.Render("    " + selDesc))
 	b.WriteString("\n\n")
 
 	// Footer: status or hint.
 	if v.status != "" {
 		b.WriteString(statusStyle.Render(v.status))
 	} else if v.focus == 1 {
-		b.WriteString(dimStyle.Render("←/→ change tool · tab/shift+tab editor · enter save · esc cancel"))
+		b.WriteString(dimStyle.Render("←/→ change profile · tab/shift+tab editor · enter save · esc cancel"))
 	} else {
-		b.WriteString(dimStyle.Render("tab/shift+tab tool · enter save · esc cancel"))
+		b.WriteString(dimStyle.Render("tab/shift+tab profile · enter save · esc cancel"))
 	}
 	return b.String()
 }

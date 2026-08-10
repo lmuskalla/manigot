@@ -48,7 +48,7 @@ func TestLoadUnresolvableHomeReturnsZeroValue(t *testing.T) {
 
 func TestSaveThenLoadRoundTrips(t *testing.T) {
 	dir := checkout(t)
-	want := Settings{Editor: "vim", Tool: ToolOpenCode}
+	want := Settings{Editor: "vim", Profile: ProfileZAI}
 	if err := Save(want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -75,11 +75,62 @@ func TestSaveUnresolvableHomeErrors(t *testing.T) {
 	}
 }
 
-func TestToolValueDefaultsToClaudeCode(t *testing.T) {
-	if got := (Settings{}).ToolValue(); got != ToolClaudeCode {
-		t.Errorf("zero-value ToolValue = %q, want %q", got, ToolClaudeCode)
+func TestProfileValueDefaultsToClaudePro(t *testing.T) {
+	if got := (Settings{}).ProfileValue(); got != ProfileClaudePro {
+		t.Errorf("zero-value ProfileValue = %q, want %q", got, ProfileClaudePro)
 	}
-	if got := (Settings{Tool: ToolOpenCode}).ToolValue(); got != ToolOpenCode {
-		t.Errorf("ToolValue = %q, want %q", got, ToolOpenCode)
+	if got := (Settings{Profile: ProfileOpenCodeGo}).ProfileValue(); got != ProfileOpenCodeGo {
+		t.Errorf("ProfileValue = %q, want %q", got, ProfileOpenCodeGo)
+	}
+}
+
+// writeSettings writes a tui-settings.json into the fake checkout.
+func writeSettings(t *testing.T, data string) {
+	t.Helper()
+	dir := checkout(t)
+	path := filepath.Join(dir, "config", "tui-settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadMigratesLegacyToolField(t *testing.T) {
+	// claude-code maps to claude-pro.
+	writeSettings(t, `{"editor":"vim","tool":"claude-code"}`)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.Profile != ProfileClaudePro {
+		t.Errorf("legacy tool claude-code -> profile %q, want %q", s.Profile, ProfileClaudePro)
+	}
+
+	// opencode maps to zai (the opencode subscription manigot configured first).
+	writeSettings(t, `{"tool":"opencode"}`)
+	s, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.Profile != ProfileZAI {
+		t.Errorf("legacy tool opencode -> profile %q, want %q", s.Profile, ProfileZAI)
+	}
+}
+
+func TestLoadKeepsExplicitProfile(t *testing.T) {
+	// A settings file that already has a profile wins over any legacy tool
+	// field, and the legacy field is dropped.
+	writeSettings(t, `{"profile":"opencode-go","tool":"opencode"}`)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.Profile != ProfileOpenCodeGo {
+		t.Errorf("profile = %q, want %q", s.Profile, ProfileOpenCodeGo)
+	}
+	if s.Tool != "" {
+		t.Errorf("legacy tool field not cleared, got %q", s.Tool)
 	}
 }
