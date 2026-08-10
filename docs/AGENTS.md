@@ -10,7 +10,7 @@ session with `mg --tool claude-code|opencode`.
 - Runtime: Docker (single image, built from `Dockerfile`)
 - Agent CLIs: Claude Code (`claude`) and OpenCode (`opencode`), both installed in the image
 - Orchestration: Bash scripts in `scripts/` (`mg.sh`, `run.sh`, `new-job.sh`,
-  `finish-job.sh`, `delete-job.sh`, `tui.sh`, `jdi.sh`, `entrypoint.sh`)
+  `finish-job.sh`, `delete-job.sh`, `tui.sh`, `jdi.sh`, `init.sh`, `entrypoint.sh`)
 - Build/CLI: `Makefile` (`make build`, `make rebuild`, `make install`, `make tui`, `make jdi`)
 - Host-side TUI: Go, in `tui/` — built with `make tui`, never runs in the container
 - Autonomous mode: Go, in `tui/cmd/jdi` (same module as the TUI) — built with
@@ -22,12 +22,12 @@ session with `mg --tool claude-code|opencode`.
   Claude Code or OpenCode update via `make rebuild`.
 - `scripts/mg.sh` — the single dispatcher, symlinked as `mg` in PATH. Inspects
   its first argument: `-h`/`--help`/`help` prints usage and exits immediately
-  (no docker/auth setup touched); one of the five subcommand names
+  (no docker/auth setup touched); one of the six subcommand names
   (`job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`, `done`→`finish-job.sh`,
-  `delete`→`delete-job.sh`) execs the matching sibling script unchanged;
-  anything else (no args, or any other first token, including `run.sh`'s own
-  `--agent`/`--job`/`--tool`/`--print` flags) falls through to `run.sh` with
-  all original args untouched.
+  `delete`→`delete-job.sh`, `init`→`init.sh`) execs the matching sibling
+  script unchanged; anything else (no args, or any other first token,
+  including `run.sh`'s own `--agent`/`--job`/`--tool`/`--print` flags) falls
+  through to `run.sh` with all original args untouched.
 - `scripts/run.sh` — container launcher, reached via bare `mg` (no
   subcommand). Mounts the current project root into the container at
   `/workspace`; nothing outside it on the host is reachable from inside. A
@@ -51,6 +51,14 @@ session with `mg --tool claude-code|opencode`.
   `bin/manigot-tui` that exports `manigot_HOME` so the TUI can find the scripts.
 - `scripts/jdi.sh` — reached via `mg jdi`; wrapper around `bin/manigot-jdi`,
   mirroring `tui.sh` exactly.
+- `scripts/init.sh` — reached via `mg init`. Bootstraps a project for the job
+  workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, and an
+  empty `docs/jobs/` — never the example job under it) into the target
+  project's `docs/` if absent, reporting "already initialized" and skipping
+  the copy otherwise, then optionally hands off to `@prompter` (via
+  `run.sh`'s `--prompt` flag) to draft a concrete `docs/AGENTS.md`. Unlike
+  every other job-workflow subcommand, it deliberately works **without** an
+  existing `docs/` — it's the one that creates it.
 - `tui/internal/resolve` — locates the host commands for the TUI (and
   `mg jdi`, which shares this package): env override (`manigot_BIN`,
   `manigot_JOB_BIN`, `manigot_DONE_BIN`, `manigot_DELETE_BIN`,
@@ -99,8 +107,8 @@ session with `mg --tool claude-code|opencode`.
   of guessing. This is deliberately not a rule in `agents/*.md` itself — those
   files are read identically by attended sessions, where a human can just
   answer a question in conversation instead of the session halting.
-- `agents/` — the six global agents (`analyst`, `developer`, `reviewer`,
-  `security`, `product-owner`, `designer`), available in every project via
+- `agents/` — the eight global agents (`analyst`, `developer`, `reviewer`,
+  `security`, `product-owner`, `designer`, `quality`, `prompter`), available in every project via
   `@name`. Baked in twice: verbatim to `~/.claude/agents/`, and to
   `~/.config/opencode/agents/` with the `name`/`tools` frontmatter keys stripped
   (OpenCode takes the name from the filename and uses a different tools schema).
@@ -135,6 +143,9 @@ session with `mg --tool claude-code|opencode`.
   is optional (see `scripts/run.sh` above) — without it you still get a
   plain agent session, just no project context or job workflow
 - `mg --tool opencode` — same, but running OpenCode instead of Claude Code
+- `mg init [--tool claude-code|opencode]` — bootstrap a project for the job
+  workflow (creates `docs/` if absent, optionally hands off to `@prompter`);
+  the only job-workflow command that works without an existing `docs/`
 - `mg job "<title>" [--type fix|chore]` — create a job dir + branch
 - `mg done <id>` — archive a finished job
 - `mg delete <id>` — permanently delete a job (directory + branch, no merge)

@@ -12,6 +12,11 @@
 .claude/
 .opencode/
 
+# OpenCode's read-only context mount of docs/AGENTS.md (see scripts/run.sh —
+# CONTEXT_TARGET for opencode is /workspace/AGENTS.md). Same duplication
+# problem as .claude/ and .opencode/ above; tracked source is docs/AGENTS.md.
+/AGENTS.md
+
 # mg-jdi's per-job status/run-log sidecar (Decision 4 in the "fully
 # autonomous mode" brief) — kept outside every job's own directory
 # (docs/jobs/<name>/) so it can never be swept into an agent's `git add -A`,

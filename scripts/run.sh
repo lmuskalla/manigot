@@ -8,17 +8,19 @@ CLAUDE_DIR_NAME="docs"
 # ── Parse args ──────────────────────────────────────────────────────────────────
 AGENT=""
 JOB=""
+INITIAL_PROMPT=""
 TOOL="claude-code"
 PRINT="false"
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --agent) AGENT="$2"; shift 2 ;;
-        --job)   JOB="$2";   shift 2 ;;
-        --tool)  TOOL="$2";  shift 2 ;;
-        --print) PRINT="true"; shift ;;
-        *)       PASSTHROUGH+=("$1"); shift ;;
+        --agent)  AGENT="$2";  shift 2 ;;
+        --job)    JOB="$2";    shift 2 ;;
+        --prompt) INITIAL_PROMPT="$2"; shift 2 ;;
+        --tool)   TOOL="$2";   shift 2 ;;
+        --print)  PRINT="true"; shift ;;
+        *)        PASSTHROUGH+=("$1"); shift ;;
     esac
 done
 
@@ -194,12 +196,20 @@ if [[ -n "$AGENT" ]]; then
 fi
 
 # Claude Code takes the initial prompt as a positional argument, OpenCode as --prompt.
+# Two sources can seed it: --job (JOB_PROMPT, the job-workflow path) and --prompt
+# (INITIAL_PROMPT, for ad-hoc non-job sessions like `mg init`'s prompter hand-off).
+# When both are given, the job prompt wins (job-only is simplest and the prompter
+# hand-off is only used when there's no job in play).
 PROMPT_ARGS=()
-if [[ -n "$JOB_PROMPT" ]]; then
+INITIAL_PROMPT_TEXT="$JOB_PROMPT"
+if [[ -z "$INITIAL_PROMPT_TEXT" && -n "$INITIAL_PROMPT" ]]; then
+    INITIAL_PROMPT_TEXT="$INITIAL_PROMPT"
+fi
+if [[ -n "$INITIAL_PROMPT_TEXT" ]]; then
     if [[ "$TOOL" == "opencode" ]]; then
-        PROMPT_ARGS=(--prompt "$JOB_PROMPT")
+        PROMPT_ARGS=(--prompt "$INITIAL_PROMPT_TEXT")
     else
-        PROMPT_ARGS=("$JOB_PROMPT")
+        PROMPT_ARGS=("$INITIAL_PROMPT_TEXT")
     fi
 fi
 

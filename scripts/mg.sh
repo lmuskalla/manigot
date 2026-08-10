@@ -10,17 +10,20 @@ set -euo pipefail
 # mg jdi --job <id>               # today's jdi.sh
 # mg done <id>                    # today's finish-job.sh
 # mg delete <id>                  # today's delete-job.sh
+# mg init [--tool ...]            # today's init.sh
 # mg -h | --help | help           # print_help below, no subcommand exec'd
 #
 # Single dispatcher: the only script `make install` symlinks onto PATH as
 # `mg`. It inspects $1 — if it's -h/--help/help, prints usage and exits
 # (before any subcommand runs, so it needs no docker/auth setup); if it
-# exactly matches one of the five subcommand names above, it execs the
+# exactly matches one of the six subcommand names above, it execs the
 # matching sibling script with the remaining args unchanged; anything else
 # (no args at all, or any other first token, including run.sh's own
 # --agent/--job/--tool/--print flags) falls through to run.sh with all
 # original args untouched. None of the underlying scripts change their own
 # logic, flags, or behavior — see docs/jobs/9pze1x_better-cli-syntax/brief.md.
+# init is the one exception to "needs an initialized project" — it creates
+# docs/, so it deliberately works without one already existing.
 
 # ── Resolve repo ────────────────────────────────────────────────────────────────
 # Follow symlinks to the real script location — this is installed as a
@@ -49,6 +52,8 @@ Usage:
   mg --agent <name> --job <id>    Combine the two
 
 Commands:
+  mg init [--tool claude-code|opencode]
+                                   Bootstrap this project for the job workflow
   mg job "<title>" [--type feature|fix|chore]
                                    Create a job directory + branch (off main)
   mg done <id>                    Archive a finished job
@@ -90,6 +95,10 @@ case "${1:-}" in
     delete)
         shift
         exec "$SCRIPT_DIR/delete-job.sh" "$@"
+        ;;
+    init)
+        shift
+        exec "$SCRIPT_DIR/init.sh" "$@"
         ;;
     *)
         exec "$SCRIPT_DIR/run.sh" "$@"

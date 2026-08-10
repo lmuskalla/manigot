@@ -28,6 +28,7 @@ manigot/
     delete-job.sh         ← job deleter             → 'mg delete'
     tui.sh                ← TUI launcher            → 'mg tui'
     jdi.sh                ← autonomous-mode launcher → 'mg jdi'
+    init.sh               ← project bootstrapper    → 'mg init'
     entrypoint.sh         ← runs inside the container before the agent CLI starts
   tui/                    ← host-side TUI source (Go); `make tui` builds bin/manigot-tui
                              tui/cmd/jdi/ is what 'mg jdi' runs, same module; `make jdi` builds bin/manigot-jdi
@@ -42,6 +43,8 @@ manigot/
     security.md
     product-owner.md
     designer.md
+    quality.md
+    prompter.md
   project-template/       ← copy this into each new project to get started
     docs/
       AGENTS.md
@@ -157,6 +160,7 @@ its first argument:
 | command | does |
 |---|---|
 | `mg` | start a session in the current project (works with or without `docs/` — see above) |
+| `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job directory + branch (off `main`); needs `docs/` |
 | `mg done` | archive a finished job; needs `docs/` |
 | `mg delete` | permanently delete a job (directory + branch, no merge); needs `docs/` |
@@ -200,6 +204,22 @@ nothing to configure.
 ## Per-project setup
 
 ```bash
+cd your-project/
+mg init
+```
+
+`mg init` copies `docs/AGENTS.md`, `docs/CLAUDE.md`, and an empty `docs/jobs/`
+from `project-template/docs/` into your project (skipping the copy — and
+reporting "already initialized" — if `docs/` already exists), then offers to
+hand off to `@prompter` to read your project and draft a concrete
+`docs/AGENTS.md` for you (`y`/`N`, defaults to no). Run it again any time to
+get that offer without re-copying. Add `--tool opencode` to run the prompter
+hand-off under OpenCode instead of Claude Code.
+
+Equivalent manual steps, if you'd rather not run the prompter or want more
+control:
+
+```bash
 # Copy the template into your project
 cp -r manigot/project-template/docs/ your-project/docs/
 
@@ -207,7 +227,8 @@ cp -r manigot/project-template/docs/ your-project/docs/
 $EDITOR your-project/docs/AGENTS.md
 ```
 
-That's it. The global agents are already in the image — nothing else to copy.
+Either way, that's it. The global agents are already in the image — nothing
+else to copy.
 
 `docs/AGENTS.md` is the one project context file, and it works for both tools:
 manigot mounts it read-only at whatever path the selected CLI reads context
@@ -220,8 +241,11 @@ used as a fallback when `docs/AGENTS.md` is absent.
 ## Usage
 
 ```bash
-# Start a manigot session (run from anywhere, in any project — docs/ optional)
+# Bootstrap a project for the job workflow (one-time, see Per-project setup)
 cd your-project/
+mg init
+
+# Start a manigot session (run from anywhere, in any project — docs/ optional)
 mg                        # Claude Code (default)
 mg --tool opencode        # OpenCode
 
@@ -231,6 +255,9 @@ mg --help
 # Start straight in an agent, or on a job
 mg --agent analyst
 mg --tool opencode --job a3f9k2
+
+# Start an agent with an ad-hoc initial prompt, outside the job workflow
+mg --agent prompter --prompt "help me write a good project prompt"
 
 # Create a new job
 mg job "add image gallery block"
@@ -243,6 +270,16 @@ mg done a3f9k2
 # Drive a job unattended: @analyst -> @developer -> @reviewer, end to end
 mg jdi --job a3f9k2
 ```
+
+Three ways to seed a session's initial prompt: `--job <id>` (the job's
+`brief.md`, for the job workflow), `--agent <name>` (starts the CLI directly
+in that agent, with no prompt text of its own), and `--prompt "…"` (a
+free-form initial prompt for an ad-hoc, non-job session — what `mg init` uses
+to hand off to `@prompter`). All three are tool-neutral: `run.sh` routes the
+prompt to the right place per tool (positional for Claude Code, `--prompt`
+for OpenCode) regardless of which of `--job`/`--prompt` you used to set it.
+`--job` and `--prompt` can't both be honored at once — if you pass both, the
+job prompt wins.
 
 ---
 
@@ -277,7 +314,7 @@ enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
 
 ## Agents
 
-Six agents are available globally in every project. Call them with `@name` in
+Eight agents are available globally in every project. Call them with `@name` in
 your session.
 
 | Agent | Role | Tools (Claude Code) |
@@ -288,6 +325,8 @@ your session.
 | `@security` | Audits for vulnerabilities | read-only |
 | `@product-owner` | Evaluates features from the user's perspective | read-only |
 | `@designer` | Reviews and directs UI/UX — typography, colour, layout | read + write |
+| `@quality` | Reviews code quality — readability, DRY, modularity | read + write |
+| `@prompter` | Crafts and refines prompts for LLMs and agents | read + write |
 
 The Tools column is enforced under Claude Code only — see the caveat under
 [Choosing a tool](#choosing-a-tool).
