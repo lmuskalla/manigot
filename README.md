@@ -493,7 +493,9 @@ macOS and Linux. Firing an agent opens `mg --profile <profile> --agent <name>
 --job <id>` in a new terminal (`<profile>` from the settings screen — see
 below), picked in this order:
 
-1. a new **tmux** window, if the TUI is itself running inside tmux (`$TMUX` set)
+1. a **tmux** split pane in the TUI's own window, if the TUI is itself running
+   inside tmux (`$TMUX` set) — each new launch replaces the pane manigot opened
+   before, so at most one agent pane exists at a time
 2. **Terminal.app** via `osascript` on macOS
 3. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
    `konsole`, or `xterm`, whichever is found first on `PATH`
