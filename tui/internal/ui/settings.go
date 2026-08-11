@@ -65,15 +65,15 @@ const (
 // config.Save and project.Save on submit so this stays a pure input
 // component.
 type settingsView struct {
-	editor       textinput.Model
-	baseBranch   textinput.Model
-	recentCount  textinput.Model
-	terminal     textinput.Model
-	profile      int // index into profileOptions
-	focus        int // stFocusEditor / stFocusBranch / stFocusCount / stFocusProfile / stFocusTerminal
-	width        int
-	height       int
-	status       string // validation/save error message
+	editor      textinput.Model
+	baseBranch  textinput.Model
+	recentCount textinput.Model
+	terminal    textinput.Model
+	profile     int // index into profileOptions
+	focus       int // stFocusEditor / stFocusBranch / stFocusCount / stFocusProfile / stFocusTerminal
+	width       int
+	height      int
+	status      string // validation/save error message
 }
 
 // newSettingsView builds the form seeded from the current global config and
