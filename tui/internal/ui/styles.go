@@ -49,13 +49,11 @@ var (
 	// statusStyle is for the detail view's status line (launch confirmations).
 	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3FB950"))
 
-	// warnStyle is for the detail view's off-branch hint in the title+meta
-	// line (see detailView.render) — plain red text, no background fill, per
+	// warnStyle is for the detail view's "[needs human]" mg-jdi badge and any
+	// other warning-level tag — plain red text, no background fill, per
 	// explicit feedback that a background banner was the wrong call. ANSI
 	// palette index 9 (bright red), not a custom hex, so it renders from the
 	// terminal's own configured red instead of depending on truecolor
-	// support. detailView.render adds .Blink(true) on top of this base style
-	// (lipgloss styles are copy-on-write) when branchFlash is set — the
-	// reaction to a just-blocked action, not this style's default state.
+	// support.
 	warnStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))
 )

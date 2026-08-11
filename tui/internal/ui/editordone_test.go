@@ -43,13 +43,16 @@ func TestEditorDoneMsgSuccess(t *testing.T) {
 }
 
 // TestEditorDoneMsgAutoCommitsBrief verifies that a successful brief.md edit
-// (root is a real git repo) is committed automatically, with a subject
+// is committed automatically in the job's own worktree, with a subject
 // following the same "[ID] <type>: <summary>" convention every agent's own
 // commits use, so a job's brief never lingers as an uncommitted change the
-// way finish-job.sh's clean-tree check would otherwise reject.
+// way finish-job.sh's clean-tree check would otherwise reject. The commit
+// must land on the job worktree's branch (git -C <worktree>), not the main
+// worktree — see commitBriefCmd's doc.
 func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "ab0001_x", "# Brief: X\n\nstatus: open\nid: ab0001\n")
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/ab0001_x", "ab0001_x", "# Brief: X\n\nstatus: open\nid: ab0001\nbranch: feature/ab0001_x\n")
 
 	jobs, err := job.Discover(dir)
 	if err != nil || len(jobs) != 1 {
@@ -60,8 +63,8 @@ func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
 	a.width, a.height = 80, 24
 	a.detail = newDetailView(jobs[0], 80, 24)
 
-	brief := filepath.Join(dir, "docs", "jobs", "ab0001_x", "brief.md")
-	os.WriteFile(brief, []byte("# Brief: X\n\nstatus: open\nid: ab0001\n\nedited by nano\n"), 0o644)
+	brief := filepath.Join(wtPath, "docs", "jobs", "ab0001_x", "brief.md")
+	os.WriteFile(brief, []byte("# Brief: X\n\nstatus: open\nid: ab0001\nbranch: feature/ab0001_x\n\nedited by nano\n"), 0o644)
 
 	_, cmd := a.Update(editorDoneMsg{path: brief, err: nil})
 	if cmd == nil {
@@ -83,7 +86,9 @@ func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
 		t.Errorf("status = %q, want %q", got.detail.status, "edited and committed brief.md")
 	}
 
-	out, err := exec.Command("git", "-C", dir, "log", "-1", "--format=%s").Output()
+	// The commit must be in the job worktree's history (on the job branch),
+	// and the main worktree must be untouched.
+	out, err := exec.Command("git", "-C", wtPath, "log", "-1", "--format=%s").Output()
 	if err != nil {
 		t.Fatalf("git log: %v", err)
 	}
@@ -91,12 +96,20 @@ func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
 		t.Errorf("commit subject = %q, want %q", subject, "[ab0001] brief: edit via TUI")
 	}
 
-	statusOut, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	statusOut, err := exec.Command("git", "-C", wtPath, "status", "--porcelain").Output()
 	if err != nil {
 		t.Fatalf("git status: %v", err)
 	}
 	if len(statusOut) != 0 {
-		t.Errorf("expected a clean working tree after auto-commit, got:\n%s", statusOut)
+		t.Errorf("expected a clean job worktree after auto-commit, got:\n%s", statusOut)
+	}
+
+	mainLog, err := exec.Command("git", "-C", dir, "log", "--format=%s", "-1").Output()
+	if err != nil {
+		t.Fatalf("git log (main): %v", err)
+	}
+	if strings.Contains(string(mainLog), "[ab0001] brief: edit via TUI") {
+		t.Errorf("auto-commit leaked into the main worktree's history:\n%s", mainLog)
 	}
 }
 

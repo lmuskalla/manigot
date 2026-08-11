@@ -215,14 +215,6 @@ type deleteMsg struct {
 	err error
 }
 
-// checkoutMsg reports the outcome of the detail view's "b" switch-to-job-
-// branch action (a `git checkout <branch>`, run off the UI thread via
-// checkoutCmd so a slow git operation doesn't block rendering).
-type checkoutMsg struct {
-	branch string
-	err    error
-}
-
 // commitMsg reports the outcome of the auto-commit that follows a successful
 // brief.md edit (see editorDoneMsg and commitBriefCmd).
 type commitMsg struct {
@@ -235,22 +227,6 @@ type commitMsg struct {
 type pushMsg struct {
 	branch string
 	err    error
-}
-
-// branchFlashDuration is how long the off-branch hint's blink (see
-// detailView.blockedByBranch) lasts before automatically clearing — long
-// enough to register as a reaction to the just-blocked key, short enough not
-// to keep blinking indefinitely while the user reads the hint it's drawing
-// attention to.
-const branchFlashDuration = 2 * time.Second
-
-// branchFlashDoneMsg clears the open detail view's branchFlash a few seconds
-// after a blocked action set it (see blockedByBranchCmd). gen guards against
-// a stale timer from an earlier blocked attempt clearing a flash a later
-// attempt (re)triggered in the meantime — the handler only clears when it
-// still matches detailView.branchFlashGen.
-type branchFlashDoneMsg struct {
-	gen int
 }
 
 // Update handles window resizing and routes key presses to the active view.
@@ -338,63 +314,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.status = "refreshed"
 		}
 		return a, spinnerCmd
-	case checkoutMsg:
-		if msg.err != nil {
-			// Checkout refused (e.g. uncommitted changes it would clobber)
-			// — surface git's own reason without touching the job list or
-			// the open detail view.
-			if a.detail != nil {
-				a.detail.setStatus(cmdErrorText(msg.err))
-			} else {
-				a.status = cmdErrorText(msg.err)
-			}
-			return a, nil
-		}
-		// Checkout succeeded: the working tree now reflects msg.branch, so
-		// re-discover (branch tags / OnCurrentBranch change for every job)
-		// and, if a detail view is open, rebuild it against the same job id
-		// so its tabs switch from git-show reads to the working tree.
-		spinnerCmd := a.refreshJobs()
-		if a.detail != nil {
-			id := a.detail.job.ID
-			if j, ok := a.jobByID(id); ok {
-				a.detail = newDetailView(j, a.width, a.height)
-				if idx := a.indexOfJob(id); idx >= 0 {
-					a.cursor = idx
-				}
-				a.detail.setStatus("switched to " + msg.branch)
-			} else {
-				// The job vanished from the re-discovered list (e.g. it only
-				// ever existed on the branch we just left) — fall back to
-				// the list rather than show a stale detail view.
-				a.detail = nil
-				a.state = stateList
-				a.status = "switched to " + msg.branch + ", but the job is no longer listed"
-			}
-		} else {
-			// No detail view open — the list view's "back to base branch"
-			// quick checkout. refreshJobs above already picked up the new
-			// currentBranch; still surface a status so the checkout
-			// (including an already-on-<branch> no-op, which git itself
-			// treats as success) isn't silent.
-			a.status = "switched to " + msg.branch
-		}
-		return a, spinnerCmd
 	case pushMsg:
-		// Unlike checkoutMsg, a push never changes what the working tree or
-		// job list looks like — only origin's state — so there is nothing to
-		// refresh or rebuild here, just a status line.
+		// A push never changes what the working tree or job list looks
+		// like — only origin's state — so there is nothing to refresh or
+		// rebuild here, just a status line.
 		if a.detail != nil {
 			if msg.err != nil {
 				a.detail.setStatus(cmdErrorText(msg.err))
 			} else {
 				a.detail.setStatus("→ pushed " + msg.branch + " to origin")
 			}
-		}
-		return a, nil
-	case branchFlashDoneMsg:
-		if a.detail != nil && a.detail.branchFlashGen == msg.gen {
-			a.detail.branchFlash = false
 		}
 		return a, nil
 	case spinnerTickMsg:
@@ -464,32 +393,6 @@ func (a *App) selectedJob() (job.Job, bool) {
 		return job.Job{}, false
 	}
 	return a.jobs[a.cursor], true
-}
-
-// jobByID returns the job with the given ID from the current list, or false
-// if it is no longer present — used by the checkoutMsg handler to rebuild the
-// open detail view against the re-discovered copy of the same job after a
-// branch switch (the old job.Job snapshot is stale: it still points at the
-// pre-checkout Branch/OnCurrentBranch).
-func (a *App) jobByID(id string) (job.Job, bool) {
-	for _, j := range a.jobs {
-		if j.ID == id {
-			return j, true
-		}
-	}
-	return job.Job{}, false
-}
-
-// indexOfJob returns the list index of the job with the given ID, or -1.
-// Used alongside jobByID to keep the list cursor in sync with the job left
-// open in the detail view after a re-discover (checkoutMsg, refresh).
-func (a *App) indexOfJob(id string) int {
-	for i, j := range a.jobs {
-		if j.ID == id {
-			return i
-		}
-	}
-	return -1
 }
 
 // --- List view --------------------------------------------------------------
@@ -823,18 +726,6 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.agentsPicker = newAgentsPickerView(agents, a.width, a.height)
 			a.state = stateAgents
 		}
-	case "b":
-		// Quick "back to base branch" checkout — the one friction point
-		// the brief calls out (finishing a job branch and wanting a quick
-		// launch against the base branch without manually switching
-		// first). Not a generic branch picker: the base branch is the
-		// project's shared convention, configured via docs/manigot.json
-		// (defaulting to "main"), same convention scripts/new-job.sh cuts
-		// new branches from. Same git.Checkout/checkoutCmd the detail
-		// view's "b" reuses. Runs as a tea.Cmd so a slow git operation
-		// doesn't block rendering; checkoutMsg's a.detail == nil branch
-		// reports the outcome to a.status.
-		return a, a.checkoutCmd(a.projectSettings.BaseBranchValue())
 	}
 	return a, nil
 }
@@ -952,9 +843,6 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// only) respond — for any other tab this falls through to the
 		// default key handling below, same as any other unbound key.
 		if a.detail.current().editable {
-			if _, blocked := a.branchGuard(); blocked {
-				return a, a.blockedByBranchCmd()
-			}
 			cmd, err := a.editCmd()
 			if err != nil {
 				a.detail.setStatus(cmdErrorText(err))
@@ -965,9 +853,6 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "D":
 		// Mark done: not an agent action, so it is handled here rather than
 		// falling into the agentForKey dispatch below.
-		if _, blocked := a.branchGuard(); blocked {
-			return a, a.blockedByBranchCmd()
-		}
 		cmd, err := a.doneCmd()
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
@@ -979,14 +864,10 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// single-agent launch, so it's handled here rather than through
 		// agentForKey. Unlike launch.Agent, this starts detached in the
 		// background with no spawned terminal window at all (Decision 7a) —
-		// see launch.Jdi's own doc for why. Same branch guard as every other
-		// mutating action: mg-jdi itself also checks out the job's branch if
-		// needed, but the TUI's own working tree must already be on it before
-		// any of *this* session's file reads (the detail view's tabs, the
-		// stage timeline) can be trusted.
-		if _, blocked := a.branchGuard(); blocked {
-			return a, a.blockedByBranchCmd()
-		}
+		// see launch.Jdi's own doc for why. Every job now has its own
+		// worktree (207bfu_git-worktrees), so — unlike before that job —
+		// there is no "wrong branch checked out" state to guard against
+		// here: mg-jdi resolves its own correct worktree per invocation.
 		// Block a second concurrent launch against the same job — the brief
 		// this job exists for ("press j ... multiple times" spawns several
 		// processes with no indication). jdiAlreadyRunning combines the
@@ -1026,42 +907,22 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// not decoded consistently across every terminal emulator/keyboard
 		// layout, so "x" (same mnemonic tmux/ranger use for a destructive
 		// remove) is a reliable fallback rather than a hidden alias — it's
-		// named in the footer hint too (see renderFooter).
-		//
-		// Same branch-mismatch guard as edit/done (delete-job.sh needs the
-		// job's directory in the current working tree, same as
-		// finish-job.sh does). The destructive confirmation itself lives in
-		// delete-job.sh's own read -rp prompt, not here — same division of
-		// responsibility "D" mark-done already uses.
-		if _, blocked := a.branchGuard(); blocked {
-			return a, a.blockedByBranchCmd()
-		}
+		// named in the footer hint too (see renderFooter). The destructive
+		// confirmation itself lives in delete-job.sh's own read -rp prompt,
+		// not here — same division of responsibility "D" mark-done already
+		// uses.
 		cmd, err := a.deleteCmd()
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 			return a, nil
 		}
 		return a, cmd
-	case "b":
-		// Switch to this job's branch (the mechanism the branch-mismatch
-		// guards on launch/edit/done point the user at). Not gated on
-		// job.OnCurrentBranch — that flag is a discovery-time snapshot that
-		// could be stale, so this always dispatches the checkout and lets
-		// git itself decide (a no-op "Already on '<branch>'" checkout still
-		// succeeds). Runs as a tea.Cmd so a slow git operation doesn't block
-		// the UI.
-		if a.detail.job.Branch == "" {
-			a.detail.setStatus("no branch known for this job")
-			return a, nil
-		}
-		return a, a.checkoutCmd(a.detail.job.Branch)
 	case "P":
 		// Push this job's branch to origin — the "quick way to push feature
-		// branches" from the "commit-feature-branches" brief. Deliberately
-		// not gated by branchGuard: git.Push pushes the named branch ref
-		// directly (git push origin <branch>), which does not require that
-		// branch to be checked out in the working tree, same as "b" itself
-		// needs no guard.
+		// branches" from the "commit-feature-branches" brief. git.Push
+		// pushes the named branch ref directly (git push origin <branch>),
+		// which does not require that branch to be checked out in the
+		// working tree.
 		if a.detail.job.Branch == "" {
 			a.detail.setStatus("no branch known for this job")
 			return a, nil
@@ -1071,9 +932,6 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
 	if agent := a.agentForKey(msg.String()); agent != "" {
-		if _, blocked := a.branchGuard(); blocked {
-			return a, a.blockedByBranchCmd()
-		}
 		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ProfileValue())
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
@@ -1135,68 +993,9 @@ func (a *App) deleteCmd() (tea.Cmd, error) {
 	}), nil
 }
 
-// blockedByBranchCmd reacts to a branchGuard block on the open detail view:
-// it flags branchFlash (see detailView.blockedByBranch) so the off-branch
-// hint already shown in the title+meta line blinks, and returns the tea.Cmd
-// that clears the flash again after branchFlashDuration.
-func (a *App) blockedByBranchCmd() tea.Cmd {
-	gen := a.detail.blockedByBranch()
-	return tea.Tick(branchFlashDuration, func(time.Time) tea.Msg {
-		return branchFlashDoneMsg{gen: gen}
-	})
-}
-
-// branchGuard reports whether the open job's branch differs from the branch
-// actually checked out right now, and if so a status message pointing the
-// user at "b" — the guard behind the mutating actions (launch agent, "e"
-// edit, "D" mark-done, "x"/delete remove job) named in the "keep-track-of-jobs" brief's
-// coupled scope: none of them may silently run against the wrong branch's
-// working tree once discovery is cross-branch. The returned status text is
-// no longer shown directly — blockedByBranchCmd's flash is the on-screen
-// reaction now — but callers (and tests) still use it as a diagnostic.
-//
-// The current branch is re-checked fresh via git.CurrentBranch rather than
-// trusted from job.OnCurrentBranch's discovery-time snapshot, since "b" (or a
-// checkout run outside the TUI) may have moved it since the job list was last
-// read.
-//
-// A job with no known Branch — job.Discover's working-tree-only fallback for
-// a project that isn't a git repo — is never guarded: there is nothing to
-// compare against, and OnCurrentBranch is unconditionally true there, so the
-// three actions keep their exact pre-guard behaviour for non-git projects.
-func (a *App) branchGuard() (status string, blocked bool) {
-	j := a.detail.job
-	if j.Branch == "" {
-		return "", false
-	}
-	cur, _ := git.CurrentBranch(a.root) // "" on detached HEAD / not-a-repo
-	if cur == j.Branch {
-		return "", false
-	}
-	curLabel := cur
-	if curLabel == "" {
-		curLabel = "(detached HEAD)"
-	}
-	return fmt.Sprintf("on branch %s, this job is on %s — press b to switch", curLabel, j.Branch), true
-}
-
-// checkoutCmd returns the tea.Cmd behind the "b" switch-to-job-branch action:
-// it runs `git checkout branch` in a.root off the UI goroutine (unlike
-// editCmd/doneCmd, this does not need tea.ExecProcess — there is no
-// interactive process to hand the terminal to, just a git call) and reports
-// the outcome as a checkoutMsg once it returns.
-func (a *App) checkoutCmd(branch string) tea.Cmd {
-	root := a.root
-	return func() tea.Msg {
-		err := git.Checkout(root, branch)
-		return checkoutMsg{branch: branch, err: err}
-	}
-}
-
-// pushCmd returns the tea.Cmd behind the "P" push-to-origin action: like
-// checkoutCmd, this is a plain git call off the UI goroutine — no interactive
-// process, just a git push — and reports the outcome as a pushMsg once it
-// returns.
+// pushCmd returns the tea.Cmd behind the "P" push-to-origin action: a plain
+// git call off the UI goroutine — no interactive process, just a git push —
+// and reports the outcome as a pushMsg once it returns.
 func (a *App) pushCmd(branch string) tea.Cmd {
 	root := a.root
 	return func() tea.Msg {
@@ -1208,20 +1007,30 @@ func (a *App) pushCmd(branch string) tea.Cmd {
 // commitBriefCmd returns the tea.Cmd that auto-commits brief.md right after a
 // successful "e" edit (see the editorDoneMsg case above), following the same
 // "[ID] <type>: <summary>" subject convention every agent's own commits use
-// (agents/developer.md, agents/reviewer.md, agents/quality.md). Like
-// checkoutCmd, this is a plain git call off the UI goroutine — no interactive
-// terminal is needed. The path is rebuilt from a.detail.job rather than
-// threaded through editorDoneMsg since only brief.md ever reaches here.
+// (agents/developer.md, agents/reviewer.md, agents/quality.md). A plain git
+// call off the UI goroutine — no interactive terminal is needed. The path is
+// rebuilt from a.detail.job rather than threaded through editorDoneMsg since
+// only brief.md ever reaches here.
+//
+// The commit runs inside the job's own worktree (git -C <job-worktree>), not
+// a.root: since 207bfu_git-worktrees a job's files live in its own worktree,
+// a sibling of the project root, so a pathspec relative to a.root would
+// escape the main worktree ("outside repository") — and even if it didn't, it
+// would stage/commit against the main worktree's branch and index instead of
+// the job's branch. The worktree root is derived from the job dir: a job
+// lives at <worktree>/docs/jobs/<id>_<slug>/, so two Dir() hops up lands on
+// the worktree root. The non-repo working-tree fallback (no worktrees at
+// all) degrades to the same derivation with job dirs under a.root itself.
 func (a *App) commitBriefCmd() tea.Cmd {
-	root := a.root
+	worktreeRoot := filepath.Dir(filepath.Dir(a.detail.job.Dir))
 	id := a.detail.job.ID
 	path := filepath.Join(a.detail.job.Dir, "brief.md")
 	return func() tea.Msg {
-		rel, err := filepath.Rel(root, path)
+		rel, err := filepath.Rel(worktreeRoot, path)
 		if err != nil {
 			return commitMsg{err: err}
 		}
-		err = git.CommitFile(root, rel, fmt.Sprintf("[%s] brief: edit via TUI", id))
+		err = git.CommitFile(worktreeRoot, rel, fmt.Sprintf("[%s] brief: edit via TUI", id))
 		return commitMsg{err: err}
 	}
 }
@@ -1371,11 +1180,6 @@ func (a *App) renderRecentActivity(w int) string {
 }
 
 // renderJobRow renders one job as a single (possibly highlighted) line.
-//
-// A job living on a branch other than the one currently checked out gets a
-// compact trailing "· <branch>" tag (not a new column, so the fixed column
-// layout stays stable) so the user can tell at a glance which jobs are
-// "elsewhere" before opening one.
 func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	status := statusOpenStyle.Render(pad(j.Status, cols.status))
 	if j.Status == "done" {
@@ -1389,9 +1193,6 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 		truncate(j.Title, cols.title),
 	}
 	line := strings.Join(cells, "  ")
-	if j.Branch != "" && !j.OnCurrentBranch {
-		line += "  " + dimStyle.Render("· "+j.Branch)
-	}
 	if badge := jdiStatusBadge(a.root, j, a.spinnerStep); badge != "" {
 		line += "  " + badge
 	}
@@ -1446,7 +1247,7 @@ func jdiStatusBadge(root string, j job.Job, spinnerStep int) string {
 // after "ctrl+r"), the status alongside it rather than replacing it — a
 // status message must never leave the user not knowing what keys exist.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · o quick · a agent · n new · b base branch · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
 	}

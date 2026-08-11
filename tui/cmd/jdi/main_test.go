@@ -63,12 +63,11 @@ func initTestRepo(t *testing.T) (root string, j job.Job) {
 	runGit(t, root, "commit", "-q", "-m", "[aaaa01] scaffold job")
 
 	j = job.Job{
-		Name:            jobName,
-		Dir:             jobDir,
-		Root:            root,
-		ID:              "aaaa01",
-		Branch:          branch,
-		OnCurrentBranch: true,
+		Name:   jobName,
+		Dir:    jobDir,
+		Root:   root,
+		ID:     "aaaa01",
+		Branch: branch,
 	}
 	return root, j
 }

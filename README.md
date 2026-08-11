@@ -207,9 +207,9 @@ its first argument:
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same script/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
-| `mg job` | create a job directory + branch (off `main`); needs `docs/` |
-| `mg done` | archive a finished job; needs `docs/` |
-| `mg delete` | permanently delete a job (directory + branch, no merge); needs `docs/` |
+| `mg job` | create a job: directory + branch, checked out in the job's own worktree (off `main`); needs `docs/` |
+| `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
+| `mg delete` | permanently delete a job (worktree + branch, no merge); needs `docs/` |
 | `mg tui` | the terminal UI (needs `make tui` first); needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first); needs `docs/` (thematic alias: `mg made-man`, same script/behavior) |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
@@ -393,16 +393,21 @@ in `your-project/docs/agents/`. Project agents take precedence over global ones.
 
 Each piece of work gets its own directory under `docs/jobs/`,
 named with a 6-character random ID and a slugified title. A git branch is
-created automatically with the same ID.
+created automatically with the same ID, checked out in the job's **own git
+worktree** — a sibling directory of the project root, under
+`<parent>/.manigot-worktrees/<project-name>/` — so every job gets its own
+directory and multiple jobs can be worked on (interactively or via
+`mg jdi`) in parallel, while the project root stays on the base branch.
 
 ```bash
 mg job "add image gallery block"
-# creates: docs/jobs/a3f9k2_add-image-gallery-block/
+# creates: docs/jobs/a3f9k2_add-image-gallery-block/   (inside the job's worktree)
 #   brief.md    ← you fill in: what and why
 #   tasks.md    ← @analyst fills in: atomic task breakdown
 #   implementation.md  ← @developer fills in: what was implemented
 #   verdict.md  ← @reviewer and/or @security fill in: pass/fail per task
 # creates branch: feature/a3f9k2_add-image-gallery-block
+# creates worktree: ../.manigot-worktrees/<project>/a3f9k2_add-image-gallery-block
 ```
 
 **Typical flow for a feature:**
@@ -429,7 +434,8 @@ Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug`.
 
 ### How to get a job done
 
-1. **Open the case.** `mg job "job name"` cuts you a directory and a branch.
+1. **Open the case.** `mg job "job name"` cuts you a directory, a branch, and
+   a worktree to keep the job in.
 2. **Write the brief.** Fill in `brief.md` — the job, and why it needs doing.
 3. **Run it past the boss.** `@product-owner` calls it: SHIP / REVISIT /
    REJECT.
@@ -462,8 +468,9 @@ same script, same behavior.)
 It drives that fixed sequence, the same one regardless of job `type`, in a
 loop: ask what's next given the job's current stage and verdict history, run
 that agent non-interactively, check whether it needs a human, repeat. It
-stops — never auto-merging; you still check out and merge the branch
-yourself — when:
+stops — never auto-merging; you still merge the branch yourself via `mg done`
+(and `mg jdi` never checks anything out in the project root — every job's own
+worktree is resolved per invocation) — when:
 
 - `verdict.md`'s `## Overall` says **APPROVED**, or
 - a REJECTED/NEEDS WORK verdict bounces back to `@developer` **once**, and
@@ -512,13 +519,15 @@ needs no credentials itself. It finds those commands dynamically — see
 [Installing without symlinks](#installing-without-symlinks) if they are not on
 your `PATH`.
 
-The job list is discovered across **every local branch**, not just the one
-currently checked out — since each job's docs live on its own branch, this is
-the only way to see everything in flight at once. A row for a job that isn't
-on the current branch is dimmed with a trailing `· <branch>` tag; open it and
-press `c` in the detail view to check out that branch before editing its
-brief, launching an agent, or marking it done — those three actions refuse
-(and point you at `c`) while a job's branch and the checked-out branch differ.
+Every open job lives in its own **git worktree** (see
+[Job workflow](#job-workflow)) — one worktree per job branch, created by
+`mg job` and removed by `mg done`/`mg delete` — so the job list is
+discovered straight from `git worktree list`: each worktree's
+`docs/jobs/` is read off its own disk, and the project root's own working
+tree stays on the base branch. There is no "wrong branch checked out" state
+to worry about: every action — editing a brief, launching an agent, marking
+done, deleting — targets the job's own worktree directly, so nothing is ever
+guarded on the currently checked-out branch.
 
 ### Supported platforms
 
@@ -594,8 +603,7 @@ Detail view:
 | `D` | mark the job done (runs the host `mg done`, in the foreground so its confirmation prompts work) |
 | `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
 | `x` / `del` | permanently delete the job (runs the host `mg delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
-| `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`j`/`x`/agent keys work on a job that isn't on the current branch |
-| `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull`; unlike `b`/`e`/`D`/`j`/`x`, this works regardless of which branch is currently checked out |
+| `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull` |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
@@ -676,8 +684,8 @@ exception is a narrow timer-driven redraw that runs *only while a run is
 active*, driving the animated indicator below:
 
 - **List-row badge** — a `[running @<agent>]`, `[finished]`, or
-  `[needs human]` tag next to a job's row,
-  next to its branch tag. While a run is active the running badge is prefixed
+  `[needs human]` tag next to a job's row.
+  While a run is active the running badge is prefixed
   with an animated activity indicator — a small spinner
   (`⠋ [running @<agent>]`), the same idea as the one opencode shows in its
   bottom-left corner — so a watched run visibly indicates it's alive instead

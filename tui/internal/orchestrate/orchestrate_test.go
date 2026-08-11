@@ -173,7 +173,6 @@ func TestNextRealButTerseBriefRunsAnalyst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j.OnCurrentBranch = true
 
 	stage := j.Stage()
 	if stage != job.StagePlan {

@@ -153,128 +153,6 @@ func TestCurrentBranchNotARepo(t *testing.T) {
 	}
 }
 
-func TestListJobDirs(t *testing.T) {
-	dir, def := initRepo(t)
-	writeFile(t, dir, "docs/jobs/aaaa01_a/brief.md", "# a\n")
-	writeFile(t, dir, "docs/jobs/bbbb02_b/brief.md", "# b\n")
-	writeFile(t, dir, "docs/jobs/archive/zzz_archived/brief.md", "# z\n")
-	writeFile(t, dir, "docs/jobs/README.md", "not a job")
-	commitAll(t, dir, "jobs")
-
-	got, err := ListJobDirs(dir, def)
-	if err != nil {
-		t.Fatalf("ListJobDirs: %v", err)
-	}
-	sort.Strings(got)
-	want := []string{"aaaa01_a", "bbbb02_b"}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("ListJobDirs = %v, want %v", got, want)
-	}
-}
-
-func TestListJobDirsNoJobsDir(t *testing.T) {
-	dir, def := initRepo(t)
-	// No docs/jobs at all on the branch.
-	got, err := ListJobDirs(dir, def)
-	if err != nil {
-		t.Errorf("ListJobDirs with no docs/jobs: unexpected error %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("ListJobDirs with no docs/jobs = %v, want empty", got)
-	}
-}
-
-func TestListJobDirsOnBranchWithoutJobs(t *testing.T) {
-	dir, def := initRepo(t)
-	// Branch off BEFORE any job exists, so the branch genuinely has no
-	// docs/jobs of its own (a branch created after the job would inherit it).
-	runGit(t, dir, "branch", "empty")
-	writeFile(t, dir, "docs/jobs/aaaa01_a/brief.md", "# a\n")
-	commitAll(t, dir, "jobs on default")
-
-	got, err := ListJobDirs(dir, "empty")
-	if err != nil {
-		t.Errorf("ListJobDirs on branch without jobs: unexpected error %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("ListJobDirs on branch without jobs = %v, want empty", got)
-	}
-	// And confirm the default branch still lists it.
-	gotDef, _ := ListJobDirs(dir, def)
-	if len(gotDef) != 1 || gotDef[0] != "aaaa01_a" {
-		t.Errorf("ListJobDirs on default = %v, want [aaaa01_a]", gotDef)
-	}
-}
-
-func TestListJobDirsNotARepo(t *testing.T) {
-	_, err := ListJobDirs(t.TempDir(), "main")
-	if !errors.Is(err, ErrNotARepo) {
-		t.Errorf("ListJobDirs on non-repo: err = %v, want ErrNotARepo", err)
-	}
-}
-
-func TestShowFile(t *testing.T) {
-	dir, def := initRepo(t)
-	const body = "# Brief: X\n\nstatus: open\nid: aaaa01\n"
-	writeFile(t, dir, "docs/jobs/aaaa01_a/brief.md", body)
-	commitAll(t, dir, "job")
-
-	got, err := ShowFile(dir, def, "docs/jobs/aaaa01_a/brief.md")
-	if err != nil {
-		t.Fatalf("ShowFile: %v", err)
-	}
-	if string(got) != body {
-		t.Errorf("ShowFile = %q, want %q", string(got), body)
-	}
-}
-
-func TestShowFileReflectsBranchContents(t *testing.T) {
-	dir, def := initRepo(t)
-	writeFile(t, dir, "docs/jobs/aaaa01_a/brief.md", "on default\n")
-	commitAll(t, dir, "default job")
-
-	// Create a branch where the file has different content.
-	runGit(t, dir, "branch", "feature/aaa")
-	runGit(t, dir, "checkout", "-q", "feature/aaa")
-	writeFile(t, dir, "docs/jobs/aaaa01_a/brief.md", "on feature\n")
-	commitAll(t, dir, "feature edit")
-	runGit(t, dir, "checkout", "-q", def)
-
-	gotDef, _ := ShowFile(dir, def, "docs/jobs/aaaa01_a/brief.md")
-	if string(gotDef) != "on default\n" {
-		t.Errorf("ShowFile(default) = %q, want %q", string(gotDef), "on default\n")
-	}
-	gotFea, _ := ShowFile(dir, "feature/aaa", "docs/jobs/aaaa01_a/brief.md")
-	if string(gotFea) != "on feature\n" {
-		t.Errorf("ShowFile(feature) = %q, want %q", string(gotFea), "on feature\n")
-	}
-}
-
-func TestShowFileMissingPath(t *testing.T) {
-	dir, def := initRepo(t)
-	// initRepo already made the initial commit, so docs/jobs simply doesn't
-	// exist on the branch yet.
-	_, err := ShowFile(dir, def, "docs/jobs/nope/brief.md")
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("ShowFile on missing path: err = %v, want os.ErrNotExist", err)
-	}
-}
-
-func TestShowFileMissingBranch(t *testing.T) {
-	dir, _ := initRepo(t)
-	_, err := ShowFile(dir, "no-such-branch", "docs/jobs/x/brief.md")
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("ShowFile on missing branch: err = %v, want os.ErrNotExist", err)
-	}
-}
-
-func TestShowFileNotARepo(t *testing.T) {
-	_, err := ShowFile(t.TempDir(), "main", "docs/jobs/x/brief.md")
-	if !errors.Is(err, ErrNotARepo) {
-		t.Errorf("ShowFile on non-repo: err = %v, want ErrNotARepo", err)
-	}
-}
-
 func TestCheckout(t *testing.T) {
 	dir, def := initRepo(t)
 	runGit(t, dir, "branch", "feature/aaa")
@@ -484,6 +362,87 @@ func TestHeadCommitNotARepo(t *testing.T) {
 	_, err := HeadCommit(t.TempDir(), "main")
 	if !errors.Is(err, ErrNotARepo) {
 		t.Errorf("HeadCommit on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
+func TestWorktreeForBranch(t *testing.T) {
+	dir, _ := initRepo(t)
+	wtDir := t.TempDir()
+	// git refuses to add a worktree into a non-empty directory; TempDir()
+	// itself already exists, so give it a fresh subdirectory instead.
+	wtPath := filepath.Join(wtDir, "job-a")
+	runGit(t, dir, "worktree", "add", wtPath, "-b", "feature/aaaa01_a")
+
+	got, ok, err := WorktreeForBranch(dir, "feature/aaaa01_a")
+	if err != nil {
+		t.Fatalf("WorktreeForBranch: %v", err)
+	}
+	if !ok {
+		t.Fatal("WorktreeForBranch: ok = false, want true")
+	}
+	// Resolve symlinks on both sides (e.g. /tmp vs /private/tmp on macOS)
+	// before comparing — a real worktree path comparison needs it.
+	wantPath, err := filepath.EvalSymlinks(wtPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotPath, err := filepath.EvalSymlinks(got)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", got, err)
+	}
+	if gotPath != wantPath {
+		t.Errorf("WorktreeForBranch path = %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestWorktreeForBranchNoWorktree(t *testing.T) {
+	dir, _ := initRepo(t)
+	runGit(t, dir, "branch", "feature/aaaa01_a")
+
+	_, ok, err := WorktreeForBranch(dir, "feature/aaaa01_a")
+	if err != nil {
+		t.Fatalf("WorktreeForBranch: %v", err)
+	}
+	if ok {
+		t.Error("WorktreeForBranch on a branch with no worktree: ok = true, want false")
+	}
+}
+
+func TestWorktreeForBranchNoCrossMatchOnPrefix(t *testing.T) {
+	dir, _ := initRepo(t)
+	wtDir := t.TempDir()
+	wtPath := filepath.Join(wtDir, "job-xy")
+	// "feature/x" is a prefix of "feature/x-y" — only the latter gets a
+	// worktree, and looking up the former must not match it.
+	runGit(t, dir, "worktree", "add", wtPath, "-b", "feature/x-y")
+
+	_, ok, err := WorktreeForBranch(dir, "feature/x")
+	if err != nil {
+		t.Fatalf("WorktreeForBranch: %v", err)
+	}
+	if ok {
+		t.Error("WorktreeForBranch(\"feature/x\") matched \"feature/x-y\"'s worktree, want no match")
+	}
+}
+
+func TestWorktreeForBranchMissingBranch(t *testing.T) {
+	dir, _ := initRepo(t)
+	_, ok, err := WorktreeForBranch(dir, "no-such-branch")
+	if err != nil {
+		t.Fatalf("WorktreeForBranch on a missing branch: unexpected error %v", err)
+	}
+	if ok {
+		t.Error("WorktreeForBranch on a missing branch: ok = true, want false")
+	}
+}
+
+func TestWorktreeForBranchNotARepo(t *testing.T) {
+	_, ok, err := WorktreeForBranch(t.TempDir(), "main")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("WorktreeForBranch on non-repo: err = %v, want ErrNotARepo", err)
+	}
+	if ok {
+		t.Error("WorktreeForBranch on non-repo: ok = true, want false")
 	}
 }
 

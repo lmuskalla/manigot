@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/lmuskalla/manigot/tui/internal/git"
 )
 
 // Stage is the workflow stage a job is in, per the ideal-workflow model:
@@ -46,11 +44,9 @@ var Stages = []Stage{StageDefine, StagePlan, StageImplement, StageReview, StageF
 // written and, once a verdict exists, whether it was approved. See the Stage
 // type's doc for the precedence and the review/approval bounce-back rule.
 //
-// For a job on the current branch the files are read from the working tree
-// (so uncommitted edits still count); for a job discovered on another branch
-// they are read via `git show <Branch>:…` from that branch — otherwise every
-// cross-branch job would falsely report stage define because its files
-// aren't in the working tree at all.
+// Files are always read straight from j.Dir — a job's own worktree (or, for
+// an archived job, the main worktree's own archive/) is unconditionally the
+// live, correct place to read them from (see the package doc).
 func (j Job) Stage() Stage {
 	switch {
 	case !j.fileWritten("brief.md"):
@@ -68,9 +64,9 @@ func (j Job) Stage() Stage {
 	}
 }
 
-// fileWritten reports whether the named job file (e.g. "tasks.md") is written,
-// reading it from the working tree for current-branch jobs and via git show
-// for jobs living on another branch. The filename is relative to the job dir.
+// fileWritten reports whether the named job file (e.g. "tasks.md") is
+// written, reading it straight from j.Dir. The filename is relative to the
+// job dir.
 func (j Job) fileWritten(filename string) bool {
 	data, ok := j.readFile(filename)
 	if !ok {
@@ -80,21 +76,12 @@ func (j Job) fileWritten(filename string) bool {
 }
 
 // readFile returns the raw bytes of a job file (filename relative to the job
-// dir), reading from the working tree for a current-branch job or via `git
-// show` for a job discovered on another branch — the same dual-path strategy
-// fileWritten (and, through it, Stage) relies on throughout this file. ok is
-// false when the file can't be read at all (missing, or a git show failure);
-// that is not itself an error condition here, just "no content to look at".
+// dir), read straight from j.Dir — the same unconditional read fileWritten
+// (and, through it, Stage) relies on throughout this file. ok is false when
+// the file can't be read at all (missing); that is not itself an error
+// condition here, just "no content to look at".
 func (j Job) readFile(filename string) (data []byte, ok bool) {
-	if j.OnCurrentBranch {
-		data, err := os.ReadFile(filepath.Join(j.Dir, filename))
-		if err != nil {
-			return nil, false
-		}
-		return data, true
-	}
-	rel := filepath.ToSlash(filepath.Join(JobsRelDir, j.Name, filename))
-	data, err := git.ShowFile(j.Root, j.Branch, rel)
+	data, err := os.ReadFile(filepath.Join(j.Dir, filename))
 	if err != nil {
 		return nil, false
 	}

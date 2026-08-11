@@ -190,9 +190,10 @@ func logJobFinished(w io.Writer, kind orchestrate.Kind, reason string, includeRe
 
 // agentTargetFile maps each driven agent (orchestrate.Sequence) to the job
 // file it's expected to have written by the time its invocation returns —
-// TASK-5's dedup check reads this file fresh off disk (via j.Dir, safe
-// because ensureOnBranch guarantees mg-jdi always operates on the job's own
-// checked-out branch) to compare against the agent's own response text.
+// TASK-5's dedup check reads this file fresh off disk via j.Dir, safe to read
+// unconditionally because every job lives in its own worktree
+// (207bfu_git-worktrees) that is the live, correct place to read it from —
+// to compare against the agent's own response text.
 var agentTargetFile = map[string]string{
 	"analyst":   "tasks.md",
 	"developer": "implementation.md",

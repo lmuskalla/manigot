@@ -48,6 +48,19 @@ configured with `mg setup`.
   session's subscription profile (`--profile`, else legacy `--tool`, else the
   `MANIGOT_PROFILE` default set by `mg profiles`, else `claude-pro`), validates
   the profile's auth, and passes the choice on as `manigot_TOOL`.
+  When `--job <id>` is passed, the mount root is the job's own git worktree
+  (207bfu_git-worktrees), not `PROJECT_ROOT`: the job is resolved by matching
+  its id_slug against local branch names, that branch's worktree is looked up
+  via `scripts/lib/worktree.sh`, and `PROJECT_ROOT` is reassigned to it so the
+  `docs/` mount, context-file mount, `.env`-shadow scan, and the primary
+  `-v ...:/workspace:z` mount all key off the same resolved root. A branch
+  match with no registered worktree is a hard error — no fallback to
+  `PROJECT_ROOT`, which would silently show the wrong job's content. The one
+  exception: a project with no local branches at all (not a git repo, or a
+  fresh repo before its first commit) has no worktrees possible, so `--job`
+  falls back to the pre-worktree directory-scan of `docs/jobs/` and
+  `PROJECT_ROOT` is left untouched — mirroring the Go side's
+  `job.discoverWorkingTree` trigger condition.
 - `scripts/profiles.sh` — reached via `mg profiles`. Lists the three profiles
   (which are ready, and which is the default); `mg profiles <name>` writes
   `MANIGOT_PROFILE=<name>` into manigot's own `.env` so bare `mg` runs use it.
@@ -67,11 +80,29 @@ configured with `mg setup`.
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
   the configured base branch (regardless of the branch the user is currently
   on). The base branch comes from `docs/manigot.json` (default `main`); the
-  `--base-branch <name>` flag overrides it for one invocation.
-- `scripts/finish-job.sh` — reached via `mg done`. Archives a finished job.
+  `--base-branch <name>` flag overrides it for one invocation. The branch is
+  created as the job's own git worktree (207bfu_git-worktrees, Decision 1/3) at
+  `<dirname(PROJECT_ROOT)>/.manigot-worktrees/<basename(PROJECT_ROOT)>/<id>_<slug>`,
+  a sibling of `PROJECT_ROOT` rather than nested inside it — every file-write
+  and the scaffold commit happen there, and `PROJECT_ROOT` itself is never
+  switched. A non-git-repo project keeps the pre-worktree fallback: no branch,
+  no worktree, the scaffold is written straight into `PROJECT_ROOT`.
+- `scripts/finish-job.sh` — reached via `mg done`. Archives a finished job:
+  the clean-tree check, the archive move, and the archive commit all run
+  inside the job's own worktree; `PROJECT_ROOT` (the main worktree) is used
+  only for the squash-merge + branch delete; then the job's worktree is
+  removed (`git worktree remove`, best-effort `git worktree prune`) — except
+  when the job's branch is checked out in the main worktree itself (a
+  pre-worktree job), where the removal step is skipped (the main worktree
+  can't be removed) and the branch delete alone finishes the job.
 - `scripts/delete-job.sh` — reached via `mg delete`. Permanently deletes a
-  job: its directory under `docs/jobs/` and, when the job has a branch, the
-  branch itself (`git branch -D` — no merge, unlike `mg done`).
+  job: its worktree (force-removed via `git worktree remove --force`, with an
+  explicit "uncommitted changes will be discarded" warning when dirty) and its
+  branch (`git branch -D` — no merge, unlike `mg done`). When the job's
+  branch is checked out in the main worktree itself (a pre-worktree job), the
+  worktree removal is skipped — the main worktree is switched off the branch
+  and the branch delete alone suffices. A non-git project's
+  job is a plain directory delete, no git involved.
 - `scripts/tui.sh` — reached via `mg tui`; wrapper around
   `bin/manigot-tui` that exports `manigot_HOME` so the TUI can find the scripts.
 - `scripts/jdi.sh` — reached via `mg jdi` (thematic alias: `mg made-man`,
@@ -97,7 +128,9 @@ configured with `mg setup`.
   `verdict.md`'s `## Overall` saying APPROVED, a `NEEDS-HUMAN-INPUT:` marker,
   or a bounce-back to `@developer` that still isn't approved after one retry
   (`tui/internal/orchestrate` implements this state machine; it never
-  auto-merges — the human still checks out and merges the branch). Every
+  auto-merges — the human still merges the branch via `mg done`, and `mg jdi`
+  never checks anything out in the main worktree: every invocation resolves
+  the job's own worktree itself, 207bfu_git-worktrees). Every
   invocation's captured output and a `running`/`stopped:finished`/
   `stopped:needs-human` status are written to a sidecar directory,
   `docs/jobs/.jdi-status/<job-name>/`, outside every job's own directory so
@@ -129,8 +162,8 @@ configured with `mg setup`.
 - `docs/manigot.json` (in the target project, committable) — project-scoped
   manigot conventions, the project-level counterpart to the personal
   `config/tui-settings.json`. Currently holds `baseBranch`: the ref new job
-  branches are cut from (`scripts/new-job.sh`) and the TUI list view's "b"
-  quick-checkout lands on, defaulting to `main` when unset. Read by the TUI
+  branches are cut from (`scripts/new-job.sh`), defaulting to `main` when
+  unset. Read by the TUI
   (via `tui/internal/project`, loaded at startup and on ctrl+r refresh) and
   by `scripts/new-job.sh` directly (guarded single-key `sed` extraction — no
   `jq` dependency yet). Seeded by `mg init` and created on first TUI settings
@@ -210,9 +243,11 @@ configured with `mg setup`.
   the only job-workflow command that works without an existing `docs/`
 - `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
   dir + branch (the branch is cut from the configured base branch — see
-  `docs/manigot.json`; `--base-branch` overrides it for one invocation)
-- `mg done <id>` — archive a finished job
-- `mg delete <id>` — permanently delete a job (directory + branch, no merge)
+  `docs/manigot.json`; `--base-branch` overrides it for one invocation; the
+  branch is checked out in the job's own git worktree, see Job workflow)
+- `mg done <id>` — archive a finished job (merges it into the base branch and
+  removes its worktree)
+- `mg delete <id>` — permanently delete a job (worktree + branch, no merge)
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
 - `mg jdi --job <id> [--profile <name>]` — drive a job's `@analyst` →
   `@developer` → `@reviewer` sequence end to end, unattended, under the given
@@ -223,7 +258,10 @@ configured with `mg setup`.
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:
 `brief.md` (what/why, filled in by the user), `tasks.md` (`@analyst`),
 `implementation.md` (`@developer`), `verdict.md` (`@reviewer` / `@security`).
-A branch `feature|fix|chore/<id>_<slug>` is created alongside it.
+A branch `feature|fix|chore/<id>_<slug>` is created alongside it, checked out
+in the job's own git worktree (207bfu_git-worktrees) — every job gets its own
+directory, so multiple jobs — interactive or autonomous — can run in
+parallel, and `PROJECT_ROOT` stays on the base branch in steady state.
 
 Typical feature flow: `mg job` → fill `brief.md` → `@product-owner` →
 `@analyst` → review `tasks.md` → `@developer` per task → `@reviewer` →

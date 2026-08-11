@@ -11,23 +11,23 @@ import (
 )
 
 // TestJdiKeyLaunchesDetachedAndSeedsBellDedup exercises the full "j" flow on
-// a current-branch job: it resolves and starts the stub mg-jdi (no spawned
-// terminal — Decision 7a), reports a status message, and seeds a.jdiSeen so
-// the stop-notification dedup (TASK-11) starts at "running" immediately
-// rather than waiting for the first poll to discover it.
+// a job in its own worktree: it resolves and starts the stub mg-jdi (no
+// spawned terminal — Decision 7a), reports a status message, and seeds
+// a.jdiSeen so the stop-notification dedup (TASK-11) starts at "running"
+// immediately rather than waiting for the first poll to discover it.
 func TestJdiKeyLaunchesDetachedAndSeedsBellDedup(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur21_c", "# Brief: Cur\n\nstatus: open\nid: cur21\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur21_c", "cur21_c", "# Brief: Cur\n\nstatus: open\nid: cur21\nbranch: feature/cur21_c\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
-	if err != nil || len(jobs) != 1 || !jobs[0].OnCurrentBranch {
+	if err != nil || len(jobs) != 1 {
 		t.Fatalf("job.Discover: err=%v jobs=%+v", err, jobs)
 	}
 
 	// Stub mg-jdi so no real container/process is spawned. PATH is left
-	// alone (unlike hostcmd's isolate() pattern) — branchGuard shells out to
-	// the real git binary as part of this same "j" flow, and the env-var
-	// override below wins resolution regardless of what's on PATH anyway.
+	// alone (unlike hostcmd's isolate() pattern) — the env-var override
+	// below wins resolution regardless of what's on PATH anyway.
 	t.Setenv("MANIGOT_HOME", "")
 	stub := filepath.Join(t.TempDir(), "stub.sh")
 	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
@@ -56,8 +56,9 @@ func TestJdiKeyLaunchesDetachedAndSeedsBellDedup(t *testing.T) {
 // not installed) surfaces as a footer status rather than panicking or
 // silently doing nothing.
 func TestJdiKeyReportsResolutionFailure(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur22_c", "# Brief: Cur\n\nstatus: open\nid: cur22\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur22_c", "cur22_c", "# Brief: Cur\n\nstatus: open\nid: cur22\nbranch: feature/cur22_c\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
 	if err != nil || len(jobs) != 1 {
@@ -134,8 +135,9 @@ func waitForMarkerRuns(t *testing.T, markerPath string, want int) int {
 // must block a second launch outright and explain why, naming the running
 // agent per the list badge's own wording.
 func TestJdiKeyBlocksSecondLaunchWhenSidecarSaysRunning(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur23_c", "# Brief: Cur\n\nstatus: open\nid: cur23\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur23_c", "cur23_c", "# Brief: Cur\n\nstatus: open\nid: cur23\nbranch: feature/cur23_c\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
 	if err != nil || len(jobs) != 1 {
@@ -174,8 +176,9 @@ func TestJdiKeyBlocksSecondLaunchWhenSidecarSaysRunning(t *testing.T) {
 // the same in-memory map updateDetail's "j" handler seeds on a successful
 // launch.
 func TestJdiKeyBlocksSecondLaunchViaInSessionDedup(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur24_c", "# Brief: Cur\n\nstatus: open\nid: cur24\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur24_c", "cur24_c", "# Brief: Cur\n\nstatus: open\nid: cur24\nbranch: feature/cur24_c\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
 	if err != nil || len(jobs) != 1 {
@@ -221,8 +224,9 @@ func TestJdiKeyBlocksSecondLaunchViaInSessionDedup(t *testing.T) {
 // polled/refreshed since) — TASK-1's "too strict permanently blocks
 // re-running a job" failure mode.
 func TestJdiKeyAllowsLaunchWhenSidecarStoppedDespiteStaleSession(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur25_c", "# Brief: Cur\n\nstatus: open\nid: cur25\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur25_c", "cur25_c", "# Brief: Cur\n\nstatus: open\nid: cur25\nbranch: feature/cur25_c\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
 	if err != nil || len(jobs) != 1 {
@@ -265,8 +269,9 @@ func TestJdiKeyAllowsLaunchWhenSidecarStoppedDespiteStaleSession(t *testing.T) {
 // trusting it and allow a fresh launch, exactly as it already does for a
 // stale-but-present on-disk status.
 func TestJdiKeyAllowsLaunchAfterInSessionDedupExpiresWithNoSidecar(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur26_c", "# Brief: Cur\n\nstatus: open\nid: cur26\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur26_c", "cur26_c", "# Brief: Cur\n\nstatus: open\nid: cur26\nbranch: feature/cur26_c\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
 	if err != nil || len(jobs) != 1 {

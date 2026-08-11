@@ -30,10 +30,10 @@ func gitAddBareOrigin(t *testing.T, dir string) string {
 // real, and feeding the resulting pushMsg back through Update sets the
 // detail view's status.
 func TestPushKeyPushesBranchToOrigin(t *testing.T) {
-	dir, def := gitInitRepo(t)
+	dir, _ := gitInitRepo(t)
 	origin := gitAddBareOrigin(t, dir)
-	gitRun(t, dir, "checkout", "-q", "-b", "feature/psh10_p")
-	gitCommitJob(t, dir, "psh10_p",
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/psh10_p", "psh10_p",
 		"# Brief: Push\n\nstatus: open\nid: psh10\nbranch: feature/psh10_p\ndate: 2026-01-01\n")
 
 	jobs, err := job.Discover(dir)
@@ -87,15 +87,14 @@ func TestPushKeyPushesBranchToOrigin(t *testing.T) {
 	if !strings.Contains(got.detail.status, "pushed feature/psh10_p to origin") {
 		t.Errorf("status = %q, want it to mention the pushed branch", got.detail.status)
 	}
-
-	gitRun(t, dir, "checkout", "-q", def)
 }
 
 // TestPushMsgErrorSurfacesInDetailStatus verifies a push git refuses (e.g.
 // no origin remote configured) is reported in the detail view's status line.
 func TestPushMsgErrorSurfacesInDetailStatus(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "cur10_c", "# Brief: Cur\n\nstatus: open\nid: cur10\nbranch: "+def+"\ndate: 2026-01-01\n")
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur10_c", "cur10_c", "# Brief: Cur\n\nstatus: open\nid: cur10\nbranch: feature/cur10_c\ndate: 2026-01-01\n")
 
 	jobs, _ := job.Discover(dir)
 	a := NewApp(dir, jobs)
@@ -103,8 +102,8 @@ func TestPushMsgErrorSurfacesInDetailStatus(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
-	wantErr := errors.New("git push origin " + def + ": exit status 128: fatal: 'origin' does not appear to be a git repository")
-	model, cmd := a.Update(pushMsg{branch: def, err: wantErr})
+	wantErr := errors.New("git push origin feature/cur10_c: exit status 128: fatal: 'origin' does not appear to be a git repository")
+	model, cmd := a.Update(pushMsg{branch: "feature/cur10_c", err: wantErr})
 	if cmd != nil {
 		t.Errorf("expected no follow-up cmd, got one")
 	}
@@ -119,7 +118,7 @@ func TestPushMsgErrorSurfacesInDetailStatus(t *testing.T) {
 	}
 }
 
-// TestPushKeyWithoutBranchIsNoop mirrors TestCheckoutKeyWithoutBranchIsNoop:
+// TestPushKeyWithoutBranchIsNoop mirrors the deleted TestCheckoutKeyWithoutBranchIsNoop:
 // a job discovered outside a git repository (Discover's working-tree-only
 // fallback, where Branch is left empty — see discoverWorkingTree) reports a
 // status instead of dispatching a push with an empty branch name.
@@ -149,52 +148,5 @@ func TestPushKeyWithoutBranchIsNoop(t *testing.T) {
 	}
 	if a.detail.status == "" {
 		t.Error("expected a status message explaining why \"P\" did nothing")
-	}
-}
-
-// TestPushKeyIgnoresBranchGuard is the key regression this task exists to
-// guard: "P" must work even when the currently checked-out branch differs
-// from the job's branch, unlike "e"/"D"/"j"/"x" which all block on
-// branchGuard.
-func TestPushKeyIgnoresBranchGuard(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitAddBareOrigin(t, dir)
-	gitRun(t, dir, "checkout", "-q", "-b", "feature/off10_o")
-	gitCommitJob(t, dir, "off10_o",
-		"# Brief: Off\n\nstatus: open\nid: off10\nbranch: feature/off10_o\ndate: 2026-01-01\n")
-	gitRun(t, dir, "checkout", "-q", def)
-
-	jobs, err := job.Discover(dir)
-	if err != nil || len(jobs) != 1 {
-		t.Fatalf("job.Discover: err=%v jobs=%d", err, len(jobs))
-	}
-	if jobs[0].OnCurrentBranch {
-		t.Fatal("expected an off-branch job to start")
-	}
-
-	a := NewApp(dir, jobs)
-	a.width, a.height = 80, 24
-	a.detail = newDetailView(jobs[0], 80, 24)
-	a.state = stateDetail
-
-	// Sanity check: branchGuard really would block a guarded action here.
-	if _, blocked := a.branchGuard(); !blocked {
-		t.Fatal("expected branchGuard to report blocked for this off-branch job")
-	}
-
-	_, cmd := a.updateDetail(keyMsg("P"))
-	if cmd == nil {
-		t.Fatal("expected \"P\" to return a tea.Cmd even for an off-branch job")
-	}
-	msg := cmd()
-	pushM, ok := msg.(pushMsg)
-	if !ok {
-		t.Fatalf("expected pushMsg (not a branch-guard block), got %T", msg)
-	}
-	if pushM.err != nil {
-		t.Fatalf("push of an off-branch job's branch failed: %v", pushM.err)
-	}
-	if pushM.branch != "feature/off10_o" {
-		t.Errorf("pushMsg.branch = %q, want feature/off10_o", pushM.branch)
 	}
 }

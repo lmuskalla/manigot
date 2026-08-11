@@ -14,10 +14,12 @@ import (
 // --- current-branch header line (TASK-3) ------------------------------------
 
 // TestRenderListShowsCurrentBranch verifies the list header names the branch
-// currently checked out, in the "manigot - <project> - on <branch>" title.
+// currently checked out in the main worktree, in the "manigot - <project> -
+// on <branch>" title.
 func TestRenderListShowsCurrentBranch(t *testing.T) {
 	dir, def := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa01_a", "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\nbranch: feature/aaaa01_a\ndate: 2026-01-01\n")
 
 	jobs, _ := job.Discover(dir)
 	a := NewApp(dir, jobs)
@@ -138,7 +140,8 @@ func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 	commitEmptyAt(t, dir, "c3", 2)
 	commitEmptyAt(t, dir, "c4", 3)
 	commitEmptyAt(t, dir, "c5", 4)
-	gitCommitJob(t, dir, "aaaa02_a", "# Brief: A\n\nstatus: open\nid: aaaa02\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa02_a", "aaaa02_a", "# Brief: A\n\nstatus: open\nid: aaaa02\nbranch: feature/aaaa02_a\ndate: 2026-01-01\n")
 
 	jobs, _ := job.Discover(dir)
 	if len(jobs) != 1 {
@@ -166,8 +169,10 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 	dir, _ := gitInitRepo(t)
 	commitEmptyAt(t, dir, "c2", 1)
 	commitEmptyAt(t, dir, "c3", 2)
+	wts := t.TempDir()
 	for i := 0; i < 20; i++ {
-		gitCommitJob(t, dir, fmt.Sprintf("bbbb%02d_b", i), fmt.Sprintf("# Brief: B%d\n\nstatus: open\nid: bbbb%02d\ndate: 2026-01-01\n", i, i))
+		addJobWorktree(t, dir, wts, fmt.Sprintf("feature/bbbb%02d_b", i), fmt.Sprintf("bbbb%02d_b", i),
+			fmt.Sprintf("# Brief: B%d\n\nstatus: open\nid: bbbb%02d\ndate: 2026-01-01\n", i, i))
 	}
 
 	jobs, _ := job.Discover(dir)
@@ -196,7 +201,8 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 // case.
 func TestRenderListZeroHeightDoesNotPanic(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa03_a", "# Brief: A\n\nstatus: open\nid: aaaa03\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa03_a", "aaaa03_a", "# Brief: A\n\nstatus: open\nid: aaaa03\nbranch: feature/aaaa03_a\ndate: 2026-01-01\n")
 
 	jobs, _ := job.Discover(dir)
 	a := NewApp(dir, jobs)
@@ -349,7 +355,8 @@ func TestRenderListEmptyStateInvitesNewJob(t *testing.T) {
 
 func TestRenderListShowsJDIRunningBadge(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa01_a", "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\nbranch: feature/aaaa01_a\ndate: 2026-01-01\n")
 
 	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIRunning, "developer"); err != nil {
 		t.Fatal(err)
@@ -367,7 +374,8 @@ func TestRenderListShowsJDIRunningBadge(t *testing.T) {
 
 func TestRenderListShowsJDINeedsHumanBadge(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa01_a", "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\nbranch: feature/aaaa01_a\ndate: 2026-01-01\n")
 
 	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIStoppedNeedsHuman, "reviewer"); err != nil {
 		t.Fatal(err)
@@ -385,7 +393,8 @@ func TestRenderListShowsJDINeedsHumanBadge(t *testing.T) {
 
 func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa01_a", "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\nbranch: feature/aaaa01_a\ndate: 2026-01-01\n")
 
 	jobs, _ := job.Discover(dir)
 	a := NewApp(dir, jobs)
@@ -405,7 +414,8 @@ func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 // spinnerStep counter — a different step renders a different frame.
 func TestRenderListRunningBadgeShowsSpinnerFrame(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa01_a", "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\nbranch: feature/aaaa01_a\ndate: 2026-01-01\n")
 
 	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIRunning, "developer"); err != nil {
 		t.Fatal(err)
@@ -439,7 +449,8 @@ func TestRenderListRunningBadgeShowsSpinnerFrame(t *testing.T) {
 // nothing is animating — even when the App's step counter is non-zero.
 func TestRenderListStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
 	dir, _ := gitInitRepo(t)
-	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa01_a", "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\nbranch: feature/aaaa01_a\ndate: 2026-01-01\n")
 
 	jobs, _ := job.Discover(dir)
 	a := NewApp(dir, jobs)

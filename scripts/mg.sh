@@ -75,9 +75,10 @@ Commands:
                                    (thematic alias: mg crew)
   mg init [--profile <name>]      Bootstrap this project for the job workflow
   mg job "<title>" [--type feature|fix|chore]
-                                   Create a job directory + branch (off main)
-  mg done <id>                    Archive a finished job
-  mg delete <id>                  Permanently delete a job (dir + branch, no merge)
+                                   Create a job directory + branch + worktree
+                                   (off main)
+  mg done <id>                    Archive a finished job (merge + remove worktree)
+  mg delete <id>                  Permanently delete a job (worktree + branch, no merge)
   mg tui                          Terminal UI for browsing jobs and firing agents
   mg jdi --job <id> [--profile <name>]
                                    Drive a job's analyst -> developer ->

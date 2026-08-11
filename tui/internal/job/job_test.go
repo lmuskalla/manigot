@@ -102,58 +102,6 @@ func TestIDDerivedFromDirName(t *testing.T) {
 	}
 }
 
-// TestReadJobFromBytes confirms a brief can be parsed from bytes (the
-// cross-branch discovery path, where the brief is read via git show rather
-// than os.ReadFile) with the same fields and defaults ReadJob produces.
-func TestReadJobFromBytes(t *testing.T) {
-	const brief = "# Brief: TUI\n\n" +
-		"status: open\ntype: fix\nid: irw320\nbranch: feature/irw320_tui\n" +
-		"date: 2026-08-08\nauthor: Leander Muskalla\n\n## What\nbody\n"
-	j := ReadJobFromBytes("irw320_tui", "/abs/dir", []byte(brief))
-
-	if j.Name != "irw320_tui" {
-		t.Errorf("Name = %q, want irw320_tui", j.Name)
-	}
-	if j.Dir != "/abs/dir" {
-		t.Errorf("Dir = %q, want /abs/dir", j.Dir)
-	}
-	if j.ID != "irw320" {
-		t.Errorf("ID = %q, want irw320", j.ID)
-	}
-	if j.Title != "TUI" {
-		t.Errorf("Title = %q, want TUI", j.Title)
-	}
-	if j.Type != "fix" {
-		t.Errorf("Type = %q, want fix", j.Type)
-	}
-	if j.Branch != "feature/irw320_tui" {
-		t.Errorf("Branch = %q, want feature/irw320_tui", j.Branch)
-	}
-	if j.Date != "2026-08-08" {
-		t.Errorf("Date = %q, want 2026-08-08", j.Date)
-	}
-}
-
-// TestReadJobFromBytesDefaults confirms a missing/empty brief still yields the
-// same defaults ReadJob uses (title = name, type = feature, status = open,
-// id derived from name) — the cross-branch path's "brief.md absent on this
-// branch" case.
-func TestReadJobFromBytesDefaults(t *testing.T) {
-	j := ReadJobFromBytes("abc123_thing", "/d", nil)
-	if j.Title != "abc123_thing" {
-		t.Errorf("Title = %q, want dir name", j.Title)
-	}
-	if j.Type != "feature" {
-		t.Errorf("Type default = %q, want feature", j.Type)
-	}
-	if j.Status != "open" {
-		t.Errorf("Status default = %q, want open", j.Status)
-	}
-	if j.ID != "abc123" {
-		t.Errorf("ID = %q, want abc123 (derived from name)", j.ID)
-	}
-}
-
 func TestDiscover(t *testing.T) {
 	root := t.TempDir()
 

@@ -92,12 +92,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	j, err = ensureOnBranch(root, j)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mg jdi: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Best-effort: see ensureSidecarIgnored's own doc for why a failure here
 	// does not abort the run.
 	if err := ensureSidecarIgnored(root); err != nil {
@@ -199,27 +193,6 @@ func resolveJob(root, arg string) (job.Job, error) {
 	default:
 		return job.Job{}, fmt.Errorf("job %q is ambiguous — matches %d jobs", arg, len(prefixMatches))
 	}
-}
-
-// ensureOnBranch switches the working tree to j's own branch if it isn't
-// already checked out. This is necessary, not optional: scripts/run.sh binds
-// mounts the project root and docs/ straight from the host's working tree
-// (see run.sh), so every agent invocation mg-jdi makes — and every commit
-// those agents create — operates against whatever branch is checked out on
-// the host, not against j.Branch specifically. Mirrors the TUI's own
-// checkoutCmd/git.Checkout ("b" in the detail view), just performed
-// automatically here instead of blocking on a human pressing a key — a
-// human manually checking out the branch first would defeat the point of an
-// unattended run.
-func ensureOnBranch(root string, j job.Job) (job.Job, error) {
-	if j.OnCurrentBranch || j.Branch == "" {
-		return j, nil
-	}
-	if err := git.Checkout(root, j.Branch); err != nil {
-		return j, fmt.Errorf("could not switch to job branch %q: %w", j.Branch, err)
-	}
-	j.OnCurrentBranch = true
-	return j, nil
 }
 
 // AgentRunner runs one non-interactive agent invocation for job j and

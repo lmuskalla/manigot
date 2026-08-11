@@ -188,6 +188,116 @@ if [[ -z "$PROJECT_ROOT" ]]; then
 fi
 
 PROJECT_ROOT="${PROJECT_ROOT%/}"
+INVOCATION_ROOT="$PROJECT_ROOT"
+
+# ── Resolve --job to its own git worktree ───────────────────────────────────────
+# 207bfu_git-worktrees, Decision 4: every open job lives in its own git
+# worktree (created by scripts/new-job.sh) — PROJECT_ROOT stays on the base
+# branch in steady state, so an open job's docs/jobs/<id>_<slug> never exists
+# in PROJECT_ROOT's working tree at all. --job is therefore resolved by
+# matching JOB against local branch names (a job's branch embeds its
+# id_slug, e.g. feature/207bfu_git-worktrees), then looking up that branch's
+# worktree via scripts/lib/worktree.sh — a branch match with no registered
+# worktree is a hard error, not a fallback to PROJECT_ROOT (which would
+# silently mount the *wrong* job's content — an inconsistent state that
+# should only happen if worktree creation itself partially failed).
+#
+# The one exception is a project with no local branches at all — not a git
+# repo, or a fresh repo before its first commit. There, no worktrees are even
+# possible: new-job.sh's kept non-git fallback wrote the job straight into
+# PROJECT_ROOT/docs/jobs/, exactly as before this change, so --job falls back
+# to the pre-worktree directory-scan resolution and PROJECT_ROOT is left
+# untouched (there is no worktree to mount). This mirrors the Go side's
+# job.discoverWorkingTree, which triggers on the same "no branches" condition.
+#
+# Once resolved, PROJECT_ROOT is reassigned to the worktree path, so every
+# downstream consumer (PROJECT_DOCS_DIR, CONTEXT_MOUNT, the .env-shadow scan,
+# the primary -v ...:/workspace:z mount, and the diagnostic banner's
+# Root/Docs lines) keys off the same resolved root with no separate
+# job-directory special-casing. INVOCATION_ROOT (captured above, before any
+# reassignment) keeps the original project identity for the banner's
+# "Project" line and the container name.
+if [[ -n "$JOB" ]]; then
+    if [[ "$DOCS_INITIALIZED" != "true" ]]; then
+        echo "Error: --job requires an initialized project (no docs/ found)."
+        echo "See 'Per-project setup' in the manigot README, then 'mg job' to create one."
+        exit 1
+    fi
+
+    # shellcheck source=lib/worktree.sh
+    source "$SCRIPT_DIR/lib/worktree.sh"
+
+    BRANCHES=$(git -C "$PROJECT_ROOT" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null || true)
+
+    if [[ -z "$BRANCHES" ]]; then
+        # ── Non-git / no-branches fallback: flat docs/jobs/ directory scan ──
+        # No local branches → not a git repo (or no commits yet) → no
+        # worktrees are possible, so the job's files live directly in
+        # PROJECT_ROOT/docs/jobs/. Resolve the job directory the way run.sh
+        # did before worktrees existed: exact match first, then a prefix scan.
+        JOB_DIR="$PROJECT_ROOT/docs/jobs/$JOB"
+        if [[ ! -d "$JOB_DIR" ]]; then
+            MATCH=$(find "$PROJECT_ROOT/docs/jobs" -maxdepth 1 -type d -name "${JOB}*" 2>/dev/null | grep -v '/archive' | head -1 || true)
+            if [[ -n "$MATCH" ]]; then
+                JOB_DIR="$MATCH"
+                JOB="$(basename "$MATCH")"
+            else
+                echo "Error: job '$JOB' not found under docs/jobs/"
+                exit 1
+            fi
+        fi
+        # PROJECT_ROOT stays as-is: the job dir is under it, no worktree to
+        # reassign to. The JOB_PROMPT block below reads docs/jobs/$JOB off
+        # PROJECT_ROOT, which is correct for this case.
+    else
+        MATCHED_BRANCH=""
+        while IFS= read -r b; do
+            [[ -z "$b" ]] && continue
+            if [[ "${b##*/}" == "$JOB" ]]; then
+                MATCHED_BRANCH="$b"
+                break
+            fi
+        done <<< "$BRANCHES"
+
+        if [[ -z "$MATCHED_BRANCH" ]]; then
+            # Prefix match on the id_slug segment — same fallback
+            # finish-job.sh/delete-job.sh apply against directory names, applied
+            # here against branch names instead.
+            PREFIX_MATCHES=()
+            while IFS= read -r b; do
+                [[ -z "$b" ]] && continue
+                if [[ "${b##*/}" == "$JOB"* ]]; then
+                    PREFIX_MATCHES+=("$b")
+                fi
+            done <<< "$BRANCHES"
+            case "${#PREFIX_MATCHES[@]}" in
+                0)
+                    echo "Error: job '$JOB' not found among local branches."
+                    exit 1
+                    ;;
+                1)
+                    MATCHED_BRANCH="${PREFIX_MATCHES[0]}"
+                    ;;
+                *)
+                    echo "Error: job '$JOB' is ambiguous — matches branches: ${PREFIX_MATCHES[*]}"
+                    exit 1
+                    ;;
+            esac
+        fi
+
+        JOB_WORKTREE="$(worktree_path_for_branch "$PROJECT_ROOT" "$MATCHED_BRANCH")"
+        if [[ -z "$JOB_WORKTREE" ]]; then
+            echo "Error: branch '$MATCHED_BRANCH' has no git worktree." >&2
+            echo "A job's worktree is created by 'mg job' and should always exist for an open job — this is an inconsistent state (worktree creation may have failed, or the worktree was removed by hand)." >&2
+            echo "Refusing to fall back to mounting $PROJECT_ROOT instead: that would show the wrong job's content." >&2
+            exit 1
+        fi
+
+        JOB="${MATCHED_BRANCH##*/}"
+        PROJECT_ROOT="${JOB_WORKTREE%/}"
+    fi
+fi
+
 PROJECT_DOCS_DIR="$PROJECT_ROOT/$CLAUDE_DIR_NAME"
 
 # ── Git identity ─────────────────────────────────────────────────────────────────
@@ -247,26 +357,20 @@ if [[ -d "$PROJECT_DOCS_DIR" ]]; then
     DOCS_MOUNT=(-v "$PROJECT_DOCS_DIR:$DOCS_MOUNT_TARGET:z")
 fi
 
-# ── Resolve job directory ───────────────────────────────────────────────────────
+# ── Job prompt ──────────────────────────────────────────────────────────────────
+# By this point PROJECT_ROOT has already been reassigned to the job's own
+# worktree (see the --job resolution block above), so docs/jobs/$JOB is
+# guaranteed to exist there — new-job.sh always creates it alongside the
+# worktree itself. The directory-existence check here is a defensive
+# consistency check, not a resolution fallback.
 AGENT_FLAG=()
 JOB_PROMPT=""
 
 if [[ -n "$JOB" ]]; then
-    if [[ "$DOCS_INITIALIZED" != "true" ]]; then
-        echo "Error: --job requires an initialized project (no docs/ found)."
-        echo "See 'Per-project setup' in the manigot README, then 'mg job' to create one."
-        exit 1
-    fi
     JOB_DIR="$PROJECT_ROOT/docs/jobs/$JOB"
     if [[ ! -d "$JOB_DIR" ]]; then
-        MATCH=$(find "$PROJECT_ROOT/docs/jobs" -maxdepth 1 -type d -name "${JOB}*" 2>/dev/null | head -1 || true)
-        if [[ -n "$MATCH" ]]; then
-            JOB_DIR="$MATCH"
-            JOB="$(basename "$MATCH")"
-        else
-            echo "Error: job '$JOB' not found under docs/jobs/"
-            exit 1
-        fi
+        echo "Error: resolved job worktree at $PROJECT_ROOT has no docs/jobs/$JOB directory — inconsistent worktree state." >&2
+        exit 1
     fi
     CONTAINER_JOB_DIR="/workspace/docs/jobs/$JOB"
     JOB_PROMPT="Please work on the job at ${CONTAINER_JOB_DIR} — start by reading brief.md"
@@ -383,7 +487,7 @@ echo "╔═══════════════════════�
 echo "║           manigot                   ║" >&3
 echo "╠══════════════════════════════════════╣" >&3
 echo "║  Entering safehouse (isolated session)..." >&3
-echo "║  Project : $(basename "$PROJECT_ROOT")" >&3
+echo "║  Project : $(basename "$INVOCATION_ROOT")" >&3
 echo "║  Root    : $PROJECT_ROOT" >&3
 if [[ "$DOCS_INITIALIZED" == "true" ]]; then
     echo "║  Docs    : $PROJECT_DOCS_DIR" >&3

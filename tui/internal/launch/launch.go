@@ -40,6 +40,16 @@ import (
 // "Terminal.app", "gnome-terminal") so the caller can surface it in a status
 // line.
 //
+// The launcher runs from projectRoot (the main worktree) even though the job
+// lives in its own worktree (207bfu_git-worktrees): scripts/run.sh re-derives
+// the effective mount root itself from the --job it is given (branch-match +
+// worktree lookup, hard error on a worktree-less job), so launching from
+// projectRoot is not just sufficient but required — the script locates the
+// project from $PWD via find_project_root, and only then resolves the job's
+// worktree. The same reasoning keeps Quick/AgentQuick (no --job at all, mount
+// PROJECT_ROOT directly) and Jdi (mg-jdi, which re-derives per invocation)
+// on projectRoot.
+//
 // The launcher process is detached: its stdio is discarded so it cannot
 // corrupt the TUI's alt screen, and it is reaped asynchronously. The one
 // exception is the tmux path, where the split-window client is run
@@ -130,6 +140,13 @@ func AgentQuick(agent, projectRoot, profile string) (string, error) {
 // profile is one of the subscription profiles in config.Profiles, matching
 // Agent/Quick — an empty value defaults to config.ProfileClaudePro, mg-jdi's
 // own default (see tui/cmd/jdi/main.go).
+//
+// cmd.Dir stays on projectRoot (the main worktree) even though the job lives
+// in its own worktree (207bfu_git-worktrees): mg-jdi — like every other
+// `--job` invocation — re-derives the effective worktree root itself from the
+// job id it is given, per invocation, so it must be launched from the project
+// root that find_project_root expects, never from a job worktree directly.
+// See Agent's doc for the full reasoning, shared by all four launch paths.
 //
 // Unlike Agent/Quick there is no "where it opened" description to return —
 // there is no terminal/pane to describe — so this returns only an error (nil

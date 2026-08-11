@@ -10,6 +10,14 @@ set -euo pipefail
 # The base branch new jobs are cut from is read from docs/manigot.json
 # (defaulting to "main"); --base-branch overrides it for one invocation.
 #
+# Every job gets its own git worktree (207bfu_git-worktrees, Decision 1/3):
+# created alongside the branch at
+# <dirname(PROJECT_ROOT)>/.manigot-worktrees/<basename(PROJECT_ROOT)>/<id>_<slug>,
+# sibling to PROJECT_ROOT rather than nested inside it. PROJECT_ROOT itself is
+# never switched — it stays on whatever branch it was already on. A
+# non-git-repo project keeps the pre-worktree behavior: no branch, no
+# worktree, the scaffold is written straight into PROJECT_ROOT.
+#
 # Installed as `mg-job`. See `make install`.
 
 # ── Configuration ───────────────────────────────────────────────────────────────
@@ -83,19 +91,19 @@ if [[ -f "$SETTINGS_FILE" ]]; then
 fi
 [[ -n "$BASE_BRANCH_OVERRIDE" ]] && BASE_BRANCH="$BASE_BRANCH_OVERRIDE"
 
-# ── Generate job ID and directory ───────────────────────────────────────────────
+# ── Generate job ID ─────────────────────────────────────────────────────────────
 ID=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 6 || true)
 SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
-JOB_DIR="$PROJECT_ROOT/$JOBS_DIR/${ID}_${SLUG}"
 DATE=$(date '+%Y-%m-%d')
 AUTHOR=$(git config user.name 2>/dev/null || echo "unknown")
 
-mkdir -p "$JOB_DIR"
-
-# ── Git branch ──────────────────────────────────────────────────────────────────
+# ── Git branch + worktree ────────────────────────────────────────────────────────
 # Always branch from the configured base branch, regardless of the branch the
 # user is currently on. A new job must not inherit work from another in-flight
-# job's branch.
+# job's branch. The job gets its own worktree (207bfu_git-worktrees, Decision
+# 1/3) rather than being checked out in PROJECT_ROOT: PROJECT_ROOT itself is
+# never switched, so it stays free for other jobs' worktrees to branch from
+# and multiple jobs can be worked on in parallel.
 BRANCH="${JOB_TYPE}/${ID}_${SLUG}"
 CURRENT_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
@@ -104,11 +112,27 @@ if [[ -n "$CURRENT_BRANCH" ]]; then
         echo "Error: base branch '${BASE_BRANCH}' does not exist; cannot create job branch from it." >&2
         exit 1
     fi
-    git -C "$PROJECT_ROOT" checkout -b "$BRANCH" "$BASE_BRANCH"
+    # Sibling to PROJECT_ROOT, not nested inside it — see scripts/lib/worktree.sh's
+    # doc for why. This naming convention is only ever computed here, at
+    # creation time; every other touch point looks the worktree up dynamically
+    # via worktree_path_for_branch instead of recomputing this path.
+    WORKTREE_PARENT="$(dirname "$PROJECT_ROOT")/.manigot-worktrees/$(basename "$PROJECT_ROOT")"
+    WORKTREE_PATH="$WORKTREE_PARENT/${ID}_${SLUG}"
+    mkdir -p "$WORKTREE_PARENT"
+    git -C "$PROJECT_ROOT" worktree add "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"
     echo "  Branch   : $BRANCH (based on $BASE_BRANCH)"
+    echo "  Worktree : $WORKTREE_PATH"
+    # The job's own docs/jobs/<id>_<slug> directory, inside the worktree —
+    # not the worktree's own checkout root. The worktree just cloned the base
+    # branch's docs/jobs/ (without this job's subdirectory yet), so it needs
+    # creating same as the non-git fallback below.
+    JOB_DIR="$WORKTREE_PATH/$JOBS_DIR/${ID}_${SLUG}"
+    mkdir -p "$JOB_DIR"
 else
-    echo "  Warning  : not a git repository — skipping branch creation"
+    echo "  Warning  : not a git repository — skipping branch/worktree creation"
     BRANCH="(no git)"
+    JOB_DIR="$PROJECT_ROOT/$JOBS_DIR/${ID}_${SLUG}"
+    mkdir -p "$JOB_DIR"
 fi
 
 # ── Write brief.md ──────────────────────────────────────────────────────────────
@@ -216,10 +240,13 @@ EOF
 
 # ── Commit scaffolding ──────────────────────────────────────────────────────────
 # Commit the template docs immediately so the new branch doesn't start with
-# uncommitted changes — they'd otherwise follow the user around until work begins.
+# uncommitted changes — they'd otherwise follow the user around until work
+# begins. Run with cwd at JOB_DIR (inside the job's own worktree, not
+# PROJECT_ROOT — PROJECT_ROOT is never switched onto the job's branch at
+# all), so `git add .` stages exactly the four new files.
 if [[ -n "$CURRENT_BRANCH" ]]; then
-    git -C "$PROJECT_ROOT" add "$JOB_DIR"
-    git -C "$PROJECT_ROOT" commit -m "Scaffold job ${ID}_${SLUG}" >/dev/null
+    git -C "$JOB_DIR" add .
+    git -C "$JOB_DIR" commit -m "Scaffold job ${ID}_${SLUG}" >/dev/null
 fi
 
 # ── Done ────────────────────────────────────────────────────────────────────────

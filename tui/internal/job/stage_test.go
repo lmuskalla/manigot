@@ -121,7 +121,6 @@ func TestTerseRealBriefJobStageIsPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j.OnCurrentBranch = true
 	if got := j.Stage(); got != StagePlan {
 		t.Errorf("terse-but-real brief.md job stage = %s, want plan", got)
 	}
@@ -180,10 +179,8 @@ func TestMissingFileIsNotWritten(t *testing.T) {
 func TestJobStageProgression(t *testing.T) {
 	dir := t.TempDir()
 
-	// The files written below live in the working tree, so this job is a
-	// current-branch job for read-strategy purposes: Stage() must read them
-	// from disk rather than via git show.
-	mkJob := func() Job { j, _ := ReadJob(dir); j.OnCurrentBranch = true; return j }
+	// Stage() always reads straight from j.Dir (see the package doc).
+	mkJob := func() Job { j, _ := ReadJob(dir); return j }
 
 	// No brief at all (ReadJob defaults status=open, no file) → define.
 	if got := mkJob().Stage(); got != StageDefine {
@@ -251,41 +248,28 @@ func TestJobStageVerdictAmbiguousBouncesToImplement(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "verdict.md"), []byte(ambiguous), 0o644)
 
 	j, _ := ReadJob(dir)
-	j.OnCurrentBranch = true
 	if got := j.Stage(); got != StageImplement {
 		t.Errorf("ambiguous verdict.md stage = %s, want implement", got)
 	}
 }
 
-// TestStageOffBranchImplementReadsViaGit confirms Stage() reads a job's files
-// from its branch via git (not the working tree) when OnCurrentBranch is
-// false. Without this, every cross-branch job would falsely report stage
-// define because its files aren't checked out into the working tree at all.
-func TestStageOffBranchImplementReadsViaGit(t *testing.T) {
-	dir, def := gitInitRepo(t)
-
-	// Build the job on a feature branch: a written brief + tasks.md → stage
-	// implement. The brief's id matches the "ddd01_d" dir name (filledBrief's
-	// hardcoded "abc123" would otherwise override the ID this test filters
-	// on).
-	gitRun(t, dir, "checkout", "-q", "-b", "feature/ddd01_d")
+// TestStageOfDiscoveredWorktreeJob confirms Stage() works correctly for a
+// job as actually returned by Discover — reading straight from its own
+// worktree, no branch check involved (207bfu_git-worktrees).
+func TestStageOfDiscoveredWorktreeJob(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
 	brief := "# Brief: Ddd\n\nstatus: open\nid: ddd01\nbranch: feature/ddd01_d\ndate: 2026-01-01\n\n" +
 		"## What\n\nAdd a widget so users can schedule recurring exports.\n\n" +
 		"## Why\n\nSeveral customers asked for this instead of the manual workaround.\n"
-	gitCommitJob(t, dir, "ddd01_d", brief)
-	if err := os.WriteFile(filepath.Join(dir, "docs", "jobs", "ddd01_d", "tasks.md"), []byte(filledTasks), 0o644); err != nil {
+	wtPath := addJobWorktree(t, dir, wts, "feature/ddd01_d", "ddd01_d", brief)
+
+	if err := os.WriteFile(filepath.Join(wtPath, "docs", "jobs", "ddd01_d", "tasks.md"), []byte(filledTasks), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-q", "-m", "tasks")
-	gitRun(t, dir, "checkout", "-q", def)
+	gitRun(t, wtPath, "add", "-A")
+	gitRun(t, wtPath, "commit", "-q", "-m", "tasks")
 
-	// The job dir is NOT in the default branch's working tree.
-	if _, err := os.Stat(filepath.Join(dir, "docs", "jobs", "ddd01_d")); !os.IsNotExist(err) {
-		t.Fatalf("ddd01_d unexpectedly checked out on default branch: %v", err)
-	}
-
-	// Discover from the default branch and find the off-branch job.
 	jobs, err := Discover(dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
@@ -299,34 +283,7 @@ func TestStageOffBranchImplementReadsViaGit(t *testing.T) {
 	if j.ID == "" {
 		t.Fatalf("ddd01 not discovered: %+v", jobs)
 	}
-	if j.OnCurrentBranch {
-		t.Fatal("ddd01 should be an off-branch job (OnCurrentBranch=false) for this test")
-	}
 	if got := j.Stage(); got != StageImplement {
-		t.Errorf("off-branch job Stage = %s, want implement (tasks.md read via git show)", got)
-	}
-}
-
-// TestStageOffBranchDefineWhenBriefUnwritten confirms an off-branch job whose
-// brief is just the bare frontmatter (no real body) reports define via the
-// git-read path.
-func TestStageOffBranchDefineWhenBriefUnwritten(t *testing.T) {
-	dir, def := gitInitRepo(t)
-	gitRun(t, dir, "checkout", "-q", "-b", "feature/eee01_e")
-	gitCommitJob(t, dir, "eee01_e", "# Brief: Eee\n\nstatus: open\nid: eee01\nbranch: feature/eee01_e\ndate: 2026-01-01\n")
-	gitRun(t, dir, "checkout", "-q", def)
-
-	jobs, _ := Discover(dir)
-	var j Job
-	for _, cand := range jobs {
-		if cand.ID == "eee01" {
-			j = cand
-		}
-	}
-	if j.ID == "" {
-		t.Fatalf("eee01 not discovered: %+v", jobs)
-	}
-	if got := j.Stage(); got != StageDefine {
-		t.Errorf("off-branch brief-only Stage = %s, want define", got)
+		t.Errorf("worktree job Stage = %s, want implement", got)
 	}
 }

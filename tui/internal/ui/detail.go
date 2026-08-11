@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lmuskalla/manigot/tui/internal/git"
 	"github.com/lmuskalla/manigot/tui/internal/job"
 	"github.com/lmuskalla/manigot/tui/internal/markdown"
 )
@@ -44,10 +43,8 @@ type fileTab struct {
 	// isLog marks the fifth "log" tab (TASK-9): unlike the four job files,
 	// its content comes from mg-jdi's sidecar run.log
 	// (job.ReadJDIRunLogTail(d.job.Root, d.job.Name)) rather than d.path —
-	// it is not part of either job.OnCurrentBranch's working-tree read or
-	// the off-branch git-show read (the sidecar isn't tracked in git at
-	// all, tied only to the job name, not a branch), and it is never
-	// editable.
+	// the sidecar lives outside any job's worktree (tied only to the job
+	// name, not a branch), and it is never editable.
 	isLog bool
 
 	// stale marks a viewer that is out of date with content and/or the
@@ -70,22 +67,6 @@ type detailView struct {
 	// status, when non-empty, replaces the footer's key hint — used to confirm
 	// an agent launch (set by TASK-8) or report a launch error.
 	status string
-
-	// branchFlash marks the off-branch hint in the title+meta line (see
-	// render) for blink treatment — set the moment branchGuard blocks an
-	// action (blockedByBranch), so the *existing* red hint up top flashes to
-	// draw the eye there instead of a second warning appearing at the
-	// footer. Cleared a few seconds later by app.go's branchFlashDoneMsg
-	// handler (see branchFlashDuration) so the flash reads as a momentary
-	// reaction rather than a state that lingers until the user switches
-	// branches.
-	branchFlash bool
-
-	// branchFlashGen is bumped every time blockedByBranch (re)triggers a
-	// flash. Round-tripped through branchFlashDoneMsg so a delayed clear from
-	// an earlier blocked attempt can't cut short a flash a later attempt
-	// (re)started in the meantime — see app.go's branchFlashDoneMsg handler.
-	branchFlashGen int
 
 	// spinnerStep is the current activity-indicator frame index (see
 	// activity.go), threaded in from the App by the spinnerTickMsg handler so
@@ -149,11 +130,10 @@ func (d *detailView) loadTabs() {
 // is left alone and the tab is marked stale so ensureCurrentSized catches it
 // up lazily once it actually becomes active.
 //
-// A job on the current branch is read from the working tree (os.ReadFile) so
-// uncommitted edits still show; a job discovered on another branch is read
-// via `git show <Branch>:…`, so its four files appear in the tabs even though
-// they don't exist under j.Dir in this working tree. Either way a missing
-// file falls back to the placeholder.
+// Every job file is read straight off disk via d.readFile (a job's own
+// worktree — or, for an archived job, the main worktree's archive/ — is
+// unconditionally the live, correct place to read it from, see the job
+// package doc). A missing file falls back to the placeholder.
 //
 // Real content goes through stripLeadingFrontmatter first: every job file's
 // new-job.sh scaffold repeats the title (as its own "# <Label>: <title>" H1)
@@ -261,19 +241,13 @@ func isFrontmatterLine(line string) bool {
 	return !strings.ContainsAny(line[:idx], " \t")
 }
 
-// readFile reads one tab's file bytes from the working tree (current-branch
-// job) or via git show (off-branch job). ok is false when the file isn't
-// available through the chosen path.
+// readFile reads one tab's file bytes straight off disk from t.path — a
+// job's own worktree (or the main worktree's archive/) is unconditionally
+// the live, correct place to read its four files from (see the job package
+// doc), so there is no branch check and no git-show fallback. ok is false
+// when the file isn't available at that path (missing).
 func (d *detailView) readFile(t *fileTab) (data []byte, ok bool) {
-	if d.job.OnCurrentBranch {
-		b, err := os.ReadFile(t.path)
-		if err != nil {
-			return nil, false
-		}
-		return b, true
-	}
-	rel := filepath.ToSlash(filepath.Join(job.JobsRelDir, d.job.Name, filepath.Base(t.path)))
-	b, err := git.ShowFile(d.job.Root, d.job.Branch, rel)
+	b, err := os.ReadFile(t.path)
 	if err != nil {
 		return nil, false
 	}
@@ -307,20 +281,6 @@ func (d *detailView) resize(width, height int) {
 func (d *detailView) setStatus(s string) {
 	d.status = s
 	d.syncViewerSize()
-}
-
-// blockedByBranch reacts to a branchGuard block: it clears any footer status
-// (the reaction lives entirely in the off-branch hint already shown in the
-// title+meta line, see render — not as a second message down at the
-// footer) and flags branchFlash so that hint blinks. Returns the new
-// branchFlashGen, which the caller (app.go's blockedByBranchCmd) rounds back
-// through a delayed branchFlashDoneMsg to clear the flash again.
-func (d *detailView) blockedByBranch() int {
-	d.status = ""
-	d.branchFlash = true
-	d.branchFlashGen++
-	d.syncViewerSize()
-	return d.branchFlashGen
 }
 
 // syncViewerSize resizes the active tab's viewer to the current body
@@ -486,25 +446,12 @@ func (d *detailView) render() string {
 	b.WriteString(titleStyle.Render(d.job.Title))
 	meta := fmt.Sprintf("  %s · %s · %s · %s", d.job.ID, d.job.Status, d.job.Type, d.job.Date)
 	b.WriteString(dimStyle.Render(meta))
-	// Branch: show which branch the job lives on, and flag it when that's a
-	// different branch than the one currently checked out (so the user
-	// understands why edits are guarded and knows to press "b" to switch).
-	// The off-branch case renders in warnStyle's red — a plain foreground
-	// color, no background fill — rather than dimStyle, so it reads as a
-	// warning at a glance instead of blending into ordinary meta text; once
-	// branchFlash is set (a blocked action was just attempted, see
-	// blockedByBranch), it also blinks to draw the eye back to this exact
-	// hint instead of a second message appearing at the footer.
+	// Branch: show which branch the job's own worktree is checked out to.
+	// Purely informational — every job has its own worktree
+	// (207bfu_git-worktrees), so there is no "wrong branch checked out"
+	// state to warn about anymore.
 	if d.job.Branch != "" {
-		if d.job.OnCurrentBranch {
-			b.WriteString(dimStyle.Render(" · branch: " + d.job.Branch))
-		} else {
-			style := warnStyle
-			if d.branchFlash {
-				style = style.Blink(true)
-			}
-			b.WriteString(style.Render(" · " + d.job.Branch + " (other branch — press b to switch)"))
-		}
+		b.WriteString(dimStyle.Render(" · branch: " + d.job.Branch))
 	}
 	b.WriteString("\n\n")
 
@@ -725,11 +672,6 @@ func (d *detailView) renderFooter() string {
 		// "e" only does anything on editable tabs (brief.md today), so the
 		// hint is scoped to when it would actually work.
 		hint += " · e edit"
-	}
-	if !d.job.OnCurrentBranch {
-		// "b" only does anything for a job that isn't already on the
-		// checked-out branch — scoped the same way "e edit" is above.
-		hint += " · b switch branch"
 	}
 	hint += " · P push to origin · x/del remove job · ctrl+r refresh · esc back · q quit"
 
