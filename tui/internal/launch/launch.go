@@ -393,8 +393,23 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 			// pane's id to its stdout so launchTmuxPane can tag it with
 			// tmuxPaneTag (via select-pane -T — split-window has no -T on any
 			// released tmux) and record it for the replace policy (TASK-3).
+			//
+			// The trailing "bash", "-lc", inner (three separate argv elements,
+			// not one combined string) matters: given a single shell-command
+			// argument, tmux runs it via the pane's default-shell in -c mode,
+			// which is non-login and non-interactive — .zshrc/.bash_profile are
+			// never sourced, so any PATH customization living there (docker,
+			// a manigot install dir, nvm, homebrew, ...) is invisible to it and
+			// the inner command fails fast (caught by holdOnFailure, but the
+			// session never actually starts). Passing multiple argv elements
+			// instead makes tmux exec them directly with no shell in between,
+			// so this becomes an ordinary `bash -lc inner` invocation — the
+			// exact login-shell wrapping every other spawn path below already
+			// uses (see shellArgs), just constructed inline since tmux's
+			// argv-vs-single-string parsing is what selects shell-vs-direct-exec
+			// here, unlike a plain exec.Command call.
 			return exec.Command("tmux", "split-window", "-h", "-p", "35",
-				"-P", "-F", "#{pane_id}", inner), "tmux pane", nil
+				"-P", "-F", "#{pane_id}", "bash", "-lc", inner), "tmux pane", nil
 		}
 	}
 

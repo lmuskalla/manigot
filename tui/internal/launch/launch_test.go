@@ -199,7 +199,7 @@ func TestBuildCmdTmuxUsesSplitWindow(t *testing.T) {
 	if cmd.Path != stub {
 		t.Errorf("cmd.Path = %q, want %q (resolved tmux binary)", cmd.Path, stub)
 	}
-	want := []string{"tmux", "split-window", "-h", "-p", "35", "-P", "-F", "#{pane_id}", "echo hi"}
+	want := []string{"tmux", "split-window", "-h", "-p", "35", "-P", "-F", "#{pane_id}", "bash", "-lc", "echo hi"}
 	if len(cmd.Args) != len(want) {
 		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, want)
 	}
@@ -416,7 +416,7 @@ func TestLaunchTmuxPaneReplacesBeforeSplittingAndRecordsPaneID(t *testing.T) {
 	if !strings.Contains(calls, "kill-pane -t %1") {
 		t.Errorf("previous tagged pane not killed:\n%s", calls)
 	}
-	if !strings.Contains(calls, "split-window -h -p 35 -P -F #{pane_id} echo hi") {
+	if !strings.Contains(calls, "split-window -h -p 35 -P -F #{pane_id} bash -lc echo hi") {
 		t.Errorf("split-window invocation missing or wrong:\n%s", calls)
 	}
 	// The tag must be applied with select-pane (split-window has no -T on any
@@ -522,7 +522,7 @@ func TestLaunchDetachedRoutesToTmuxPane(t *testing.T) {
 	if desc != "tmux pane" {
 		t.Errorf("desc = %q, want %q", desc, "tmux pane")
 	}
-	if !strings.Contains(stub.calls(), "split-window -h -p 35 -P -F #{pane_id} echo hi") {
+	if !strings.Contains(stub.calls(), "split-window -h -p 35 -P -F #{pane_id} bash -lc echo hi") {
 		t.Errorf("tmux split-window not invoked via launchDetached:\n%s", stub.calls())
 	}
 }
