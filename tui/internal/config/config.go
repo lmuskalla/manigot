@@ -128,6 +128,13 @@ type Settings struct {
 	// kept only so old tui-settings.json files load. It is migrated into
 	// Profile by Load and never written back.
 	Tool string `json:"tool,omitempty"`
+
+	// Terminal is the command used to spawn an agent session's terminal
+	// (launch.Agent/Quick/AgentQuick), e.g. "kitty" or "alacritty -e". Empty
+	// means fall back to today's auto-detect spawn order (tmux split pane,
+	// macOS Terminal.app, then a Linux emulator list) — see
+	// tui/internal/launch's buildCmd.
+	Terminal string `json:"terminal,omitempty"`
 }
 
 // ProfileValue returns s.Profile, defaulting to ProfileClaudePro when unset.
