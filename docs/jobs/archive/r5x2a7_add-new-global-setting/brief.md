@@ -1,6 +1,6 @@
 # Brief: Add new global setting
 
-status: open
+status: done
 type: feature
 id: r5x2a7
 branch: feature/r5x2a7_add-new-global-setting
