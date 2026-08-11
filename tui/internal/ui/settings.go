@@ -39,10 +39,13 @@ const (
 	stSubmit          // enter — persist the settings
 )
 
-// settingsView is the "Settings" form. It edits two separate files at once:
+// settingsView is the "Settings" form. It edits three files at once:
 //
-//   - the global config.Settings (editor + subscription profile) — personal
-//     prefs, gitignored, in the manigot checkout; and
+//   - config/tui-settings.json — the editor preference (personal, gitignored,
+//     in the manigot checkout);
+//   - manigot/.env — the subscription profile, as MANIGOT_PROFILE: the one
+//     default shared between CLI and TUI (bare `mg` resolves to it, `mg
+//     profiles` writes it, and this form reads/writes the same key); and
 //   - the project.Settings (base branch) — shared project convention,
 //     committable, in the target project's docs/manigot.json.
 //
@@ -250,12 +253,15 @@ func (v *settingsView) render() string {
 		b.WriteString("\n")
 	}
 	// Describe the selected profile: which agent CLI it launches and what it
-	// bills against. The model is deliberately not shown — the opencode
-	// profiles' model lives in manigot's .env, which the TUI does not read.
+	// bills against, then where the choice is stored. The model is
+	// deliberately not shown — the opencode profiles' model lives in manigot's
+	// .env (OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL), which the TUI does not read.
 	sel := profileOptions[v.profile]
 	selDesc := "tool: " + sel.Tool
 	selDesc += " · billed via " + sel.Auth
 	b.WriteString(dimStyle.Render("    " + selDesc))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("    saved as MANIGOT_PROFILE in manigot/.env — shared with the CLI (bare mg / mg profiles)"))
 	b.WriteString("\n\n")
 
 	// Footer: status or a focus-aware hint.

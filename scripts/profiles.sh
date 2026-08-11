@@ -2,13 +2,14 @@
 set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
-# mg profiles                 # list the profiles and which one bare `mg` uses
+# mg profiles                 # list the profiles, then pick the default (TTY)
 # mg profiles <name>          # set the default profile for bare `mg` runs
 #
 # The default is stored as MANIGOT_PROFILE in manigot/.env — the same file
 # scripts/run.sh sources, so a bare `mg` (no --profile/--tool flag) resolves to
-# it. Sessions launched from the TUI instead use the profile chosen in the
-# TUI's own settings screen (it always passes --profile explicitly).
+# it. It is the one shared default: the TUI's settings screen reads and writes
+# the same value, so a profile switched here is what TUI-launched sessions use,
+# and a profile switched in the TUI is what bare `mg` uses.
 #
 # Keep the profile table below in sync with tui/internal/config/config.go and
 # the one in scripts/run.sh.
@@ -55,7 +56,7 @@ PROF_AUTH[opencode-go]="OPENCODE_API_KEY"
 ORDER=(claude-pro zai opencode-go)
 ACTIVE="${MANIGOT_PROFILE:-claude-pro}"
 
-# ── Set mode ────────────────────────────────────────────────────────────────────
+# ── Help ────────────────────────────────────────────────────────────────────────
 case "${1:-}" in
     -h|--help|help)
         cat <<'EOF'
@@ -63,15 +64,53 @@ mg profiles [name]
 
 Lists manigot's subscription profiles — claude-pro, zai, opencode-go — showing
 which are configured and which is the default used by bare `mg`. With a name,
-sets that profile as the default (written as MANIGOT_PROFILE in manigot/.env).
+sets that profile as the default (written as MANIGOT_PROFILE in manigot/.env);
+with no name and an interactive terminal, prompts to select the default after
+listing.
 
-TUI-launched sessions use the profile chosen in the TUI's settings screen
-instead, independent of this CLI default.
+The default is shared: the TUI's settings screen reads and writes the same
+MANIGOT_PROFILE, so TUI-launched sessions use whatever this command sets, and
+vice versa.
 EOF
         exit 0
         ;;
 esac
 
+# ── set_default_profile NAME — write MANIGOT_PROFILE=<name> into .env ───────────
+# Upserts the value, preserving every other line (.env may hold credentials and
+# comments the user wrote). NAME must already be validated by the caller; it is
+# a known profile id, so it is safe both as an awk regex and as literal output.
+set_default_profile() {
+    local target="$1"
+    if [[ ! -f "$ENV_FILE" ]]; then
+        echo "# manigot configuration — credentials and defaults (never commit this file)" > "$ENV_FILE"
+    fi
+    if grep -q '^MANIGOT_PROFILE=' "$ENV_FILE"; then
+        awk -v v="$target" '
+            BEGIN { done = 0 }
+            !done && $0 ~ /^MANIGOT_PROFILE=/ { print "MANIGOT_PROFILE=" v; done = 1; next }
+            { print }
+            END { if (!done) print "MANIGOT_PROFILE=" v }
+        ' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+    else
+        echo "MANIGOT_PROFILE=$target" >> "$ENV_FILE"
+    fi
+}
+
+# confirm_set NAME — echo the set confirmation + missing-credentials warning,
+# shared by the positional and interactive set paths.
+confirm_set() {
+    local target="$1"
+    echo "Default profile set to $target (MANIGOT_PROFILE in $ENV_FILE)."
+    echo "Bare \`mg\` sessions and TUI-launched sessions share this default."
+
+    KEY="${PROF_AUTH[$target]}"
+    if [[ -z "${!KEY:-}" ]]; then
+        echo "Warning: $KEY is not set in $ENV_FILE — run 'mg setup $target' first, or sessions will fail at launch."
+    fi
+}
+
+# ── Set mode (positional) ───────────────────────────────────────────────────────
 if [[ $# -gt 0 ]]; then
     TARGET="$1"
     shift
@@ -90,36 +129,13 @@ if [[ $# -gt 0 ]]; then
             ;;
     esac
 
-    if [[ ! -f "$ENV_FILE" ]]; then
-        echo "# manigot configuration — credentials and defaults (never commit this file)" > "$ENV_FILE"
-    fi
-
-    # Upsert MANIGOT_PROFILE=<target>, preserving every other line (.env may
-    # hold credentials and comments the user wrote). The value is a validated
-    # profile id, so it is safe both as an awk regex and as literal output.
-    if grep -q '^MANIGOT_PROFILE=' "$ENV_FILE"; then
-        awk -v v="$TARGET" '
-            BEGIN { done = 0 }
-            !done && $0 ~ /^MANIGOT_PROFILE=/ { print "MANIGOT_PROFILE=" v; done = 1; next }
-            { print }
-            END { if (!done) print "MANIGOT_PROFILE=" v }
-        ' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
-    else
-        echo "MANIGOT_PROFILE=$TARGET" >> "$ENV_FILE"
-    fi
-
-    echo "Default profile set to $TARGET (MANIGOT_PROFILE in $ENV_FILE)."
-    echo "Bare \`mg\` sessions will use it. TUI-launched sessions use the profile chosen in the TUI's settings screen instead."
-
-    KEY="${PROF_AUTH[$TARGET]}"
-    if [[ -z "${!KEY:-}" ]]; then
-        echo "Warning: $KEY is not set in $ENV_FILE — run 'mg setup $TARGET' first, or sessions will fail at launch."
-    fi
+    set_default_profile "$TARGET"
+    confirm_set "$TARGET"
     exit 0
 fi
 
 # ── List mode ───────────────────────────────────────────────────────────────────
-echo "Active default: $ACTIVE   (bare \`mg\` runs; switch with: mg profiles <name>)"
+echo "Active default: $ACTIVE   (shared with the TUI; switch with: mg profiles <name>, or pick one below)"
 echo ""
 
 printf "  %-13s %-28s %-10s %-26s %s\n" "profile" "label" "tool" "model" "creds"
@@ -147,3 +163,34 @@ done
 
 echo ""
 echo "  * = default. Configure credentials with: mg setup [name]"
+
+# ── Interactive selection (TTY only) ───────────────────────────────────────────
+# Bare `mg profiles` on an interactive terminal lets the user pick the default
+# right there; piped/non-interactive invocations just get the listing above.
+if [[ ! -t 0 ]]; then
+    exit 0
+fi
+
+echo ""
+echo "Select the default profile (shared with the TUI):"
+while true; do
+    read -rp "  [1-${#ORDER[@]}, Enter keeps $ACTIVE, q quits]: " SELECTION
+    if [[ -z "$SELECTION" ]]; then
+        echo "Keeping $ACTIVE."
+        exit 0
+    fi
+    case "$SELECTION" in
+        q|Q|quit|exit)
+            exit 0
+            ;;
+    esac
+    if [[ "$SELECTION" =~ ^[0-9]+$ ]] && (( SELECTION >= 1 && SELECTION <= ${#ORDER[@]} )); then
+        TARGET="${ORDER[$((SELECTION - 1))]}"
+        break
+    fi
+    echo "Enter a number between 1 and ${#ORDER[@]}, or q to quit."
+done
+
+echo ""
+set_default_profile "$TARGET"
+confirm_set "$TARGET"

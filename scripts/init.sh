@@ -46,7 +46,7 @@ done
 # --profile is the canonical selector. --tool is a legacy alias, mapped to the
 # matching profile: claude-code → claude-pro, opencode → zai (the opencode
 # subscription manigot configured first). When neither is given, run.sh falls
-# back to the default profile set by `mg profiles`.
+# back to the default profile set by `mg profiles` / the TUI settings screen.
 TOOL=""
 PROFILE=""
 while [[ $# -gt 0 ]]; do

@@ -73,7 +73,8 @@ fi
 # Keep this table in sync with tui/internal/config/config.go.
 #
 # Precedence: --profile (explicit) > --tool (legacy alias) > $MANIGOT_PROFILE
-# (the default set by `mg profiles`, read from .env) > claude-pro.
+# (the one shared default in manigot/.env, written by both `mg profiles` and
+# the TUI's settings screen) > claude-pro.
 # --tool remains accepted for backward compatibility: `--tool claude-code`
 # behaves exactly like `--profile claude-pro`, and `--tool opencode` keeps its
 # legacy behavior of forwarding every configured opencode key and using

@@ -46,7 +46,8 @@ configured with `mg setup`.
   like `mg job`/`mg jdi` still require it). When no `docs/` is found, the
   container boundary falls back to the git root, else `$PWD`. Resolves the
   session's subscription profile (`--profile`, else legacy `--tool`, else the
-  `MANIGOT_PROFILE` default set by `mg profiles`, else `claude-pro`), validates
+  `MANIGOT_PROFILE` default set by `mg profiles` or the TUI settings screen,
+  else `claude-pro`), validates
   the profile's auth, and passes the choice on as `manigot_TOOL`.
   When `--job <id>` is passed, the mount root is the job's own git worktree
   (207bfu_git-worktrees), not `PROJECT_ROOT`: the job is resolved by matching
@@ -62,7 +63,8 @@ configured with `mg setup`.
   `PROJECT_ROOT` is left untouched — mirroring the Go side's
   `job.discoverWorkingTree` trigger condition.
 - `scripts/profiles.sh` — reached via `mg profiles`. Lists the three profiles
-  (which are ready, and which is the default); `mg profiles <name>` writes
+  (which are ready, and which is the default) and, on an interactive terminal,
+  prompts to select the default right there; `mg profiles <name>` writes
   `MANIGOT_PROFILE=<name>` into manigot's own `.env` so bare `mg` runs use it.
 - `scripts/setup.sh` — reached via `mg setup`. Interactive wizard that guides
   you through configuring each profile's credentials into manigot's `.env`,
@@ -147,18 +149,21 @@ configured with `mg setup`.
   its only visibility, and the TUI itself rings the bell on its next poll
   when it notices the status transition into a stopped state.
 - `config/tui-settings.json` (gitignored) — local TUI **personal** preferences:
-  which editor opens `brief.md` and which subscription profile
-  (`claude-pro`/`zai`/`opencode-go`) agent launches use. Project-scoped
-  conventions (currently: the base branch) are NOT here — they live in the
-  target project's `docs/manigot.json` (see next bullet), so they travel with
-  the project and are shared across a team rather than being a per-user pref.
-  Written by the TUI's settings screen (`s` from the job list), read/written
+  which editor opens `brief.md`. The subscription profile is NOT stored here —
+  it lives in manigot's `.env` as `MANIGOT_PROFILE` (see the `.env` bullet), the
+  one default shared between CLI and TUI: the TUI's settings screen (`s` from
+  the job list) reads and writes that value via `tui/internal/config`, the same
+  key `mg profiles` writes and bare `mg` resolves to. Project-scoped
+  conventions (currently: the base branch) are NOT here either — they live in
+  the target project's `docs/manigot.json` (see next bullet), so they travel
+  with the project and are shared across a team rather than being a per-user
+  pref. Written by the TUI's settings screen, read/written
   via `tui/internal/config`. Missing is not an error —
   every reader falls back to defaults (`$VISUAL`/`$EDITOR`/`nano`/`vi` for the
-  editor, `claude-pro` for the profile). This is the TUI's own default — it
-  always passes `--profile` explicitly, independent of the `MANIGOT_PROFILE`
-  default in `.env` set by `mg profiles`. A legacy `tool` field in the file is
-  migrated on load (`claude-code`→`claude-pro`, `opencode`→`zai`).
+  editor, `claude-pro` for the profile). A legacy `profile` field in the file
+  is honored as a migration fallback while `.env` has no `MANIGOT_PROFILE` yet,
+  and the older `tool` field still migrates (`claude-code`→`claude-pro`,
+  `opencode`→`zai`); neither is written back.
 - `docs/manigot.json` (in the target project, committable) — project-scoped
   manigot conventions, the project-level counterpart to the personal
   `config/tui-settings.json`. Currently holds `baseBranch`: the ref new job
@@ -173,9 +178,11 @@ configured with `mg setup`.
   profiles: `CLAUDE_CODE_OAUTH_TOKEN`/`CLAUDE_ACCOUNT_UUID`/`CLAUDE_EMAIL`/
   `CLAUDE_ORG_UUID` (claude-pro), `ZHIPU_API_KEY` + `OPENCODE_ZAI_MODEL`
   (zai), `OPENCODE_API_KEY` + `OPENCODE_GO_MODEL` (opencode-go), and
-  `MANIGOT_PROFILE` (the default profile for bare `mg`, set by `mg profiles`).
-  Written by `mg setup`/`mg profiles`, sourced by `scripts/run.sh`. Never
-  committed.
+  `MANIGOT_PROFILE` — the default profile, the ONE value shared between CLI and
+  TUI: bare `mg` resolves to it, `mg profiles` writes it, and the TUI's
+  settings screen reads/writes the same key.
+  Written by `mg setup`/`mg profiles`/the TUI settings screen, sourced by
+  `scripts/run.sh`. Never committed.
 - `scripts/entrypoint.sh` — runs inside the container before the agent CLI starts.
   Branches on `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's
   onboarding wizard, pre-accept folder trust for `/workspace`, and start it in
@@ -235,8 +242,10 @@ configured with `mg setup`.
   plain agent session, just no project context or job workflow
 - `mg --profile <name>` — same, but under the given subscription profile
   (`claude-pro`/`zai`/`opencode-go`); `--tool` is accepted as a legacy alias
-- `mg profiles [name]` — list the profiles and which is the default, or set
-  the default profile bare `mg` uses (`MANIGOT_PROFILE` in manigot's `.env`)
+- `mg profiles [name]` — list the profiles and which is the default, set the
+  default profile bare `mg` uses (`MANIGOT_PROFILE` in manigot's `.env`), or
+  pick it interactively (no name, on a TTY). The TUI's settings screen shares
+  the same default.
 - `mg setup [name] [--check]` — configure credentials for the profiles,
   interactively, or report status with `--check`
 - `mg agents` — list available agents (global + any `docs/agents/`
@@ -284,8 +293,9 @@ agent prints the `NEEDS-HUMAN-INPUT:` marker (see the `--print` bullet
 above), or the same agent makes no progress on two consecutive runs. `mg
 jdi --profile <name>` selects which subscription profile drives the agent
 sequence (`claude-pro`, `zai`, or `opencode-go`), defaulting to `claude-pro`
-when unset; the TUI's `j` keybinding passes its own settings profile
-(`config.Settings.ProfileValue()`) through the same way `@name` launches do.
+when unset; the TUI's `j` keybinding passes its settings profile — the same
+shared `MANIGOT_PROFILE` (`config.Settings.ProfileValue()`) — through the same
+way `@name` launches do.
 
 ## Hard rules
 - NEVER commit `.env` or any file containing OAuth tokens / account UUIDs

@@ -117,7 +117,9 @@ mg setup              # interactive wizard: walks through each profile,
                       # auto-applying what it can read off your host (e.g.
                       # your Claude account from ~/.claude.json) and letting
                       # you paste the rest into manigot/.env
-mg profiles           # see the three profiles, which are ready, and the default
+mg profiles           # see the three profiles, which are ready, and the default;
+                      # on an interactive terminal it then lets you pick the
+                      # default right there
 mg profiles zai       # make bare `mg` use the zai profile
 ```
 
@@ -203,7 +205,7 @@ its first argument:
 | command | does |
 |---|---|
 | `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
-| `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg` |
+| `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg`, or pick it interactively on a TTY; the TUI's settings screen shares the same default |
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same script/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
@@ -295,7 +297,7 @@ mg init
 mg                            # the default profile (claude-pro), or whatever `mg profiles` set
 mg --profile zai              # this session on your Z.AI Coding Plan
 mg --profile opencode-go      # this session on your OpenCode Go subscription
-mg profiles                   # list profiles + the current default
+mg profiles                   # list profiles + the current default (then pick a new one on a TTY)
 mg setup --check              # which profiles are ready to use
 
 # List all commands
@@ -502,9 +504,9 @@ subscription instead:
 mg jdi --job a3f9k2 --profile zai
 ```
 
-The TUI's `j` keybinding (see below) passes its own settings profile the
-same way `@name` agent launches already do — no separate configuration
-needed there.
+The TUI's `j` keybinding (see below) passes its settings profile — the shared
+`MANIGOT_PROFILE` default — the same way `@name` agent launches already do;
+no separate configuration needed there.
 
 **Watching a run.** A direct `mg jdi --job <id>` run streams each agent's
 output to its own terminal as each invocation completes, and rings the
@@ -637,15 +639,16 @@ Press `s` from the job list to open the settings screen:
   (the selected profile's tool, model, and billing are shown beneath the list).
   Selects which subscription firing an agent from the action bar launches
   (adds `--profile` to the `mg --agent ... --job ...` command the same way
-  `mg --profile zai` would on the command line). This is the TUI's own
-  default — it always passes `--profile` explicitly, independent of the
-  default set by `mg profiles` on the CLI.
+  `mg --profile zai` would on the command line). It is stored as
+  `MANIGOT_PROFILE` in `manigot/.env` — the one default shared between CLI and
+  TUI — so switching it here also switches what bare `mg` uses, and a profile
+  set with `mg profiles` shows up here.
 
-`tab` moves between fields, `enter` saves, `esc` discards. Settings persist to
-`config/tui-settings.json` in the manigot checkout (gitignored — it's a
-local preference, not shared) and apply immediately; a missing file just
-means nothing has been saved yet, and every setting falls back to its default
-above.
+`tab` moves between fields, `enter` saves, `esc` discards. The editor persists
+to `config/tui-settings.json` and the profile to `manigot/.env` as
+`MANIGOT_PROFILE` (both gitignored, both in the manigot checkout) and apply
+immediately; a missing file just means nothing has been saved yet, and every
+setting falls back to its default above.
 
 ### Stage timeline
 

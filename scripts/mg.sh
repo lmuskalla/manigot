@@ -5,7 +5,7 @@ set -euo pipefail
 # mg                              # start a session (today's run.sh behavior)
 # mg --profile zai                # ...with a specific subscription profile
 # mg --agent analyst --job <id>
-# mg profiles                     # list profiles / set the default profile
+# mg profiles                     # list profiles, then pick the default (TTY)
 # mg profiles zai                 # ...make bare `mg` use the zai profile
 # mg setup                        # configure credentials for your subscriptions
 # mg agents                       # today's agents.sh — pick an agent, then run.sh
@@ -68,7 +68,8 @@ Usage:
 
 Commands:
   mg profiles [name]              List the profiles (and which is the default),
-                                   or set the default used by bare `mg`
+                                   set the default used by bare `mg`, or pick
+                                   one interactively (no name, on a TTY)
   mg setup [name] [--check]       Configure credentials for your subscriptions,
                                    interactively, or report status with --check
   mg agents                       List available agents and pick one to start
