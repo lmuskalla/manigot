@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lmuskalla/manigot/tui/internal/agentlist"
 	"github.com/lmuskalla/manigot/tui/internal/config"
 	"github.com/lmuskalla/manigot/tui/internal/editor"
 	"github.com/lmuskalla/manigot/tui/internal/git"
@@ -31,6 +32,7 @@ const (
 	stateDetail
 	stateNewJob   // "n" from the list — create a job via the host mg-job command
 	stateSettings // "s" from the list — edit the persisted TUI settings
+	stateAgents   // "a" from the list — pick and launch any agent as a jobless quick session
 )
 
 // App is the root Bubble Tea model.
@@ -77,6 +79,9 @@ type App struct {
 
 	// settingsView is non-nil while state == stateSettings.
 	settingsView *settingsView
+
+	// agentsPicker is non-nil while state == stateAgents.
+	agentsPicker *agentsPickerView
 
 	// status is a transient one-line message shown in the footer (e.g. after
 	// running mg-job or an agent).
@@ -269,6 +274,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.settingsView != nil {
 			a.settingsView.resize(a.width, a.height)
 		}
+		if a.agentsPicker != nil {
+			a.agentsPicker.resize(a.width, a.height)
+		}
 		return a, nil
 	case editorDoneMsg:
 		if a.detail != nil {
@@ -424,6 +432,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateNewJob(msg)
 		case stateSettings:
 			return a.updateSettings(msg)
+		case stateAgents:
+			return a.updateAgentsPicker(msg)
 		}
 	}
 	return a, nil
@@ -440,6 +450,8 @@ func (a *App) View() string {
 		content = a.newJob.render()
 	case stateSettings:
 		content = a.settingsView.render()
+	case stateAgents:
+		content = a.agentsPicker.render()
 	default:
 		content = a.renderList()
 	}
@@ -793,6 +805,24 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.status = "→ quick session in " + desc
 		}
+	case "a":
+		// Pick any agent and launch it as a jobless quick session — the
+		// native-TUI counterpart to `mg agents` (scripts/agents.sh),
+		// mirroring "o" (bare quick session) but for a specific agent.
+		// A discovery failure (TASK-1 error, e.g. no resolvable manigot
+		// checkout) or an empty agent list degrades to a status line
+		// instead of opening the picker, the same "never crash on a
+		// host-command error" convention every other action in this file
+		// follows (cmdErrorText).
+		agents, err := agentlist.Discover(a.root)
+		if err != nil {
+			a.status = cmdErrorText(err)
+		} else if len(agents) == 0 {
+			a.status = "no agents found"
+		} else {
+			a.agentsPicker = newAgentsPickerView(agents, a.width, a.height)
+			a.state = stateAgents
+		}
 	case "b":
 		// Quick "back to base branch" checkout — the one friction point
 		// the brief calls out (finishing a job branch and wanting a quick
@@ -868,6 +898,32 @@ func (a *App) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.status = "created \"" + title + "\" (" + typ + ")"
 		a.newJob = nil
 		a.state = stateList
+	}
+	return a, nil
+}
+
+// updateAgentsPicker handles keys in the "Launch an agent" picker opened by
+// "a" from the list view.
+func (a *App) updateAgentsPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch a.agentsPicker.update(msg) {
+	case apCancel:
+		a.agentsPicker = nil
+		a.state = stateList
+	case apSubmit:
+		agent, ok := a.agentsPicker.selected()
+		a.agentsPicker = nil
+		a.state = stateList
+		if !ok {
+			return a, nil
+		}
+		// Mirrors updateDetail's agent-launch status reporting ("→ <agent>
+		// in <desc>") so both launch paths feel consistent in the footer.
+		desc, err := launch.AgentQuick(agent.Name, a.root, a.settings.ProfileValue())
+		if err != nil {
+			a.status = cmdErrorText(err)
+		} else {
+			a.status = "→ " + agent.Name + " in " + desc
+		}
 	}
 	return a, nil
 }
@@ -1390,7 +1446,7 @@ func jdiStatusBadge(root string, j job.Job, spinnerStep int) string {
 // after "ctrl+r"), the status alongside it rather than replacing it — a
 // status message must never leave the user not knowing what keys exist.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · o quick · n new · b base branch · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · o quick · a agent · n new · b base branch · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
 	}

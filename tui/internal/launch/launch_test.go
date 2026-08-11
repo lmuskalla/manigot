@@ -74,6 +74,52 @@ func TestQuickShellCommandQuotesPathWithSpaces(t *testing.T) {
 	}
 }
 
+// --- agent-quick (jobless agent session) launcher ---------------------------
+
+func TestAgentQuickShellCommandFormat(t *testing.T) {
+	got := agentQuickShellCommand("/usr/local/bin/manigot", "developer", "/home/me/proj", "claude-pro")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --profile 'claude-pro' --agent 'developer'"
+	if !strings.HasPrefix(got, wantInner) {
+		t.Errorf("agentQuickShellCommand =\n %q\nwant prefix\n %q", got, wantInner)
+	}
+	// Must be wrapped by holdOnFailure, exactly like the other launch paths.
+	if got != holdOnFailure(wantInner) {
+		t.Errorf("agentQuickShellCommand does not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// An agent-quick session must never carry --job — that's what distinguishes
+// it from the job-scoped Agent launch path.
+func TestAgentQuickShellCommandOmitsJob(t *testing.T) {
+	got := agentQuickShellCommand("/usr/local/bin/manigot", "developer", "/home/me/proj", "claude-pro")
+	if strings.Contains(got, "--job") {
+		t.Errorf("agentQuickShellCommand unexpectedly contains --job: %q", got)
+	}
+}
+
+func TestAgentQuickShellCommandDefaultsEmptyProfile(t *testing.T) {
+	got := agentQuickShellCommand("/bin/manigot", "developer", "/home/me/proj", "")
+	if !strings.Contains(got, "--profile 'claude-pro'") {
+		t.Errorf("agentQuickShellCommand with empty profile = %q, want it to default to claude-pro", got)
+	}
+}
+
+func TestAgentQuickShellCommandPassesZAIProfile(t *testing.T) {
+	got := agentQuickShellCommand("/bin/manigot", "developer", "/home/me/proj", "zai")
+	if !strings.Contains(got, "--profile 'zai'") {
+		t.Errorf("agentQuickShellCommand with zai profile = %q, want --profile 'zai'", got)
+	}
+}
+
+// A checkout in a directory with spaces must still produce a single word for
+// the manigot path, since the string is re-parsed by osascript / bash -lc.
+func TestAgentQuickShellCommandQuotesPathWithSpaces(t *testing.T) {
+	got := agentQuickShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "developer", "/tmp/p", "claude-pro")
+	if !strings.Contains(got, `'/Users/me/My Projects/manigot/scripts/run.sh'`) {
+		t.Errorf("manigot path not quoted as one word in %q", got)
+	}
+}
+
 // An empty profile must default to claude-pro, matching scripts/run.sh's own
 // default, rather than passing an empty --profile value through.
 func TestShellCommandDefaultsEmptyProfile(t *testing.T) {

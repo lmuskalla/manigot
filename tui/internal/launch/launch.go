@@ -93,6 +93,28 @@ func Quick(projectRoot, profile string) (string, error) {
 	return launchDetached(inner)
 }
 
+// AgentQuick opens a new terminal — inside tmux, a split pane in the TUI's
+// current window, exactly like Agent/Quick, including the replace policy —
+// that runs manigot with `--profile <profile> --agent <agent>` (no --job) in
+// projectRoot: launching a specific agent for an ad-hoc session that doesn't
+// belong to any particular job. profile is one of the subscription profiles
+// in config.Profiles; an empty value defaults to config.ProfileClaudePro,
+// matching Agent/Quick. It returns the same short human description of where
+// it opened so the caller can surface it in a status line.
+//
+// scripts/run.sh already treats --job as optional (see Quick's own doc for
+// the --agent/--job-less case), so `sc --profile <profile> --agent <agent>`
+// simply runs that agent against the current project with no job prompt — no
+// container-side changes were needed to support this.
+func AgentQuick(agent, projectRoot, profile string) (string, error) {
+	found, err := resolve.Resolve(resolve.Manigot())
+	if err != nil {
+		return "", err
+	}
+	inner := agentQuickShellCommand(found.Path, agent, projectRoot, profile)
+	return launchDetached(inner)
+}
+
 // Jdi starts `mg-jdi --job <jobID> --profile <profile>` detached in the
 // background — no spawned terminal window at all, unlike Agent/Quick
 // (Decision 7a in the "fully autonomous mode" brief). mg-jdi drives a fixed,
@@ -346,6 +368,27 @@ func quickShellCommand(manigotPath, projectRoot, profile string) string {
 	}
 	inner := fmt.Sprintf("cd %s && %s --profile %s",
 		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile))
+	return holdOnFailure(inner)
+}
+
+// agentQuickShellCommand builds the shell string for AgentQuick's jobless
+// agent session (--agent, no --job), executed inside the new terminal:
+//
+//	cd '<projectRoot>' && '<manigot>' --profile '<profile>' --agent '<agent>'; ec=$?; ...
+//
+// It sits between shellCommand (agent + job) and quickShellCommand (neither):
+// same cd-first, shellQuote-everything, holdOnFailure-wrap behavior, just
+// with --agent and no --job. An empty profile defaults to
+// config.ProfileClaudePro for the same reason the other two do. Deliberately
+// its own function rather than a generalization of either existing one, per
+// the file's "deliberately a separate function" convention — keeps
+// shellCommand/quickShellCommand's exact-format tests stable.
+func agentQuickShellCommand(manigotPath, agent, projectRoot, profile string) string {
+	if profile == "" {
+		profile = config.ProfileClaudePro
+	}
+	inner := fmt.Sprintf("cd %s && %s --profile %s --agent %s",
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile), shellQuote(agent))
 	return holdOnFailure(inner)
 }
 

@@ -535,7 +535,11 @@ below), picked in this order:
 
 The list view's `o` shortcut (see Keybindings) opens a bare `mg --profile
 <profile>` instead — same spawn paths, but with no agent and no job, for a quick ad-hoc
-session that isn't tied to a specific job's workflow.
+session that isn't tied to a specific job's workflow. `a` is the middle
+ground: it opens a picker of every agent available to the project (global
+`agents/*.md`, with any `docs/agents/` overrides/additions swapped in — the
+same set `mg agents` lists), then launches the one you pick the same way `o`
+does, `mg --profile <profile> --agent <name>`, still with no `--job`.
 
 Windows is not supported in this version.
 
@@ -573,6 +577,7 @@ List view:
 | `↑`/`↓` or `k`/`j` | move selection |
 | `enter` | open the job's detail view |
 | `o` | launch a quick manigot session (no agent, no job) |
+| `a` | pick any agent and launch it as a quick session (no job) |
 | `n` | create a new job (runs the host `mg job`) |
 | `s` | open settings (editor, subscription profile) |
 | `ctrl+r` | refresh — re-read job files from disk |
