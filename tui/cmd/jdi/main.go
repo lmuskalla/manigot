@@ -43,11 +43,12 @@ var version = "0.1.0-dev"
 
 func main() {
 	jobArg := flag.String("job", "", "job ID or directory name to drive (required)")
+	profileArg := flag.String("profile", "", "subscription profile to run agents under: claude-pro, zai, or opencode-go (default claude-pro)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "mg jdi %s\n\n", version)
 		fmt.Fprintf(os.Stderr, "Drives a job's @analyst -> @developer -> @reviewer sequence end to end.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n")
-		fmt.Fprintf(os.Stderr, "  mg jdi --job <id-or-name>\n\n")
+		fmt.Fprintf(os.Stderr, "  mg jdi --job <id-or-name> [--profile <profile>]\n\n")
 		fmt.Fprintf(os.Stderr, "Run from anywhere inside a project that has a docs/ directory.\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
@@ -59,6 +60,18 @@ func main() {
 	if strings.TrimSpace(*jobArg) == "" {
 		fmt.Fprintln(os.Stderr, "mg jdi: --job is required")
 		flag.Usage()
+		os.Exit(2)
+	}
+
+	// Default to claude-pro when unset, so existing callers/behavior are
+	// unchanged; validated against config.Profiles() otherwise rather than
+	// left to scripts/run.sh's own (less specific) error.
+	profile := strings.TrimSpace(*profileArg)
+	if profile == "" {
+		profile = config.ProfileClaudePro
+	}
+	if _, ok := config.ProfileByID(profile); !ok {
+		fmt.Fprintf(os.Stderr, "mg jdi: --profile must be one of: claude-pro, zai, opencode-go (got %q)\n", profile)
 		os.Exit(2)
 	}
 
@@ -90,7 +103,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "mg jdi: warning: could not exclude the status sidecar from git: %v\n", err)
 	}
 
-	runner, err := newCommandAgentRunner(root)
+	runner, err := newCommandAgentRunner(root, profile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mg jdi: %v\n", err)
 		os.Exit(1)
@@ -216,38 +229,40 @@ type AgentRunner interface {
 type commandAgentRunner struct {
 	manigotPath string
 	projectRoot string
+	profile     string
 }
 
 // newCommandAgentRunner resolves the mg launcher once up front, the same way
 // tui/internal/hostcmd resolves its own host commands, so a missing install
 // fails fast with resolve's own diagnostic rather than partway through a
-// loop.
-func newCommandAgentRunner(projectRoot string) (*commandAgentRunner, error) {
+// loop. profile is passed through unchanged to every Run invocation — see
+// its own doc.
+func newCommandAgentRunner(projectRoot, profile string) (*commandAgentRunner, error) {
 	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return nil, err
 	}
-	return &commandAgentRunner{manigotPath: found.Path, projectRoot: projectRoot}, nil
+	return &commandAgentRunner{manigotPath: found.Path, projectRoot: projectRoot, profile: profile}, nil
 }
 
-// Run invokes `mg --print --profile claude-pro --agent <agent> --job <j.Name>`
+// Run invokes `mg --print --profile <profile> --agent <agent> --job <j.Name>`
 // synchronously and returns its stdout. scripts/run.sh's --print path keeps
 // stdout clean of its own diagnostics (redirected to fd 3/stderr — see
 // run.sh), so stdout here is exactly the agent's own response. j.Name (the
 // exact job directory name) is passed rather than j.ID to remove any ambiguity
 // in run.sh's own --job resolution.
 //
-// The claude-pro profile is pinned explicitly rather than left to run.sh's
-// default: v1 of mg-jdi is Claude Code only (--print is rejected for opencode
-// profiles), and pinning keeps it working even when the user has set a
-// different default profile via `mg profiles`.
+// r.profile is passed explicitly rather than left to run.sh's own default
+// (main's --profile flag, validated and defaulted to config.ProfileClaudePro
+// there) so a run keeps using the profile it was started with even when the
+// user later changes their default profile via `mg profiles` mid-run.
 //
 // cmd.Dir and $PWD are both set to projectRoot, the same pattern
 // tui/internal/hostcmd's NewJob/DoneCommand/DeleteCommand use, because
 // run.sh resolves the project root from $PWD via its own find_project_root
 // helper.
 func (r *commandAgentRunner) Run(agent string, j job.Job) ([]byte, error) {
-	cmd := exec.Command(r.manigotPath, "--print", "--profile", config.ProfileClaudePro, "--agent", agent, "--job", j.Name)
+	cmd := exec.Command(r.manigotPath, "--print", "--profile", r.profile, "--agent", agent, "--job", j.Name)
 	cmd.Dir = r.projectRoot
 	cmd.Env = append(os.Environ(), "PWD="+r.projectRoot)
 

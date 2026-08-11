@@ -349,7 +349,7 @@ What differs per profile:
 | `docs/AGENTS.md` mounted at | `/workspace/.claude/CLAUDE.md` | `/workspace/AGENTS.md` |
 | Initial job prompt | positional argument | `--prompt` |
 | Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go subscription |
-| Non-interactive (`--print` / `mg jdi`) | supported | not supported in v1 — rejected with an error |
+| Non-interactive (`--print` / `mg jdi`) | supported | supported |
 
 Both tools get the same `agents/*.md` files baked in at build time. The
 OpenCode copies are generated from the same sources with the `name` and `tools`
@@ -477,10 +477,19 @@ yourself — when:
   backstop, independent of the marker above).
 
 `@product-owner` and `@security` are not part of the sequence `mg jdi`
-drives — both stay available as ordinary agents, unaffected. **v1 is Claude
-Code only** — it always runs under the claude-pro profile, and any `--print`
-invocation of an OpenCode profile is rejected with a clear error; OpenCode's
-non-interactive invocation is unverified.
+drives — both stay available as ordinary agents, unaffected.
+
+`mg jdi` runs under the `claude-pro` profile by default; pass `--profile
+zai` or `--profile opencode-go` to drive the sequence under an OpenCode
+subscription instead:
+
+```bash
+mg jdi --job a3f9k2 --profile zai
+```
+
+The TUI's `j` keybinding (see below) passes its own settings profile the
+same way `@name` agent launches already do — no separate configuration
+needed there.
 
 **Watching a run.** A direct `mg jdi --job <id>` run streams each agent's
 output to its own terminal as each invocation completes, and rings the

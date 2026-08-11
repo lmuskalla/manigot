@@ -79,8 +79,9 @@ Commands:
   mg done <id>                    Archive a finished job
   mg delete <id>                  Permanently delete a job (dir + branch, no merge)
   mg tui                          Terminal UI for browsing jobs and firing agents
-  mg jdi --job <id>                Drive a job's analyst -> developer ->
-                                   reviewer sequence unattended (Claude Code only)
+  mg jdi --job <id> [--profile <name>]
+                                   Drive a job's analyst -> developer ->
+                                   reviewer sequence unattended
                                    (thematic alias: mg made-man)
 
   mg -h, --help, help             Show this help

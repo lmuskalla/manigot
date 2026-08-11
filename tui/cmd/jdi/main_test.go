@@ -348,3 +348,40 @@ type errRunner struct{}
 func (errRunner) Run(agent string, j job.Job) ([]byte, error) {
 	return nil, errors.New("boom")
 }
+
+// TestCommandAgentRunnerUsesGivenProfile confirms commandAgentRunner.Run
+// forwards the profile it was constructed with as mg's own --profile flag
+// (TASK-5), rather than the old hardcoded config.ProfileClaudePro pin —
+// exercised for a non-default profile so a stale pin would be caught.
+func TestCommandAgentRunnerUsesGivenProfile(t *testing.T) {
+	root, j := initTestRepo(t)
+	out := filepath.Join(root, "args.txt")
+
+	stub := filepath.Join(t.TempDir(), "stub.sh")
+	script := "#!/bin/sh\nfor a in \"$@\"; do echo \"arg=$a\"; done > " + out + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &commandAgentRunner{manigotPath: stub, projectRoot: root, profile: "zai"}
+	if _, err := r.Run("developer", j); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("reading stub record: %v", err)
+	}
+	recorded := string(raw)
+	for _, want := range []string{
+		"arg=--print",
+		"arg=--profile",
+		"arg=zai",
+		"arg=--agent",
+		"arg=developer",
+	} {
+		if !strings.Contains(recorded, want) {
+			t.Errorf("missing %q in stub record:\n%s", want, recorded)
+		}
+	}
+}

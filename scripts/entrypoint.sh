@@ -117,6 +117,41 @@ if [[ "${MANIGOT_PRINT:-false}" != "true" && -n "${MANIGOT_QUOTE:-}" ]]; then
 fi
 
 if [[ "$TOOL" == "opencode" ]]; then
+    if [[ "${MANIGOT_PRINT:-false}" == "true" ]]; then
+        # Non-interactive, one-shot mode (run.sh's --print flag, e.g. for
+        # mg-jdi) — mirrors the claude-code branch below. OpenCode's
+        # interactive `opencode [project]` command (the "$@" passthrough
+        # used otherwise) takes --agent/--prompt as flags, but has no
+        # non-interactive equivalent of its own; the headless mode is a
+        # separate subcommand, `opencode run [message..]`, which takes the
+        # prompt as a positional argument instead and supports its own
+        # --agent flag (confirmed via `opencode run --help` against the
+        # opencode-ai version installed from the Dockerfile's unpinned `npm
+        # install -g opencode-ai`). Translate the incoming --agent/--prompt
+        # pair into that shape rather than passing "$@" through unchanged.
+        # --format json makes it emit one JSON object per line (JSONL: a
+        # stream of step_start/tool_use/text/step_finish events, each
+        # reporting the assistant's response in a "text"-typed event's
+        # part.text) instead of interactive TUI output — parsed by
+        # tui/internal/orchestrate.ResultText/DetectSignal the same way
+        # Claude's --output-format json "result" field is.
+        OC_AGENT=""
+        OC_PROMPT=""
+        OC_REST=()
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --agent)  OC_AGENT="$2";  shift 2 ;;
+                --prompt) OC_PROMPT="$2"; shift 2 ;;
+                *)        OC_REST+=("$1"); shift ;;
+            esac
+        done
+
+        OC_ARGS=(run)
+        [[ -n "$OC_PROMPT" ]] && OC_ARGS+=("$OC_PROMPT")
+        [[ -n "$OC_AGENT" ]] && OC_ARGS+=(--agent "$OC_AGENT")
+        OC_ARGS+=(--format json)
+        exec opencode "${OC_ARGS[@]}" "${OC_REST[@]+"${OC_REST[@]}"}"
+    fi
     exec opencode "$@"
 else
     # --dangerously-skip-permissions starts every Claude Code session in full
@@ -124,8 +159,7 @@ else
     # manigot launches an isolated, ephemeral container specifically for this
     # purpose; the brief explicitly wants Claude Code to start in auto mode.
     # Placed before "$@" so it composes with the passthrough (--agent <name>
-    # and/or the positional job prompt). The opencode branch is intentionally
-    # untouched — the brief is a Claude-Code-only request.
+    # and/or the positional job prompt).
     if [[ "${MANIGOT_PRINT:-false}" == "true" ]]; then
         # Non-interactive, one-shot mode (run.sh's --print flag, e.g. for
         # mg-jdi): no attached terminal, so the caller gets the agent's final

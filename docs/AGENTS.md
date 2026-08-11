@@ -148,7 +148,14 @@ configured with `mg setup`.
   onboarding wizard, pre-accept folder trust for `/workspace`, and start it in
   permission-bypass mode (full auto, no per-tool prompts) via
   `--dangerously-skip-permissions`; or checks for a provider API key and execs
-  `opencode`.
+  `opencode`. When `manigot_PRINT` is set, each branch execs its CLI's own
+  non-interactive/headless invocation instead of the interactive one: `claude
+  --print --output-format json` (a single JSON object with a `"result"`
+  field), or, for OpenCode, `opencode run <message> --agent <agent> --format
+  json` (translated from the interactive `--agent`/`--prompt` passthrough —
+  OpenCode's headless mode takes the prompt as a positional argument, not a
+  flag; its JSON output is a JSONL stream of typed events, the response text
+  living in `"text"`-typed events' `part.text`).
 - `scripts/run.sh`'s `--print` flag — non-interactive invocation (used by
   automated/unattended runs, e.g. `mg jdi`, not by a human's own `mg`/TUI
   session) that appends one extra sentence to the job prompt defining the
@@ -156,7 +163,9 @@ configured with `mg setup`.
   decision stops and prints a line starting with exactly that string instead
   of guessing. This is deliberately not a rule in `agents/*.md` itself — those
   files are read identically by attended sessions, where a human can just
-  answer a question in conversation instead of the session halting.
+  answer a question in conversation instead of the session halting. Supported
+  under every profile (`claude-pro`, `zai`, `opencode-go`) — only the legacy,
+  profile-less `--tool opencode` path still rejects it.
 - `agents/` — the eight global agents (`analyst`, `developer`, `reviewer`,
   `security`, `product-owner`, `designer`, `quality`, `prompter`), available in every project via
   `@name`. Baked in twice: verbatim to `~/.claude/agents/`, and to
@@ -205,8 +214,9 @@ configured with `mg setup`.
 - `mg done <id>` — archive a finished job
 - `mg delete <id>` — permanently delete a job (directory + branch, no merge)
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
-- `mg jdi --job <id>` — drive a job's `@analyst` → `@developer` → `@reviewer`
-  sequence end to end, unattended (Claude Code only for v1 — see Job workflow)
+- `mg jdi --job <id> [--profile <name>]` — drive a job's `@analyst` →
+  `@developer` → `@reviewer` sequence end to end, unattended, under the given
+  subscription profile (default `claude-pro`; see Job workflow)
   (thematic alias: `mg made-man --job <id>`, same script/behavior)
 
 ## Job workflow
@@ -229,9 +239,11 @@ stops (never auto-merging) when `verdict.md`'s `## Overall` says APPROVED, or
 hands control back to a human when: the one allowed bounce back to
 `@developer` after a REJECTED/NEEDS WORK verdict still isn't approved, an
 agent prints the `NEEDS-HUMAN-INPUT:` marker (see the `--print` bullet
-above), or the same agent makes no progress on two consecutive runs. v1 is
-Claude Code only — `mg jdi` pins the `claude-pro` profile, and `--print` is
-rejected for any OpenCode profile.
+above), or the same agent makes no progress on two consecutive runs. `mg
+jdi --profile <name>` selects which subscription profile drives the agent
+sequence (`claude-pro`, `zai`, or `opencode-go`), defaulting to `claude-pro`
+when unset; the TUI's `j` keybinding passes its own settings profile
+(`config.Settings.ProfileValue()`) through the same way `@name` launches do.
 
 ## Hard rules
 - NEVER commit `.env` or any file containing OAuth tokens / account UUIDs

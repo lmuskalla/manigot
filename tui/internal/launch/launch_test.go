@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lmuskalla/manigot/tui/internal/config"
 )
 
 func TestShellCommandFormat(t *testing.T) {
@@ -615,7 +617,7 @@ func TestJdiUnresolvable(t *testing.T) {
 	t.Setenv("MANIGOT_JDI_BIN", "")
 	t.Setenv("MANIGOT_HOME", "")
 
-	err := Jdi("ab0001_x", t.TempDir())
+	err := Jdi("ab0001_x", t.TempDir(), "")
 	if err == nil {
 		t.Fatal("expected an error when mg-jdi cannot be resolved")
 	}
@@ -644,7 +646,7 @@ func TestJdiStartsResolvedCommandDetached(t *testing.T) {
 	}
 	t.Setenv("MANIGOT_JDI_BIN", stub)
 
-	if err := Jdi("ab0001_x", root); err != nil {
+	if err := Jdi("ab0001_x", root, ""); err != nil {
 		t.Fatalf("Jdi: %v", err)
 	}
 
@@ -671,7 +673,52 @@ func TestJdiStartsResolvedCommandDetached(t *testing.T) {
 		"cwd=" + root,   // and the real cwd agrees
 		"arg=--job",
 		"arg=ab0001_x",
+		"arg=--profile",
+		"arg=" + config.ProfileClaudePro, // empty profile defaults to claude-pro, matching Agent/Quick
 	} {
+		if !strings.Contains(recorded, want) {
+			t.Errorf("missing %q in stub record:\n%s", want, recorded)
+		}
+	}
+}
+
+// TestJdiForwardsGivenProfile confirms a non-empty profile (TASK-6) is
+// forwarded to mg-jdi as its own --profile flag unchanged, not overridden by
+// the claude-pro default TestJdiStartsResolvedCommandDetached exercises.
+func TestJdiForwardsGivenProfile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	t.Setenv("MANIGOT_HOME", "")
+
+	root := t.TempDir()
+	out := filepath.Join(root, "args.txt")
+
+	stub := filepath.Join(t.TempDir(), "stub.sh")
+	script := "#!/bin/sh\nfor a in \"$@\"; do echo \"arg=$a\"; done > " + out + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MANIGOT_JDI_BIN", stub)
+
+	if err := Jdi("ab0001_x", root, config.ProfileZAI); err != nil {
+		t.Fatalf("Jdi: %v", err)
+	}
+
+	var raw []byte
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(out); err == nil {
+			raw = data
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if raw == nil {
+		t.Fatal("stub did not run within the timeout")
+	}
+
+	recorded := string(raw)
+	for _, want := range []string{"arg=--profile", "arg=" + config.ProfileZAI} {
 		if !strings.Contains(recorded, want) {
 			t.Errorf("missing %q in stub record:\n%s", want, recorded)
 		}

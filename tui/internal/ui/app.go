@@ -833,7 +833,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.detail.setStatus(label)
 			return a, nil
 		}
-		if err := launch.Jdi(a.detail.job.ID, a.root); err != nil {
+		if err := launch.Jdi(a.detail.job.ID, a.root, a.settings.ProfileValue()); err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 		} else {
 			// Seed the stop-notification dedup (TASK-11) as "running" right

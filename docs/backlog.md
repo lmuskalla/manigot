@@ -28,16 +28,6 @@ and this is a bigger architectural commitment (a wire format, a writer side
 in every agent invocation, a reader side in the TUI) that deserves its own
 design pass.
 
-## OpenCode support for `mg-jdi`
-
-Raised during scoping of `vu33rn_fully-autonomous-mode`. `mg-jdi` v1 is
-restricted to `--tool claude-code` because its non-interactive invocation
-leans on `claude --print`, which `docs/jobs/archive/c4ouwc_auto-mode-for-claude-code`
-already verified works with no TTY. OpenCode's non-interactive equivalent
-(if any) is unverified. Extending `mg-jdi` to OpenCode needs the same kind
-of investigation-first treatment c4ouwc's TASK-1 gave Claude Code before
-anything is built on top of an assumption.
-
 ## `@product-owner` / `@security` in the autonomous sequence
 
 Raised during scoping of `vu33rn_fully-autonomous-mode`. `mg-jdi` v1 drives

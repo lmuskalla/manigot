@@ -93,16 +93,21 @@ func Quick(projectRoot, profile string) (string, error) {
 	return launchDetached(inner)
 }
 
-// Jdi starts `mg-jdi --job <jobID>` detached in the background — no spawned
-// terminal window at all, unlike Agent/Quick (Decision 7a in the "fully
-// autonomous mode" brief). mg-jdi drives a fixed, non-interactive agent
-// sequence with no TTY at any point in its own container invocations (see
-// scripts/run.sh's --print flag) and needs no terminal for a human or a
-// subprocess to attach to — spawning one anyway would be pure overhead and
-// would reintroduce exactly the per-agent-window cost the backlog's "in-TUI
-// agent terminal" idea is about removing, not adding to. Visibility into a
-// TUI-launched run is TASK-8's list-row status badge and TASK-9's detail-view
-// log tab, not a window; see those for how a human watches it run.
+// Jdi starts `mg-jdi --job <jobID> --profile <profile>` detached in the
+// background — no spawned terminal window at all, unlike Agent/Quick
+// (Decision 7a in the "fully autonomous mode" brief). mg-jdi drives a fixed,
+// non-interactive agent sequence with no TTY at any point in its own
+// container invocations (see scripts/run.sh's --print flag) and needs no
+// terminal for a human or a subprocess to attach to — spawning one anyway
+// would be pure overhead and would reintroduce exactly the per-agent-window
+// cost the backlog's "in-TUI agent terminal" idea is about removing, not
+// adding to. Visibility into a TUI-launched run is TASK-8's list-row status
+// badge and TASK-9's detail-view log tab, not a window; see those for how a
+// human watches it run.
+//
+// profile is one of the subscription profiles in config.Profiles, matching
+// Agent/Quick — an empty value defaults to config.ProfileClaudePro, mg-jdi's
+// own default (see tui/cmd/jdi/main.go).
 //
 // Unlike Agent/Quick there is no "where it opened" description to return —
 // there is no terminal/pane to describe — so this returns only an error (nil
@@ -110,12 +115,15 @@ func Quick(projectRoot, profile string) (string, error) {
 // discarded and it is reaped asynchronously so it cannot corrupt the TUI's
 // alt screen or zombie; mg-jdi may run for a long time (several full agent
 // sessions), so this must not block waiting for it.
-func Jdi(jobID, projectRoot string) error {
+func Jdi(jobID, projectRoot, profile string) error {
+	if profile == "" {
+		profile = config.ProfileClaudePro
+	}
 	found, err := resolve.Resolve(resolve.Jdi())
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(found.Path, "--job", jobID)
+	cmd := exec.Command(found.Path, "--job", jobID, "--profile", profile)
 	cmd.Dir = projectRoot
 	// exec.Cmd sets cwd via chdir but does not update the PWD env var; mg-jdi
 	// (like the mg it shells out to) resolves the project root from $PWD via

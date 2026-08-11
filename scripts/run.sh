@@ -147,12 +147,15 @@ esac
 
 # --print is a non-interactive, one-shot invocation (see scripts/entrypoint.sh)
 # built for automated/unattended callers like mg-jdi, not for a human's own
-# session. It is Claude Code only for v1 — OpenCode's non-interactive
-# equivalent is unverified (see docs/backlog.md) — so reject the combination
-# with a clear error rather than silently falling back to an interactive run.
-if [[ "$PRINT" == "true" && "$TOOL" == "opencode" ]]; then
-    echo "Error: --print is only supported with the claude-pro profile (Claude Code)." >&3
-    echo "OpenCode's non-interactive invocation is unverified for v1 — see docs/backlog.md." >&3
+# session. OpenCode's non-interactive equivalent (`opencode run --format
+# json`, confirmed in docs/jobs/foycfl_jdi-for-opencode) is now wired up in
+# scripts/entrypoint.sh for the zai and opencode-go profiles, same as
+# claude-pro. The legacy, profile-less `--tool opencode` path (PROFILE left
+# empty by the resolution above) is intentionally left rejected here — it
+# predates the profile system and was never in scope for this support.
+if [[ "$PRINT" == "true" && "$TOOL" == "opencode" && -z "$PROFILE" ]]; then
+    echo "Error: --print is not supported with the legacy --tool opencode (no --profile)." >&3
+    echo "Use --profile zai or --profile opencode-go instead." >&3
     exit 1
 fi
 
