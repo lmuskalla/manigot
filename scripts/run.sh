@@ -189,6 +189,7 @@ fi
 
 PROJECT_ROOT="${PROJECT_ROOT%/}"
 INVOCATION_ROOT="$PROJECT_ROOT"
+GIT_COMMON_DIR=""
 
 # ── Resolve --job to its own git worktree ───────────────────────────────────────
 # 207bfu_git-worktrees, Decision 4: every open job lives in its own git
@@ -295,6 +296,22 @@ if [[ -n "$JOB" ]]; then
 
         JOB="${MATCHED_BRANCH##*/}"
         PROJECT_ROOT="${JOB_WORKTREE%/}"
+
+        # A worktree's .git is a pointer file whose gitdir lives in the main
+        # repo's .git/worktrees/<name>/ — git's own, mandatory admin layout
+        # (the .manigot-worktrees/ directory holds only the checked-out
+        # working tree). Only the worktree itself is mounted at /workspace, so
+        # that gitdir would be unresolvable inside the container and every git
+        # command there would fail with "not a git repository". Mount the main
+        # repo's git dir back at its host absolute path so git works inside
+        # the container exactly as it does on the host.
+        GIT_COMMON_DIR="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+        if [[ -z "$GIT_COMMON_DIR" ]]; then
+            # Pre-2.31 git fallback: --git-common-dir without --path-format
+            # returns a path relative to the caller's cwd (PROJECT_ROOT).
+            GIT_COMMON_DIR="$(cd "$PROJECT_ROOT" && git rev-parse --git-common-dir 2>/dev/null || true)"
+            [[ -n "$GIT_COMMON_DIR" && "$GIT_COMMON_DIR" != /* ]] && GIT_COMMON_DIR="$PROJECT_ROOT/$GIT_COMMON_DIR"
+        fi
     fi
 fi
 
@@ -513,10 +530,25 @@ if [[ "$PRINT" == "true" ]]; then
     DOCKER_TTY_FLAGS=()
 fi
 
+# A job running in its own worktree needs the main repo's git dir reachable
+# inside the container (see the --job resolution block): the worktree's .git
+# pointer file names a gitdir under the main repo's .git/worktrees/, which is
+# outside the worktree's own mount. Mount it back at its host absolute path —
+# the exact path the pointer file names — so git resolves it unchanged.
+# When PROJECT_ROOT isn't a worktree (plain session, or a pre-worktree job
+# checked out in the main worktree), GIT_COMMON_DIR stays empty and no extra
+# mount is added: the project's own .git is already inside the primary
+# -v "$PROJECT_ROOT:/workspace:z" mount.
+GIT_DIR_MOUNT=()
+if [[ -n "$GIT_COMMON_DIR" ]]; then
+    GIT_DIR_MOUNT=(-v "$GIT_COMMON_DIR:$GIT_COMMON_DIR:z")
+fi
+
 docker run "${DOCKER_TTY_FLAGS[@]+"${DOCKER_TTY_FLAGS[@]}"}" --rm \
     --name "manigot-$(basename "$PROJECT_ROOT")-$$" \
     --user "$(id -u):$(id -g)" \
     -v "$PROJECT_ROOT:/workspace:z" \
+    "${GIT_DIR_MOUNT[@]+"${GIT_DIR_MOUNT[@]}"}" \
     "${DOCS_MOUNT[@]+"${DOCS_MOUNT[@]}"}" \
     "${CONTEXT_MOUNT[@]+"${CONTEXT_MOUNT[@]}"}" \
     "${ENV_MOUNTS[@]+"${ENV_MOUNTS[@]}"}" \
