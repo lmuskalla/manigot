@@ -27,6 +27,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/lmuskalla/manigot/tui/internal/config"
@@ -136,6 +137,7 @@ func main() {
 		}
 	}
 
+	logStarted(logDest, j.Name, profile)
 	result := Run(root, j, runner, logDest, statusFn)
 	fmt.Printf("\nmg jdi: %s — %s\n", result.Kind, result.Reason)
 
@@ -331,8 +333,14 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 			status(state, agent)
 		}
 	}
-	finish := func(kind orchestrate.Kind, reason string) LoopResult {
+	// finish reports the terminal status, logs the "job finished" event
+	// (TASK-4), and builds the LoopResult every exit point returns.
+	// includeReason is normally true; it's false only for the
+	// stop-before-any-agent-ran case below, whose reason was already printed
+	// by logImmediateStop a line above — see logJobFinished's own doc.
+	finish := func(kind orchestrate.Kind, reason string, includeReason bool) LoopResult {
 		report(jdiTerminalState(kind), lastAgent)
+		logJobFinished(log, kind, reason, includeReason)
 		return LoopResult{Kind: kind, Reason: reason}
 	}
 
@@ -343,6 +351,7 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		decision := orchestrate.Next(stageBefore, rounds, tipIsVerdict)
 
 		if decision.Kind != orchestrate.RunAgent {
+			includeReason := true
 			if !agentEverRan {
 				// No agent has run yet this whole loop (typically the very
 				// first iteration, e.g. an unwritten brief.md) — logInvocation
@@ -350,30 +359,48 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 				// leaves run.log at 0 bytes for a case that has just as much
 				// reason to explain itself there as any agent invocation does.
 				logImmediateStop(log, decision.Reason)
+				includeReason = false
 			}
-			return finish(decision.Kind, decision.Reason)
+			return finish(decision.Kind, decision.Reason, includeReason)
 		}
 
 		report(job.JDIRunning, decision.Agent)
+		logAgentInvoked(log, decision.Agent, i+1)
 		headBefore, _ := git.HeadCommit(root, j.Branch)
 
 		out, runErr := runner.Run(decision.Agent, j)
 		agentEverRan = true
+
+		// TASK-5: read the just-run agent's expected target file fresh off
+		// disk, so logInvocation can skip re-printing output that's already
+		// the same as what got written to the job's own markdown file. Safe
+		// to read directly from j.Dir — see agentTargetFile's own doc. A
+		// missing/unreadable file (targetContent left "") just means
+		// logInvocation's dedup check never matches, which is the same as
+		// not having this feature at all for that call.
+		var targetContent string
+		targetFile := agentTargetFile[decision.Agent]
+		if targetFile != "" {
+			if data, rerr := os.ReadFile(filepath.Join(j.Dir, targetFile)); rerr == nil {
+				targetContent = string(data)
+			}
+		}
+
 		// Fan-out (Decision 7/TASK-7): log gets the same formatted section
 		// regardless of whether it's os.Stdout, the sidecar run.log, or (in
 		// tests) an in-memory buffer — see main()'s io.MultiWriter and
 		// output.go's logInvocation. DetectSignal below scans the raw bytes
 		// directly (it does its own JSON extraction), independent of what
 		// logInvocation writes for a human to read.
-		logInvocation(log, decision.Agent, i+1, out)
+		logInvocation(log, decision.Agent, i+1, out, targetFile, targetContent)
 
 		if sig, ok := orchestrate.DetectSignal(out); ok {
 			lastAgent = decision.Agent
-			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s asked for human input: %s", decision.Agent, sig.Reason))
+			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s asked for human input: %s", decision.Agent, sig.Reason), true)
 		}
 		if runErr != nil {
 			lastAgent = decision.Agent
-			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s invocation failed: %v", decision.Agent, runErr))
+			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s invocation failed: %v", decision.Agent, runErr), true)
 		}
 
 		// Stall backstop (Decision 1a): the same agent invoked twice in a
@@ -388,10 +415,10 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		noChange := stageAfter == stageBefore && headAfter == headBefore
 
 		if noChange && lastNoChange && decision.Agent == lastAgent {
-			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s made no progress on two consecutive runs (Stage and branch HEAD unchanged both times) — stopping rather than looping indefinitely", decision.Agent))
+			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s made no progress on two consecutive runs (Stage and branch HEAD unchanged both times) — stopping rather than looping indefinitely", decision.Agent), true)
 		}
 		lastAgent, lastNoChange = decision.Agent, noChange
 	}
 
-	return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("exceeded %d iterations without finishing", maxIterations))
+	return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("exceeded %d iterations without finishing", maxIterations), true)
 }

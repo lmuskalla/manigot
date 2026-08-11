@@ -9,13 +9,65 @@ import (
 	"testing"
 
 	"github.com/lmuskalla/manigot/tui/internal/job"
+	"github.com/lmuskalla/manigot/tui/internal/orchestrate"
 )
+
+func TestLogStarted(t *testing.T) {
+	var buf bytes.Buffer
+	logStarted(&buf, "aaaa01_test-job", "claude-pro")
+	got := buf.String()
+	if !strings.Contains(got, "mg jdi started") {
+		t.Errorf("logStarted output missing 'mg jdi started', got:\n%s", got)
+	}
+	if !strings.Contains(got, "aaaa01_test-job") {
+		t.Errorf("logStarted output missing job name, got:\n%s", got)
+	}
+	if !strings.Contains(got, "claude-pro") {
+		t.Errorf("logStarted output missing profile, got:\n%s", got)
+	}
+}
+
+func TestLogAgentInvoked(t *testing.T) {
+	var buf bytes.Buffer
+	logAgentInvoked(&buf, "developer", 2)
+	got := buf.String()
+	if !strings.Contains(got, "developer invoked (attempt 2)") {
+		t.Errorf("logAgentInvoked output missing header, got:\n%s", got)
+	}
+}
+
+func TestLogJobFinishedIncludesReasonByDefault(t *testing.T) {
+	var buf bytes.Buffer
+	logJobFinished(&buf, orchestrate.StopFinished, "verdict.md's Overall verdict is APPROVED", true)
+	got := buf.String()
+	if !strings.Contains(got, "mg jdi finished") {
+		t.Errorf("logJobFinished output missing 'mg jdi finished', got:\n%s", got)
+	}
+	if !strings.Contains(got, "stop-finished") {
+		t.Errorf("logJobFinished output missing the outcome kind, got:\n%s", got)
+	}
+	if !strings.Contains(got, "verdict.md's Overall verdict is APPROVED") {
+		t.Errorf("logJobFinished output missing reason, got:\n%s", got)
+	}
+}
+
+func TestLogJobFinishedOmitsReasonWhenAlreadyLogged(t *testing.T) {
+	var buf bytes.Buffer
+	logJobFinished(&buf, orchestrate.StopNeedsHuman, "brief.md is not written yet", false)
+	got := buf.String()
+	if !strings.Contains(got, "mg jdi finished") {
+		t.Errorf("logJobFinished output missing 'mg jdi finished', got:\n%s", got)
+	}
+	if strings.Contains(got, "brief.md is not written yet") {
+		t.Errorf("logJobFinished output repeats reason despite includeReason=false, got:\n%s", got)
+	}
+}
 
 func TestLogInvocationPlainText(t *testing.T) {
 	var buf bytes.Buffer
-	logInvocation(&buf, "developer", 1, []byte("did the thing\n"))
+	logInvocation(&buf, "developer", 1, []byte("did the thing\n"), "", "")
 	got := buf.String()
-	if !strings.Contains(got, "developer (attempt 1)") {
+	if !strings.Contains(got, "developer finished (attempt 1)") {
 		t.Errorf("logInvocation output missing header, got:\n%s", got)
 	}
 	if !strings.Contains(got, "did the thing") {
@@ -26,7 +78,7 @@ func TestLogInvocationPlainText(t *testing.T) {
 func TestLogInvocationExtractsJSONResult(t *testing.T) {
 	var buf bytes.Buffer
 	raw := []byte(`{"type":"result","result":"All done, committed TASK-1."}`)
-	logInvocation(&buf, "developer", 2, raw)
+	logInvocation(&buf, "developer", 2, raw, "", "")
 	got := buf.String()
 	if !strings.Contains(got, "All done, committed TASK-1.") {
 		t.Errorf("logInvocation did not extract the JSON result field, got:\n%s", got)
@@ -38,10 +90,74 @@ func TestLogInvocationExtractsJSONResult(t *testing.T) {
 
 func TestLogInvocationEmptyOutput(t *testing.T) {
 	var buf bytes.Buffer
-	logInvocation(&buf, "analyst", 1, nil)
+	logInvocation(&buf, "analyst", 1, nil, "", "")
 	got := buf.String()
 	if !strings.Contains(got, "(no output)") {
 		t.Errorf("logInvocation on empty output = %q, want it to note there was no output", got)
+	}
+}
+
+// --- TASK-5: dedup already-committed file content -----------------------
+
+func TestLogInvocationOmitsDuplicateOutput(t *testing.T) {
+	var buf bytes.Buffer
+	fileContent := "# Tasks\n\nTASK-1: do the thing\n"
+	raw := []byte("Sure, here's what I wrote:\n\n" + fileContent + "\nAll done!")
+	logInvocation(&buf, "analyst", 1, raw, "tasks.md", fileContent)
+	got := buf.String()
+	if !strings.Contains(got, "(output matches tasks.md, omitted)") {
+		t.Errorf("logInvocation did not dedup matching output, got:\n%s", got)
+	}
+	if strings.Contains(got, "TASK-1: do the thing") {
+		t.Errorf("logInvocation printed the full duplicated text instead of omitting it, got:\n%s", got)
+	}
+}
+
+func TestLogInvocationKeepsDistinctOutput(t *testing.T) {
+	var buf bytes.Buffer
+	fileContent := "# Tasks\n\nTASK-1: do the thing\n"
+	raw := []byte("I analyzed the brief and decided on a different approach entirely.")
+	logInvocation(&buf, "analyst", 1, raw, "tasks.md", fileContent)
+	got := buf.String()
+	if strings.Contains(got, "omitted") {
+		t.Errorf("logInvocation dedup'd distinct output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "I analyzed the brief") {
+		t.Errorf("logInvocation output missing agent text, got:\n%s", got)
+	}
+}
+
+func TestLogInvocationSkipsDedupWhenTargetFileEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	raw := []byte("some response text")
+	logInvocation(&buf, "analyst", 1, raw, "", "")
+	got := buf.String()
+	if strings.Contains(got, "omitted") {
+		t.Errorf("logInvocation dedup'd with no target file, got:\n%s", got)
+	}
+	if !strings.Contains(got, "some response text") {
+		t.Errorf("logInvocation output missing agent text, got:\n%s", got)
+	}
+}
+
+func TestIsDuplicateOutput(t *testing.T) {
+	cases := []struct {
+		name        string
+		text        string
+		fileContent string
+		want        bool
+	}{
+		{"exact substring", "prose\n# Tasks\nTASK-1\nmore prose", "# Tasks\nTASK-1", true},
+		{"whitespace differs", "prose\n#  Tasks\n\nTASK-1  \nmore prose", "# Tasks\nTASK-1", true},
+		{"not present", "totally different text", "# Tasks\nTASK-1", false},
+		{"empty file content never matches", "anything at all", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isDuplicateOutput(c.text, c.fileContent); got != c.want {
+				t.Errorf("isDuplicateOutput(%q, %q) = %v, want %v", c.text, c.fileContent, got, c.want)
+			}
+		})
 	}
 }
 

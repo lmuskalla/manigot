@@ -139,6 +139,23 @@ full detail on each.
 
 ---
 
+## Parking lot (not scoped, not shipped)
+
+Ideas floated but not yet brief'd per rule 5 above — written down so they
+aren't lost, not a commitment that they'll land:
+
+- **associate** — a single agent (e.g. one `@developer` session). Distinct
+  from `made-man`, which specifically means having completed a full
+  unattended `mg jdi` sequence — an ordinary one-off agent session hasn't
+  earned that.
+- **boss** — the TUI (`mg tui`). You survey all the jobs and hand them off
+  to associates from there, which is just what a boss does.
+
+If either gets picked up for real, it needs its own scoped brief like
+`tt45uz_naming-features` before touching any script or doc.
+
+---
+
 ## Where this is documented elsewhere
 
 - `scripts/mg.sh` — the `# ── Usage ──` header comment and `print_help()`'s

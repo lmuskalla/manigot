@@ -129,6 +129,43 @@ func TestRunHappyPath(t *testing.T) {
 	}
 }
 
+// TestRunLogsAgentInvoked confirms Run writes an "invoked" event to the log
+// immediately before each agent invocation (TASK-2), reusing the same
+// attempt number logInvocation's own post-run header uses.
+func TestRunLogsAgentInvoked(t *testing.T) {
+	root, j := initTestRepo(t)
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		switch agent {
+		case "analyst":
+			writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
+			commit(t, root, "[aaaa01] tasks: add breakdown")
+		case "developer":
+			writeJobFile(t, j, "implementation.md", "# Implementation\n\nTASK-1: did the thing\n")
+			commit(t, root, "[aaaa01] TASK-1: do the thing")
+		case "reviewer":
+			writeJobFile(t, j, "verdict.md", "# Verdict\n\nTASK-1: PASS\n\n## Overall\n\nAPPROVED\n")
+			commit(t, root, "[aaaa01] verdict: approved")
+		}
+		return []byte("ok")
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopFinished {
+		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
+	}
+	out := log.String()
+	for _, want := range []string{
+		"analyst invoked (attempt 1)",
+		"developer invoked (attempt 2)",
+		"reviewer invoked (attempt 3)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
 // TestRunReportsStatus exercises Run's StatusFunc callback (TASK-8): a
 // job.JDIRunning report before each invocation naming that invocation's
 // agent, and a final job.JDIStoppedFinished report naming the last agent
@@ -340,6 +377,182 @@ func TestRunLogsImmediateStopReason(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), got.Reason) {
 		t.Errorf("log = %q, want it to contain the stop reason %q", log.String(), got.Reason)
+	}
+}
+
+// TestRunLogsJobFinishedOnNormalStop confirms Run writes a "job finished"
+// event to the log at loop exit (TASK-4) once an agent has actually run —
+// distinct from the immediate-stop case covered by
+// TestRunLogsImmediateStopReason below, which must not repeat the same
+// reason text twice in a row.
+func TestRunLogsJobFinishedOnNormalStop(t *testing.T) {
+	root, j := initTestRepo(t)
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		switch agent {
+		case "analyst":
+			writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
+			commit(t, root, "[aaaa01] tasks: add breakdown")
+		case "developer":
+			writeJobFile(t, j, "implementation.md", "# Implementation\n\nTASK-1: did the thing\n")
+			commit(t, root, "[aaaa01] TASK-1: do the thing")
+		case "reviewer":
+			writeJobFile(t, j, "verdict.md", "# Verdict\n\nTASK-1: PASS\n\n## Overall\n\nAPPROVED\n")
+			commit(t, root, "[aaaa01] verdict: approved")
+		}
+		return []byte("ok")
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopFinished {
+		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
+	}
+	out := log.String()
+	if !strings.Contains(out, "mg jdi finished: stop-finished") {
+		t.Errorf("log missing job-finished event, got:\n%s", out)
+	}
+	if !strings.Contains(out, got.Reason) {
+		t.Errorf("log missing the finish reason %q, got:\n%s", got.Reason, out)
+	}
+}
+
+// TestRunImmediateStopDoesNotDuplicateReason extends
+// TestRunLogsImmediateStopReason: TASK-4's "job finished" event must still
+// fire for the stop-before-any-agent-ran case, but must not print the same
+// reason text logImmediateStop already printed a second time.
+func TestRunImmediateStopDoesNotDuplicateReason(t *testing.T) {
+	root, j := initTestRepo(t)
+	writeJobFile(t, j, "brief.md", "# Brief: test job\n\nstatus: open\ntype: feature\nid: aaaa01\n\n"+
+		"## What\n\n<!-- placeholder -->\n")
+	commit(t, root, "[aaaa01] brief: reset to scaffold")
+
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		t.Fatal("no agent should have been invoked for an immediate stop")
+		return nil
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopNeedsHuman {
+		t.Fatalf("Run.Kind = %v, want StopNeedsHuman (reason: %s)", got.Kind, got.Reason)
+	}
+	out := log.String()
+	if !strings.Contains(out, "mg jdi finished: stop-needs-human") {
+		t.Errorf("log missing job-finished event, got:\n%s", out)
+	}
+	if strings.Count(out, got.Reason) != 1 {
+		t.Errorf("reason %q appears %d times in log, want exactly 1 (not duplicated between logImmediateStop and logJobFinished):\n%s", got.Reason, strings.Count(out, got.Reason), out)
+	}
+}
+
+// assertLogOrder fails the test unless every substring in wantInOrder
+// appears in out, each strictly after the previous one — i.e. out reads as
+// wantInOrder describes, start to finish.
+func assertLogOrder(t *testing.T, out string, wantInOrder []string) {
+	t.Helper()
+	pos := 0
+	for _, want := range wantInOrder {
+		idx := strings.Index(out[pos:], want)
+		if idx == -1 {
+			t.Fatalf("log missing %q after position %d, want it in order %v; full log:\n%s", want, pos, wantInOrder, out)
+		}
+		pos += idx + len(want)
+	}
+}
+
+// TestRunFullLogSequenceHappyPath is TASK-6's end-to-end coverage: a full
+// mg-jdi run (mimicking main()'s own logStarted call ahead of Run) produces
+// the complete started -> invoked -> finished -> ... -> job finished
+// sequence the brief asked for, not just each event in isolation.
+func TestRunFullLogSequenceHappyPath(t *testing.T) {
+	root, j := initTestRepo(t)
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		switch agent {
+		case "analyst":
+			writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
+			commit(t, root, "[aaaa01] tasks: add breakdown")
+			return []byte("Wrote tasks.md with one task.")
+		case "developer":
+			writeJobFile(t, j, "implementation.md", "# Implementation\n\nTASK-1: did the thing\n")
+			commit(t, root, "[aaaa01] TASK-1: do the thing")
+			return []byte("Implemented TASK-1, all tests pass.")
+		case "reviewer":
+			writeJobFile(t, j, "verdict.md", "# Verdict\n\nTASK-1: PASS\n\n## Overall\n\nAPPROVED\n")
+			commit(t, root, "[aaaa01] verdict: approved")
+			return []byte("Reviewed and approved.")
+		}
+		return nil
+	}}
+
+	var log bytes.Buffer
+	logStarted(&log, j.Name, "claude-pro")
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopFinished {
+		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
+	}
+
+	assertLogOrder(t, log.String(), []string{
+		"mg jdi started",
+		"analyst invoked (attempt 1)",
+		"analyst finished (attempt 1)",
+		"Wrote tasks.md with one task.",
+		"developer invoked (attempt 2)",
+		"developer finished (attempt 2)",
+		"Implemented TASK-1, all tests pass.",
+		"reviewer invoked (attempt 3)",
+		"reviewer finished (attempt 3)",
+		"Reviewed and approved.",
+		"mg jdi finished: stop-finished",
+	})
+}
+
+// TestRunFullLogSequenceDedupsMatchingOutput is TASK-6's dedup-case
+// end-to-end coverage: when an agent's response text is just an echo of the
+// file it wrote (TASK-5), the full sequence still reads started -> invoked
+// -> finished -> ... -> job finished, but the finished body is the short
+// omission note instead of the file's full content repeated in the log.
+func TestRunFullLogSequenceDedupsMatchingOutput(t *testing.T) {
+	root, j := initTestRepo(t)
+	const tasksContent = "# Tasks\n\nTASK-1: do the thing\n"
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		switch agent {
+		case "analyst":
+			writeJobFile(t, j, "tasks.md", tasksContent)
+			commit(t, root, "[aaaa01] tasks: add breakdown")
+			return []byte(tasksContent)
+		case "developer":
+			writeJobFile(t, j, "implementation.md", "# Implementation\n\nTASK-1: did the thing\n")
+			commit(t, root, "[aaaa01] TASK-1: do the thing")
+			return []byte("done")
+		case "reviewer":
+			writeJobFile(t, j, "verdict.md", "# Verdict\n\nTASK-1: PASS\n\n## Overall\n\nAPPROVED\n")
+			commit(t, root, "[aaaa01] verdict: approved")
+			return []byte("done")
+		}
+		return nil
+	}}
+
+	var log bytes.Buffer
+	logStarted(&log, j.Name, "claude-pro")
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopFinished {
+		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
+	}
+
+	out := log.String()
+	assertLogOrder(t, out, []string{
+		"mg jdi started",
+		"analyst invoked (attempt 1)",
+		"analyst finished (attempt 1)",
+		"(output matches tasks.md, omitted)",
+		"developer invoked (attempt 2)",
+		"developer finished (attempt 2)",
+		"reviewer invoked (attempt 3)",
+		"reviewer finished (attempt 3)",
+		"mg jdi finished: stop-finished",
+	})
+	if strings.Contains(out, "TASK-1: do the thing") {
+		t.Errorf("log = %q, want tasks.md's content not repeated verbatim (should be omitted)", out)
 	}
 }
 

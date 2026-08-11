@@ -99,11 +99,87 @@ func openRunLog(root, jobName string) (*os.File, error) {
 	return f, nil
 }
 
+// logStarted writes a "mg jdi started" event to w, once, at the very top of
+// a run (TASK-1) — main()'s first write to logDest, before Run is even
+// invoked, so a human watching run.log sees confirmation the run began
+// immediately, rather than the log staying empty until the first agent
+// invocation finishes (the brief's own complaint). Mirrors
+// logImmediateStop's "=== ... ===" header shape so every event in the log
+// looks consistent.
+func logStarted(w io.Writer, jobName, profile string) {
+	fmt.Fprintf(w, "=== %s mg jdi started: job %s, profile %s ===\n", time.Now().Format(time.RFC3339), jobName, profile)
+}
+
+// logAgentInvoked writes an "agent invoked" event to w immediately before
+// Run launches an agent (TASK-2) — distinct from logInvocation's own
+// post-run header below, so a human watching run.log sees an invoked
+// header right away rather than waiting for the (possibly long-running)
+// invocation to finish before anything at all appears for it.
+func logAgentInvoked(w io.Writer, agent string, attempt int) {
+	fmt.Fprintf(w, "=== %s %s invoked (attempt %d) ===\n", time.Now().Format(time.RFC3339), agent, attempt)
+}
+
+// logJobFinished writes a "job finished" event to w at Run's loop exit
+// (TASK-4) — both terminal outcomes, StopFinished and StopNeedsHuman.
+//
+// includeReason is false only for the stop-before-any-agent-ran case: that
+// path has already printed reason via logImmediateStop immediately above,
+// so repeating it here would print the exact same line twice in a row.
+// Every other call site has never logged reason before this point, so it's
+// included.
+func logJobFinished(w io.Writer, kind orchestrate.Kind, reason string, includeReason bool) {
+	fmt.Fprintf(w, "=== %s mg jdi finished: %s ===\n", time.Now().Format(time.RFC3339), kind)
+	if includeReason && reason != "" {
+		fmt.Fprintln(w, reason)
+	}
+}
+
+// agentTargetFile maps each driven agent (orchestrate.Sequence) to the job
+// file it's expected to have written by the time its invocation returns —
+// TASK-5's dedup check reads this file fresh off disk (via j.Dir, safe
+// because ensureOnBranch guarantees mg-jdi always operates on the job's own
+// checked-out branch) to compare against the agent's own response text.
+var agentTargetFile = map[string]string{
+	"analyst":   "tasks.md",
+	"developer": "implementation.md",
+	"reviewer":  "verdict.md",
+}
+
+// isDuplicateOutput reports whether fileContent — the just-run agent's
+// target file, read fresh after this invocation — appears, once both sides
+// are trimmed and internal whitespace is collapsed, as a substring of text —
+// the agent's own response (TASK-5's "already the same ... skip it" rule
+// from the brief). Substring rather than exact equality, since a real
+// response typically echoes the file's content plus its own surrounding
+// commentary (a leading summary, a trailing "done!", etc.).
+//
+// An empty fileContent (the target file doesn't exist yet, or is itself
+// empty) never counts as a duplicate — trivially "contained" in anything,
+// but not a meaningful match.
+func isDuplicateOutput(text, fileContent string) bool {
+	normFile := normalizeWhitespace(fileContent)
+	if normFile == "" {
+		return false
+	}
+	return strings.Contains(normalizeWhitespace(text), normFile)
+}
+
+// normalizeWhitespace collapses s to single-space-separated fields, so
+// isDuplicateOutput's comparison isn't tripped up by incidental reformatting
+// (extra blank lines, trailing spaces, etc.) between what's on disk and what
+// an agent echoed back.
+func normalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // logInvocation writes one agent invocation's captured output to w — Run's
 // fan-out target (Decision 7), which main() builds as an io.MultiWriter of
 // mg-jdi's own stdout and the sidecar's run.log, so both destinations get
-// the exact same section: a "=== <timestamp> <agent> (attempt N) ==="
-// header, then the agent's extracted final-response text
+// the exact same section: a "=== <timestamp> <agent> finished (attempt N)
+// ===" header — paired with logAgentInvoked's own header just before this
+// invocation started (TASK-2/TASK-3) so a reader sees an invoked/finished
+// pair per agent call rather than one ambiguous header — then the agent's
+// extracted final-response text
 // (orchestrate.ResultText) — not the raw --output-format json blob, so a
 // human reading either destination sees prose, not JSON.
 //
@@ -113,11 +189,23 @@ func openRunLog(root, jobName string) (*os.File, error) {
 // `claude --print` (json or plain-text form) actually returns. "See what
 // happens" means "see each agent's final answer as it's produced," not a
 // live diff of its work.
-func logInvocation(w io.Writer, agent string, attempt int, raw []byte) {
-	fmt.Fprintf(w, "=== %s %s (attempt %d) ===\n", time.Now().Format(time.RFC3339), agent, attempt)
+//
+// targetFile/targetContent (TASK-5) are the just-run agent's expected job
+// file and its content read fresh after the invocation (see
+// agentTargetFile) — the caller's responsibility, since it already has j.Dir
+// on hand. When the response text turns out to be a duplicate of that file
+// (isDuplicateOutput), the body is replaced with a short note instead of the
+// full (possibly large) text — the header is unaffected, so a reader still
+// sees an invoked/finished pair either way. targetFile == "" (e.g. an
+// unrecognized agent, or the file couldn't be read) simply skips the check.
+func logInvocation(w io.Writer, agent string, attempt int, raw []byte, targetFile, targetContent string) {
+	fmt.Fprintf(w, "=== %s %s finished (attempt %d) ===\n", time.Now().Format(time.RFC3339), agent, attempt)
 	text := orchestrate.ResultText(raw)
-	if text == "" {
+	switch {
+	case text == "":
 		text = "(no output)"
+	case targetFile != "" && isDuplicateOutput(text, targetContent):
+		text = fmt.Sprintf("(output matches %s, omitted)", targetFile)
 	}
 	if text[len(text)-1] != '\n' {
 		text += "\n"
