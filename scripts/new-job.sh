@@ -4,17 +4,22 @@ set -euo pipefail
 # ── Usage ───────────────────────────────────────────────────────────────────────
 # mg-job "add image gallery block"
 # mg-job "fix tenant isolation on media uploads" --type fix
+# mg-job "add gallery" --base-branch develop
 # mg-job "upgrade dependencies" --type chore
+#
+# The base branch new jobs are cut from is read from docs/manigot.json
+# (defaulting to "main"); --base-branch overrides it for one invocation.
 #
 # Installed as `mg-job`. See `make install`.
 
 # ── Configuration ───────────────────────────────────────────────────────────────
 JOBS_DIR="docs/jobs"
 DEFAULT_TYPE="feature"
+DEFAULT_BASE_BRANCH="main"
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
-    echo "Usage: mg-job \"title of job\" [--type feature|fix|chore]"
+    echo "Usage: mg-job \"title of job\" [--type feature|fix|chore] [--base-branch <name>]"
     exit 1
 fi
 
@@ -22,9 +27,11 @@ TITLE="$1"
 shift
 
 JOB_TYPE="$DEFAULT_TYPE"
+BASE_BRANCH_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --type) JOB_TYPE="$2"; shift 2 ;;
+        --base-branch) BASE_BRANCH_OVERRIDE="$2"; shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
@@ -54,6 +61,28 @@ if [[ -z "$PROJECT_ROOT" ]]; then
     exit 1
 fi
 
+# ── Resolve base branch ─────────────────────────────────────────────────────────
+# The base branch new jobs are cut from is configured per-project in
+# docs/manigot.json (baseBranch key), defaulting to "main". This reads the
+# same file the TUI writes, so `mg job` and the TUI's "m" checkout agree on
+# what "base branch" means for this project. The --base-branch flag overrides
+# the file for a single invocation (an ad-hoc one-off, e.g. spiking a branch
+# off a release tag while the project default stays on main).
+#
+# The JSON extraction is a guarded sed regex against the single known key —
+# revisit (add jq) only if more project keys appear.
+BASE_BRANCH="$DEFAULT_BASE_BRANCH"
+SETTINGS_FILE="$PROJECT_ROOT/docs/manigot.json"
+if [[ -f "$SETTINGS_FILE" ]]; then
+    # Match "baseBranch": "value" anywhere on a line, so both the
+    # pretty-printed JSON project.Save writes and a hand-written one-liner
+    # are accepted. Single known key with sane ref-name values, so a greedy
+    # leading .* is safe here.
+    VALUE=$(sed -n 's/^.*"baseBranch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$SETTINGS_FILE" | head -n1)
+    [[ -n "$VALUE" ]] && BASE_BRANCH="$VALUE"
+fi
+[[ -n "$BASE_BRANCH_OVERRIDE" ]] && BASE_BRANCH="$BASE_BRANCH_OVERRIDE"
+
 # ── Generate job ID and directory ───────────────────────────────────────────────
 ID=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 6 || true)
 SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
@@ -64,10 +93,10 @@ AUTHOR=$(git config user.name 2>/dev/null || echo "unknown")
 mkdir -p "$JOB_DIR"
 
 # ── Git branch ──────────────────────────────────────────────────────────────────
-# Always branch from the base branch (main), regardless of the branch the user is
-# currently on. A new job must not inherit work from another in-flight job's branch.
+# Always branch from the configured base branch, regardless of the branch the
+# user is currently on. A new job must not inherit work from another in-flight
+# job's branch.
 BRANCH="${JOB_TYPE}/${ID}_${SLUG}"
-BASE_BRANCH="main"
 CURRENT_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
 if [[ -n "$CURRENT_BRANCH" ]]; then

@@ -302,3 +302,72 @@ func TestMainKeyRefusedCheckoutSurfacesStatusInList(t *testing.T) {
 		t.Errorf("job list should be untouched by a failed checkout; got %d job(s)", len(got.jobs))
 	}
 }
+
+// TestMainKeyUsesConfiguredBaseBranch verifies the "m" quick-checkout honors
+// a non-default base branch configured in docs/manigot.json (the whole point
+// of the project-scoped settings file). With baseBranch set to "develop", the
+// "m" key checks out develop rather than the literal "main".
+func TestMainKeyUsesConfiguredBaseBranch(t *testing.T) {
+	dir, def := gitInitRepo(t)
+	// Set up a project whose base branch is "develop", not main, and commit
+	// the project settings file on develop so it's present regardless of the
+	// branch checked out.
+	gitRun(t, dir, "branch", "-m", def, "develop")
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs", "manigot.json"), []byte(`{"baseBranch":"develop"}`), 0o644); err != nil {
+		t.Fatalf("write manigot.json: %v", err)
+	}
+	gitRun(t, dir, "add", "docs/manigot.json")
+	gitRun(t, dir, "commit", "-q", "-m", "add project settings")
+
+	// Create a feature branch with a job, then discover while still on it.
+	gitRun(t, dir, "checkout", "-q", "-b", "feature/off20_o")
+	gitCommitJob(t, dir, "off20_o",
+		"# Brief: Off\n\nstatus: open\nid: off20\nbranch: feature/off20_o\ndate: 2026-01-01\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%d", err, len(jobs))
+	}
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.state = stateList
+	if a.currentBranch != "feature/off20_o" {
+		t.Fatalf("currentBranch = %q, want feature/off20_o", a.currentBranch)
+	}
+	if got := a.projectSettings.BaseBranchValue(); got != "develop" {
+		t.Fatalf("BaseBranchValue = %q, want develop", got)
+	}
+
+	model, cmd := a.updateList(keyMsg("m"))
+	got := model.(*App)
+	if cmd == nil {
+		t.Fatal("expected \"m\" to return a tea.Cmd, got nil")
+	}
+	msg := cmd()
+	checkoutM, ok := msg.(checkoutMsg)
+	if !ok {
+		t.Fatalf("expected checkoutMsg, got %T", msg)
+	}
+	if checkoutM.err != nil {
+		t.Fatalf("checkout failed: %v", checkoutM.err)
+	}
+	if checkoutM.branch != "develop" {
+		t.Errorf("checkoutMsg.branch = %q, want develop", checkoutM.branch)
+	}
+
+	// The working tree really did switch to the configured base branch.
+	out, execErr := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+	if execErr != nil || strings.TrimSpace(string(out)) != "develop" {
+		t.Fatalf("git HEAD after checkout = %q (err=%v), want develop", out, execErr)
+	}
+
+	model2, _ := got.Update(checkoutM)
+	final := model2.(*App)
+	if !strings.Contains(final.status, "switched to develop") {
+		t.Errorf("status = %q, want it to mention switching to develop", final.status)
+	}
+}

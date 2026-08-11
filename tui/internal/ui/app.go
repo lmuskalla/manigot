@@ -18,6 +18,7 @@ import (
 	"github.com/lmuskalla/manigot/tui/internal/hostcmd"
 	"github.com/lmuskalla/manigot/tui/internal/job"
 	"github.com/lmuskalla/manigot/tui/internal/launch"
+	"github.com/lmuskalla/manigot/tui/internal/project"
 	"github.com/lmuskalla/manigot/tui/internal/resolve"
 )
 
@@ -60,6 +61,13 @@ type App struct {
 	// profile). It is loaded once at startup and updated in place whenever the
 	// settings form is submitted.
 	settings config.Settings
+
+	// projectSettings holds the project-scoped conventions (base branch),
+	// read from docs/manigot.json in the target project root. Unlike
+	// settings, this file is meant to be committed and shared across a
+	// team — it travels with the project, not the user. Loaded once at
+	// startup and updated in place whenever the settings form is submitted.
+	projectSettings project.Settings
 
 	// detail is non-nil while state == stateDetail.
 	detail *detailView
@@ -133,6 +141,20 @@ func NewApp(root string, jobs []job.Job) *App {
 	a.settings = settings
 	if err != nil {
 		a.status = cmdErrorText(err)
+	}
+	// Project settings (base branch) live in the target project, not the
+	// manigot checkout, so a missing file is the normal pre-first-save state
+	// and project.Load already degrades it to a zero value — only a real I/O
+	// or parse error surfaces here. Append rather than overwrite a config
+	// load error so both can be seen.
+	projSettings, perr := project.Load(root)
+	a.projectSettings = projSettings
+	if perr != nil {
+		if a.status != "" {
+			a.status += " · " + cmdErrorText(perr)
+		} else {
+			a.status = cmdErrorText(perr)
+		}
 	}
 	return a
 }
@@ -313,8 +335,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.status = "switched to " + msg.branch + ", but the job is no longer listed"
 			}
 		} else {
-			// No detail view open — the list view's "back to main" quick
-			// checkout. refreshJobs above already picked up the new
+			// No detail view open — the list view's "back to base branch"
+			// quick checkout. refreshJobs above already picked up the new
 			// currentBranch; still surface a status so the checkout
 			// (including an already-on-<branch> no-op, which git itself
 			// treats as success) isn't silent.
@@ -595,8 +617,16 @@ var ringBell = func() {
 
 // refresh does refreshJobs, plus reloads the open detail view's files (if
 // any) so changes an agent made outside the TUI show up — used by "ctrl+r".
+// It also re-reads the project settings, so a docs/manigot.json edited
+// outside the TUI (e.g. base branch changed by hand or pulled from origin)
+// is picked up without an app restart. The settings form's own submit path
+// is the only writer to a.projectSettings and it never runs concurrently
+// with refresh() — ctrl+r isn't routed here while the form is open.
 func (a *App) refresh() {
 	a.refreshJobs()
+	if ps, err := project.Load(a.root); err == nil {
+		a.projectSettings = ps
+	}
 	if a.detail != nil {
 		a.detail.reload()
 	}
@@ -635,8 +665,10 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.newJob = newNewJobView(a.width, a.height)
 		a.state = stateNewJob
 	case "s":
-		// Edit the persisted TUI settings (editor, subscription profile).
-		a.settingsView = newSettingsView(a.settings, a.width, a.height)
+		// Edit the persisted TUI settings: the global personal prefs
+		// (editor, subscription profile) and the project base branch.
+		// Both are seeded from their on-disk files (see NewApp).
+		a.settingsView = newSettingsView(a.settings, a.projectSettings, a.width, a.height)
 		a.state = stateSettings
 	case "o":
 		// Launch a bare manigot session (no agent, no job) in a detached
@@ -650,15 +682,17 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.status = "→ quick session in " + desc
 		}
 	case "m":
-		// Quick "back to main" checkout — the one friction point the brief
-		// calls out (finishing a job branch and wanting a quick launch
-		// against main without manually switching first). Not a generic
-		// branch picker: "main" is the project's hardcoded base-branch
-		// convention (scripts/new-job.sh), same as detail view's "b" reuses
-		// git.Checkout/checkoutCmd. Runs as a tea.Cmd so a slow git
-		// operation doesn't block rendering; checkoutMsg's a.detail == nil
-		// branch reports the outcome to a.status.
-		return a, a.checkoutCmd("main")
+		// Quick "back to base branch" checkout — the one friction point
+		// the brief calls out (finishing a job branch and wanting a quick
+		// launch against the base branch without manually switching
+		// first). Not a generic branch picker: the base branch is the
+		// project's shared convention, configured via docs/manigot.json
+		// (defaulting to "main"), same convention scripts/new-job.sh cuts
+		// new branches from. Same git.Checkout/checkoutCmd the detail
+		// view's "b" reuses. Runs as a tea.Cmd so a slow git operation
+		// doesn't block rendering; checkoutMsg's a.detail == nil branch
+		// reports the outcome to a.status.
+		return a, a.checkoutCmd(a.projectSettings.BaseBranchValue())
 	}
 	return a, nil
 }
@@ -670,12 +704,23 @@ func (a *App) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.settingsView = nil
 		a.state = stateList
 	case stSubmit:
+		// Persist both files: the global personal prefs (config.Save)
+		// and the project base branch (project.Save). Surface whichever
+		// fails first in the form's status, leaving the form open so the
+		// user can retry without retyping; only update the in-memory
+		// copies and return to the list once both succeed.
 		s := a.settingsView.settingsValue()
+		ps := a.settingsView.projectValue()
 		if err := config.Save(s); err != nil {
 			a.settingsView.status = cmdErrorText(err)
 			return a, nil
 		}
+		if err := project.Save(a.root, ps); err != nil {
+			a.settingsView.status = cmdErrorText(err)
+			return a, nil
+		}
 		a.settings = s
+		a.projectSettings = ps
 		a.settingsView = nil
 		a.status = "settings saved"
 		a.state = stateList
@@ -1217,7 +1262,7 @@ func jdiStatusBadge(root string, j job.Job) string {
 // after "ctrl+r"), the status alongside it rather than replacing it — a
 // status message must never leave the user not knowing what keys exist.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · o quick · n new · m main · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · o quick · n new · m base branch · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
 	}

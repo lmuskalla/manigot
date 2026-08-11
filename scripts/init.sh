@@ -5,13 +5,14 @@ set -euo pipefail
 # mg init [--profile claude-pro|zai|opencode-go]   (legacy: --tool claude-code|opencode)
 #
 # Reached via `mg init`. Bootstraps a project for the manigot job workflow:
-# copies project-template/docs/ (AGENTS.md + CLAUDE.md, an empty jobs/, but NOT
-# the example job) into the current project if docs/ is absent, then optionally
-# hands off to the @prompter agent to write a good project context into
-# docs/AGENTS.md. Unlike every other job-workflow subcommand, init CREATES
-# docs/, so it deliberately does not use the "walk up to find docs/" gate — it
-# runs in uninitialized projects by design. Target dir resolution matches
-# run.sh's container-boundary fallback: git top-level if in a repo, else $PWD.
+# copies project-template/docs/ (AGENTS.md + CLAUDE.md + manigot.json, an empty
+# jobs/, but NOT the example job) into the current project if docs/ is absent,
+# then optionally hands off to the @prompter agent to write a good project
+# context into docs/AGENTS.md. Unlike every other job-workflow subcommand,
+# init CREATES docs/, so it deliberately does not use the "walk up to find
+# docs/" gate — it runs in uninitialized projects by design. Target dir
+# resolution matches run.sh's container-boundary fallback: git top-level if in
+# a repo, else $PWD.
 
 # ── Resolve repo ────────────────────────────────────────────────────────────────
 # Follow symlinks to the real script location — this is installed as a
@@ -34,7 +35,7 @@ if [[ ! -d "$TEMPLATE_DIR" ]]; then
     echo "Error: project template not found at $TEMPLATE_DIR." >&2
     exit 1
 fi
-for f in AGENTS.md CLAUDE.md; do
+for f in AGENTS.md CLAUDE.md manigot.json; do
     if [[ ! -f "$TEMPLATE_DIR/$f" ]]; then
         echo "Error: template file $TEMPLATE_DIR/$f is missing." >&2
         exit 1
@@ -79,19 +80,24 @@ TARGET="${TARGET%/}"
 DOCS_DIR="$TARGET/docs"
 
 # ── Copy template (unless already initialized) ──────────────────────────────────
-# Copy AGENTS.md and CLAUDE.md only — explicitly NOT the example job under
-# project-template/docs/jobs/6-char-random-id_title-of-job/. Keep an empty
-# docs/jobs/ so `mg job` is ready to go (the workflow expects docs/jobs/ to
-# exist; new-job.sh mkdir -p's each job dir beneath it).
+# Copy AGENTS.md, CLAUDE.md, and the seeded manigot.json (project settings,
+# e.g. baseBranch) — explicitly NOT the example job under
+# project-template/docs/jobs/<id>_<slug>/. Keep an empty docs/jobs/ so `mg
+# job` is ready to go (the workflow expects docs/jobs/ to exist; new-job.sh
+# mkdir -p's each job dir beneath it). Existing initialized projects are left
+# untouched: a docs/manigot.json they already maintain by hand wins over the
+# template default, and the TUI creates one on first save anyway.
 if [[ -e "$DOCS_DIR" ]]; then
     echo "  Docs     : $DOCS_DIR already exists — skipping template copy."
 else
     mkdir -p "$DOCS_DIR"
     cp "$TEMPLATE_DIR/AGENTS.md" "$DOCS_DIR/AGENTS.md"
     cp "$TEMPLATE_DIR/CLAUDE.md" "$DOCS_DIR/CLAUDE.md"
+    cp "$TEMPLATE_DIR/manigot.json" "$DOCS_DIR/manigot.json"
     mkdir -p "$DOCS_DIR/jobs"
     echo "  Created  : $DOCS_DIR/AGENTS.md"
     echo "            $DOCS_DIR/CLAUDE.md"
+    echo "            $DOCS_DIR/manigot.json (baseBranch: main)"
     echo "            $DOCS_DIR/jobs/ (empty)"
 fi
 

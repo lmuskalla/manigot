@@ -65,7 +65,9 @@ configured with `mg setup`.
   `docs/` too, same as bare `mg` — it just has no overrides to show.
 - `scripts/new-job.sh` — reached via `mg job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
-  `main` (regardless of the branch the user is currently on).
+  the configured base branch (regardless of the branch the user is currently
+  on). The base branch comes from `docs/manigot.json` (default `main`); the
+  `--base-branch <name>` flag overrides it for one invocation.
 - `scripts/finish-job.sh` — reached via `mg done`. Archives a finished job.
 - `scripts/delete-job.sh` — reached via `mg delete`. Permanently deletes a
   job: its directory under `docs/jobs/` and, when the job has a branch, the
@@ -76,11 +78,11 @@ configured with `mg setup`.
   same script, same behavior); wrapper around `bin/manigot-jdi`, mirroring
   `tui.sh` exactly.
 - `scripts/init.sh` — reached via `mg init`. Bootstraps a project for the job
-  workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, and an
-  empty `docs/jobs/` — never the example job under it) into the target
-  project's `docs/` if absent, reporting "already initialized" and skipping
-  the copy otherwise, then optionally hands off to `@prompter` (via
-  `run.sh`'s `--prompt` flag) to draft a concrete `docs/AGENTS.md`. Unlike
+  workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, a seeded
+  `manigot.json`, and an empty `docs/jobs/` — never the example job under it)
+  into the target project's `docs/` if absent, reporting "already initialized"
+  and skipping the copy otherwise, then optionally hands off to `@prompter`
+  (via `run.sh`'s `--prompt` flag) to draft a concrete `docs/AGENTS.md`. Unlike
   every other job-workflow subcommand, it deliberately works **without** an
   existing `docs/` — it's the one that creates it.
 - `tui/internal/resolve` — locates the host commands for the TUI (and
@@ -111,16 +113,29 @@ configured with `mg setup`.
   own at all — it starts fully detached, with the status badge and log tab as
   its only visibility, and the TUI itself rings the bell on its next poll
   when it notices the status transition into a stopped state.
-- `config/tui-settings.json` (gitignored) — local TUI preferences: which
-  editor opens `brief.md` and which subscription profile
-  (`claude-pro`/`zai`/`opencode-go`) agent launches use. Written by the TUI's
-  settings screen (`s` from the job list), read/written via
-  `tui/internal/config`. Missing is not an error —
+- `config/tui-settings.json` (gitignored) — local TUI **personal** preferences:
+  which editor opens `brief.md` and which subscription profile
+  (`claude-pro`/`zai`/`opencode-go`) agent launches use. Project-scoped
+  conventions (currently: the base branch) are NOT here — they live in the
+  target project's `docs/manigot.json` (see next bullet), so they travel with
+  the project and are shared across a team rather than being a per-user pref.
+  Written by the TUI's settings screen (`s` from the job list), read/written
+  via `tui/internal/config`. Missing is not an error —
   every reader falls back to defaults (`$VISUAL`/`$EDITOR`/`nano`/`vi` for the
   editor, `claude-pro` for the profile). This is the TUI's own default — it
   always passes `--profile` explicitly, independent of the `MANIGOT_PROFILE`
   default in `.env` set by `mg profiles`. A legacy `tool` field in the file is
   migrated on load (`claude-code`→`claude-pro`, `opencode`→`zai`).
+- `docs/manigot.json` (in the target project, committable) — project-scoped
+  manigot conventions, the project-level counterpart to the personal
+  `config/tui-settings.json`. Currently holds `baseBranch`: the ref new job
+  branches are cut from (`scripts/new-job.sh`) and the TUI list view's "m"
+  quick-checkout lands on, defaulting to `main` when unset. Read by the TUI
+  (via `tui/internal/project`, loaded at startup and on ctrl+r refresh) and
+  by `scripts/new-job.sh` directly (guarded single-key `sed` extraction — no
+  `jq` dependency yet). Seeded by `mg init` and created on first TUI settings
+  save; contains only a public ref name, no secrets, so it's meant to be
+  committed and shared across a team.
 - `manigot/.env` (gitignored) — holds credentials and defaults for the
   profiles: `CLAUDE_CODE_OAUTH_TOKEN`/`CLAUDE_ACCOUNT_UUID`/`CLAUDE_EMAIL`/
   `CLAUDE_ORG_UUID` (claude-pro), `ZHIPU_API_KEY` + `OPENCODE_ZAI_MODEL`
@@ -184,7 +199,9 @@ configured with `mg setup`.
 - `mg init [--profile <name>]` — bootstrap a project for the job
   workflow (creates `docs/` if absent, optionally hands off to `@prompter`);
   the only job-workflow command that works without an existing `docs/`
-- `mg job "<title>" [--type fix|chore]` — create a job dir + branch
+- `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
+  dir + branch (the branch is cut from the configured base branch — see
+  `docs/manigot.json`; `--base-branch` overrides it for one invocation)
 - `mg done <id>` — archive a finished job
 - `mg delete <id>` — permanently delete a job (directory + branch, no merge)
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
