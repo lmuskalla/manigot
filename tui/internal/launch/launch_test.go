@@ -9,8 +9,8 @@ import (
 )
 
 func TestShellCommandFormat(t *testing.T) {
-	got := shellCommand("/usr/local/bin/manigot", "developer", "irw320", "/home/me/proj", "claude-code")
-	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --tool 'claude-code' --agent 'developer' --job 'irw320'"
+	got := shellCommand("/usr/local/bin/manigot", "developer", "irw320", "/home/me/proj", "claude-pro")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --profile 'claude-pro' --agent 'developer' --job 'irw320'"
 	if !strings.HasPrefix(got, wantInner) {
 		t.Errorf("shellCommand =\n %q\nwant prefix\n %q", got, wantInner)
 	}
@@ -24,8 +24,8 @@ func TestShellCommandFormat(t *testing.T) {
 // --- quick (bare-session) launcher ------------------------------------------
 
 func TestQuickShellCommandFormat(t *testing.T) {
-	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-code")
-	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --tool 'claude-code'"
+	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-pro")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' --profile 'claude-pro'"
 	if !strings.HasPrefix(got, wantInner) {
 		t.Errorf("quickShellCommand =\n %q\nwant prefix\n %q", got, wantInner)
 	}
@@ -38,7 +38,7 @@ func TestQuickShellCommandFormat(t *testing.T) {
 // A bare session must never carry --agent or --job — that's the whole point of
 // the quick launch path.
 func TestQuickShellCommandOmitsAgentAndJob(t *testing.T) {
-	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-code")
+	got := quickShellCommand("/usr/local/bin/manigot", "/home/me/proj", "claude-pro")
 	if strings.Contains(got, "--agent") {
 		t.Errorf("quickShellCommand unexpectedly contains --agent: %q", got)
 	}
@@ -47,44 +47,44 @@ func TestQuickShellCommandOmitsAgentAndJob(t *testing.T) {
 	}
 }
 
-// An empty tool must default to claude-code, mirroring the agent path and
+// An empty profile must default to claude-pro, mirroring the agent path and
 // scripts/run.sh's own default.
-func TestQuickShellCommandDefaultsEmptyTool(t *testing.T) {
+func TestQuickShellCommandDefaultsEmptyProfile(t *testing.T) {
 	got := quickShellCommand("/bin/manigot", "/home/me/proj", "")
-	if !strings.Contains(got, "--tool 'claude-code'") {
-		t.Errorf("quickShellCommand with empty tool = %q, want it to default to claude-code", got)
+	if !strings.Contains(got, "--profile 'claude-pro'") {
+		t.Errorf("quickShellCommand with empty profile = %q, want it to default to claude-pro", got)
 	}
 }
 
-func TestQuickShellCommandPassesOpencodeTool(t *testing.T) {
-	got := quickShellCommand("/bin/manigot", "/home/me/proj", "opencode")
-	if !strings.Contains(got, "--tool 'opencode'") {
-		t.Errorf("quickShellCommand with opencode tool = %q, want --tool 'opencode'", got)
+func TestQuickShellCommandPassesZAIProfile(t *testing.T) {
+	got := quickShellCommand("/bin/manigot", "/home/me/proj", "zai")
+	if !strings.Contains(got, "--profile 'zai'") {
+		t.Errorf("quickShellCommand with zai profile = %q, want --profile 'zai'", got)
 	}
 }
 
 // A checkout in a directory with spaces must still produce a single word for
 // the manigot path, since the string is re-parsed by osascript / bash -lc.
 func TestQuickShellCommandQuotesPathWithSpaces(t *testing.T) {
-	got := quickShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "/tmp/p", "claude-code")
+	got := quickShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "/tmp/p", "claude-pro")
 	if !strings.Contains(got, `'/Users/me/My Projects/manigot/scripts/run.sh'`) {
 		t.Errorf("manigot path not quoted as one word in %q", got)
 	}
 }
 
-// An empty tool must default to claude-code, matching scripts/run.sh's own
-// default, rather than passing an empty --tool value through.
-func TestShellCommandDefaultsEmptyTool(t *testing.T) {
+// An empty profile must default to claude-pro, matching scripts/run.sh's own
+// default, rather than passing an empty --profile value through.
+func TestShellCommandDefaultsEmptyProfile(t *testing.T) {
 	got := shellCommand("/bin/manigot", "developer", "irw320", "/home/me/proj", "")
-	if !strings.Contains(got, "--tool 'claude-code'") {
-		t.Errorf("shellCommand with empty tool = %q, want it to default to claude-code", got)
+	if !strings.Contains(got, "--profile 'claude-pro'") {
+		t.Errorf("shellCommand with empty profile = %q, want it to default to claude-pro", got)
 	}
 }
 
-func TestShellCommandPassesOpencodeTool(t *testing.T) {
-	got := shellCommand("/bin/manigot", "developer", "irw320", "/home/me/proj", "opencode")
-	if !strings.Contains(got, "--tool 'opencode'") {
-		t.Errorf("shellCommand with opencode tool = %q, want --tool 'opencode'", got)
+func TestShellCommandPassesZAIProfile(t *testing.T) {
+	got := shellCommand("/bin/manigot", "developer", "irw320", "/home/me/proj", "zai")
+	if !strings.Contains(got, "--profile 'zai'") {
+		t.Errorf("shellCommand with zai profile = %q, want --profile 'zai'", got)
 	}
 }
 
@@ -159,10 +159,426 @@ func TestShellQuoteNeutralizesInjection(t *testing.T) {
 
 func TestShellCommandQuoteEscape(t *testing.T) {
 	// A projectRoot with a quote still ends up as one safe argument.
-	got := shellCommand("/bin/manigot", "a", "b", "/path/with'quote", "claude-code")
+	got := shellCommand("/bin/manigot", "a", "b", "/path/with'quote", "claude-pro")
 	// The root must appear escaped, not as a raw close-quote.
 	if !strings.Contains(got, `'/path/with'\''quote'`) {
 		t.Errorf("root quote not escaped in %q", got)
+	}
+}
+
+// --- tmux split-pane construction (TASK-2) -----------------------------
+
+// TestBuildCmdTmuxUsesSplitWindow confirms buildCmd's tmux branch runs
+// `tmux split-window -h -p 35` (side-by-side, new pane sized to 35% of the
+// window so the TUI's own pane keeps the majority share — TASK-1 scope
+// decision) rather than `tmux new-window`, and describes the result as a
+// "tmux pane". The -P -F '#{pane_id}' flags are TASK-3's replace-policy
+// plumbing: they make the split-window client print the new pane's id, which
+// launchTmuxPane records and tags (select-pane -T — split-window itself has
+// no -T on any released tmux, so tagging is deliberately not constructed
+// here). This only exercises the command *construction*; it stubs `tmux` on
+// PATH rather than running a real tmux server, so it cannot verify the pane
+// actually lands next to the TUI at runtime — see TASK-2's own risk note and
+// TASK-4/TASK-5's manual-verification caveat for that gap.
+func TestBuildCmdTmuxUsesSplitWindow(t *testing.T) {
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "tmux")
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
+
+	cmd, desc, err := buildCmd("echo hi")
+	if err != nil {
+		t.Fatalf("buildCmd: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if cmd.Path != stub {
+		t.Errorf("cmd.Path = %q, want %q (resolved tmux binary)", cmd.Path, stub)
+	}
+	want := []string{"tmux", "split-window", "-h", "-p", "35", "-P", "-F", "#{pane_id}", "echo hi"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, want)
+	}
+	for i, a := range want {
+		if cmd.Args[i] != a {
+			t.Errorf("cmd.Args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], a, cmd.Args)
+		}
+	}
+}
+
+// --- tmux replace/reuse tracking (TASK-3, TASK-5) ----------------------
+
+// tmuxStub is a fake `tmux` binary used to exercise the replace/reuse
+// tracking logic without a real tmux server. It records every invocation to a
+// log file (so tests can assert both the content and the order of the commands
+// manigot *runs*) and answers like a minimal tmux:
+//
+//   - list-panes prints the contents of panesFile verbatim — each line is one
+//     "<pane_id> <pane_title>", matching what `list-panes -s -F '#{pane_id}
+//     #{pane_title}'` prints in a real tmux.
+//   - split-window prints the next "%N" pane id (from an incrementing
+//     counterFile, starting at %100 so ids never collide with the listed
+//     panes), matching what `-P -F '#{pane_id}'` prints for a real split.
+//   - select-pane does nothing, unless TMUX_STUB_SELECT_PANE_FAIL (exit 1 —
+//     the "tagging failed but the pane is live" case) is set.
+//   - kill-pane does nothing, unless TMUX_STUB_KILL_FAIL (exit 1 — the "user
+//     already closed the pane" case) or TMUX_STUB_SPLIT_FAIL (exit 1 — the
+//     "tmux is broken" case for split-window) is set.
+//
+// Like the existing TestJdiStartsResolvedCommandDetached stub, this can only
+// confirm that the commands manigot runs are the right ones — real tmux
+// session behavior (actual pane creation/listing/killing) cannot be verified
+// without a live tmux server, which this environment does not have (TASK-5
+// risk note).
+type tmuxStub struct {
+	log     string
+	panes   string
+	counter string
+	path    string
+}
+
+func newTmuxStub(t *testing.T) *tmuxStub {
+	t.Helper()
+	dir := t.TempDir()
+	s := &tmuxStub{
+		log:     filepath.Join(dir, "calls.log"),
+		panes:   filepath.Join(dir, "panes.txt"),
+		counter: filepath.Join(dir, "counter.txt"),
+		path:    filepath.Join(dir, "tmux"),
+	}
+	script := "#!/bin/sh\n" +
+		"echo \"$@\" >> '" + s.log + "'\n" +
+		"case \"$1\" in\n" +
+		// Only shell builtins below: PATH is set to the stub dir alone (so
+		// exec.LookPath("tmux") resolves the stub, not a real tmux), so any
+		// external command would not be found.
+		"  list-panes) while read -r line; do echo \"$line\"; done < '" + s.panes + "' ;;\n" +
+		"  split-window) [ -n \"$TMUX_STUB_SPLIT_FAIL\" ] && exit 1; n=0; [ -f '" + s.counter + "' ] && read -r n < '" + s.counter + "'; n=$((n+1)); echo \"$n\" > '" + s.counter + "'; echo \"%$n\" ;;\n" +
+		"  kill-pane) [ -n \"$TMUX_STUB_KILL_FAIL\" ] && exit 1 ;;\n" +
+		"  select-pane) [ -n \"$TMUX_STUB_SELECT_PANE_FAIL\" ] && exit 1 ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(s.path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Empty panes file (list-panes succeeds but lists nothing) and a counter
+	// starting at 99, so the first split prints %100 — never colliding with
+	// the small ids tests use for the panes they list.
+	if err := os.WriteFile(s.panes, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.counter, []byte("99"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
+	return s
+}
+
+// setPanes replaces the pane listing list-panes will print. Each line is one
+// pane: "<pane_id> <pane_title>".
+func (s *tmuxStub) setPanes(lines ...string) {
+	content := strings.Join(lines, "\n")
+	if content != "" {
+		content += "\n"
+	}
+	if err := os.WriteFile(s.panes, []byte(content), 0o644); err != nil {
+		panic(err)
+	}
+}
+
+// calls returns the recorded invocation log, one `tmux ...` line per call.
+func (s *tmuxStub) calls() string {
+	raw, err := os.ReadFile(s.log)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// indexCalls returns the byte offset of needle in the invocation log, or -1.
+func (s *tmuxStub) indexCalls(needle string) int {
+	return strings.Index(s.calls(), needle)
+}
+
+// TestKillPreviousTmuxPaneKillsTrackedAndTaggedOnly is the core safety test
+// for the replace policy's "must never kill a pane it didn't itself open":
+// the previously tracked pane id and every pane whose title is tmuxPaneTag
+// are killed, and nothing else in the session is touched.
+func TestKillPreviousTmuxPaneKillsTrackedAndTaggedOnly(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = "%1" // tracked from a previous launch in this TUI process
+	stub.setPanes(
+		"%2 "+tmuxPaneTag, // tagged — must be killed
+		"%3 other pane",   // untagged — must be left alone
+		"%4",              // no title at all — must be left alone
+	)
+
+	if err := killPreviousTmuxPane(); err != nil {
+		t.Fatalf("killPreviousTmuxPane: %v", err)
+	}
+	calls := stub.calls()
+	for _, want := range []string{
+		"list-panes -s -F #{pane_id} #{pane_title}",
+		"kill-pane -t %1",
+		"kill-pane -t %2",
+	} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("missing %q in stub call log:\n%s", want, calls)
+		}
+	}
+	for _, not := range []string{"kill-pane -t %3", "kill-pane -t %4"} {
+		if strings.Contains(calls, not) {
+			t.Errorf("unexpectedly killed a pane manigot did not open (%q):\n%s", not, calls)
+		}
+	}
+}
+
+// TestKillPreviousTmuxPaneSkipsWhenNothingToReplace: with no tracked pane and
+// no tagged pane in the session, replace must be a complete no-op — not a
+// single kill-pane. Also exercises the empty list-panes output edge case.
+func TestKillPreviousTmuxPaneSkipsWhenNothingToReplace(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+	stub.setPanes("%9 unrelated")
+
+	if err := killPreviousTmuxPane(); err != nil {
+		t.Fatalf("killPreviousTmuxPane: %v", err)
+	}
+	if strings.Contains(stub.calls(), "kill-pane") {
+		t.Errorf("kill-pane called with nothing to replace:\n%s", stub.calls())
+	}
+}
+
+// TestKillPreviousTmuxPaneToleratesAlreadyClosedPane: a kill-pane failure
+// (the user closed the pane themselves in the meantime) is not an error — it
+// is the tolerated no-op case from TASK-3.
+func TestKillPreviousTmuxPaneToleratesAlreadyClosedPane(t *testing.T) {
+	newTmuxStub(t) // sets up the stubbed tmux on PATH + $TMUX; no panes listed
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = "%1"
+	t.Setenv("TMUX_STUB_KILL_FAIL", "1")
+
+	if err := killPreviousTmuxPane(); err != nil {
+		t.Fatalf("killPreviousTmuxPane should tolerate a missing pane, got: %v", err)
+	}
+}
+
+// TestKillPreviousTmuxPaneListFailure: when tmux cannot list panes at all,
+// the error is surfaced so the caller can decide — launchTmuxPane continues
+// anyway (see TestLaunchTmuxPaneContinuesAfterListFailure).
+func TestKillPreviousTmuxPaneListFailure(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+	if err := os.Remove(stub.panes); err != nil {
+		t.Fatal(err) // a missing file makes the stub's `cat` fail, like a real tmux error
+	}
+
+	err := killPreviousTmuxPane()
+	if err == nil {
+		t.Fatal("expected an error when list-panes fails")
+	}
+	if !strings.Contains(err.Error(), "list-panes") {
+		t.Errorf("error should mention list-panes, got: %v", err)
+	}
+}
+
+// TestLaunchTmuxPaneReplacesBeforeSplittingAndRecordsPaneID exercises the
+// whole TASK-3 sequence: the previous manigot pane (identified by its title
+// tag — a fresh TUI process has no tracked id) is killed before the new
+// split, the new pane's id (printed by split-window -P) is tagged via
+// select-pane -T (the replace-policy tag survives a TUI restart) and recorded
+// for the next replace. The log's ordering proves kill-before-split and
+// tag-after-split, and that select-pane targets only the pane just created.
+func TestLaunchTmuxPaneReplacesBeforeSplittingAndRecordsPaneID(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = "" // fresh TUI process: only the tag identifies the old pane
+	stub.setPanes("%1 " + tmuxPaneTag)
+
+	desc, err := launchTmuxPane("echo hi")
+	if err != nil {
+		t.Fatalf("launchTmuxPane: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if tmuxLastPaneID != "%100" {
+		t.Errorf("tmuxLastPaneID = %q, want %q (the id split-window printed)", tmuxLastPaneID, "%100")
+	}
+	calls := stub.calls()
+	if !strings.Contains(calls, "kill-pane -t %1") {
+		t.Errorf("previous tagged pane not killed:\n%s", calls)
+	}
+	if !strings.Contains(calls, "split-window -h -p 35 -P -F #{pane_id} echo hi") {
+		t.Errorf("split-window invocation missing or wrong:\n%s", calls)
+	}
+	// The tag must be applied with select-pane (split-window has no -T on any
+	// released tmux), to the pane the split just created — %100 — and to no
+	// other pane. ("-t %1 -T" rather than "-t %1" so the %100 line cannot
+	// false-positive the check.)
+	if !strings.Contains(calls, "select-pane -t %100 -T manigot") {
+		t.Errorf("select-pane tagging of the new pane missing or wrong:\n%s", calls)
+	}
+	if strings.Contains(calls, "select-pane -t %1 -T") {
+		t.Errorf("select-pane tagged the previous pane instead of the new one:\n%s", calls)
+	}
+	if i, j := stub.indexCalls("kill-pane -t %1"), stub.indexCalls("split-window"); i < 0 || j < 0 || i > j {
+		t.Errorf("kill-pane (%d) must precede split-window (%d):\n%s", i, j, calls)
+	}
+	if i, j := stub.indexCalls("split-window"), stub.indexCalls("select-pane"); i < 0 || j < 0 || i > j {
+		t.Errorf("split-window (%d) must precede select-pane (%d):\n%s", i, j, calls)
+	}
+}
+
+// TestLaunchTmuxPaneSecondLaunchReplacesRecordedPane: two launches through
+// launchTmuxPane — the second must kill the pane the first recorded (by id).
+// This is the case the in-memory tracking exists for: the running agent may
+// have overwritten the pane title in the meantime, so the tag alone could not
+// find it.
+func TestLaunchTmuxPaneSecondLaunchReplacesRecordedPane(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	if _, err := launchTmuxPane("echo one"); err != nil {
+		t.Fatalf("first launchTmuxPane: %v", err)
+	}
+	first := tmuxLastPaneID
+	if first == "" {
+		t.Fatal("first launch did not record a pane id")
+	}
+
+	// The old pane no longer appears tagged in list-panes (as if the running
+	// agent retitled it) — only the in-memory id can find it now.
+	stub.setPanes("%9 unrelated")
+	if _, err := launchTmuxPane("echo two"); err != nil {
+		t.Fatalf("second launchTmuxPane: %v", err)
+	}
+	if want := "kill-pane -t " + first; !strings.Contains(stub.calls(), want) {
+		t.Errorf("second launch did not kill the recorded pane %s:\n%s", first, stub.calls())
+	}
+}
+
+// TestLaunchTmuxPaneContinuesAfterListFailure documents the best-effort
+// replace decision from TASK-3: a list-panes failure must not abort the new
+// launch — if tmux is in a state where list-panes fails, the split below will
+// fail with the accurate error instead.
+func TestLaunchTmuxPaneContinuesAfterListFailure(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+	if err := os.Remove(stub.panes); err != nil {
+		t.Fatal(err)
+	}
+
+	desc, err := launchTmuxPane("echo hi")
+	if err != nil {
+		t.Fatalf("launchTmuxPane should continue after list-panes failure, got: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if tmuxLastPaneID == "" {
+		t.Error("launch succeeded but no pane id was recorded")
+	}
+}
+
+// TestLaunchTmuxPaneSplitFailureReturnsError: a split-window failure (the
+// tmux server is gone, say) is surfaced as the launch error.
+func TestLaunchTmuxPaneSplitFailureReturnsError(t *testing.T) {
+	newTmuxStub(t) // sets up the stubbed tmux on PATH + $TMUX; no panes listed
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+	t.Setenv("TMUX_STUB_SPLIT_FAIL", "1")
+
+	_, err := launchTmuxPane("echo hi")
+	if err == nil {
+		t.Fatal("expected an error when split-window fails")
+	}
+	if !strings.Contains(err.Error(), "tmux pane") {
+		t.Errorf("error should say where the launch was attempted, got: %v", err)
+	}
+}
+
+// TestLaunchDetachedRoutesToTmuxPane: with $TMUX set and a tmux binary on
+// PATH, launchDetached (the shared tail of Agent and Quick) must route to the
+// synchronous tmux-pane path rather than the detached terminal-emulator tail.
+func TestLaunchDetachedRoutesToTmuxPane(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	desc, err := launchDetached("echo hi")
+	if err != nil {
+		t.Fatalf("launchDetached: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if !strings.Contains(stub.calls(), "split-window -h -p 35 -P -F #{pane_id} echo hi") {
+		t.Errorf("tmux split-window not invoked via launchDetached:\n%s", stub.calls())
+	}
+}
+
+// TestLaunchTmuxPaneContinuesAfterSelectPaneFailure documents the best-effort
+// tagging decision from the TASK-2/TASK-3 rework: the pane is already live and
+// the in-memory tmuxLastPaneID covers replacement within this TUI process, so
+// a select-pane -T failure (the tag that would survive a TUI restart) must not
+// abort a launch that already succeeded.
+func TestLaunchTmuxPaneContinuesAfterSelectPaneFailure(t *testing.T) {
+	newTmuxStub(t) // sets up the stubbed tmux on PATH + $TMUX; no panes listed
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+	t.Setenv("TMUX_STUB_SELECT_PANE_FAIL", "1")
+
+	desc, err := launchTmuxPane("echo hi")
+	if err != nil {
+		t.Fatalf("launchTmuxPane should continue after select-pane failure, got: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if tmuxLastPaneID == "" {
+		t.Error("launch succeeded but no pane id was recorded")
+	}
+}
+
+// TestAgentAndQuickShareOneTrackedPane is the requirement behind "a single
+// shared tracked pane across both launch.Agent and launch.Quick": a Quick
+// launch after an Agent launch must replace the pane the Agent opened, so at
+// most one manigot pane exists regardless of which entry point opened it.
+func TestAgentAndQuickShareOneTrackedPane(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	manigot := filepath.Join(t.TempDir(), "manigot")
+	if err := os.WriteFile(manigot, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MANIGOT_BIN", manigot)
+	root := t.TempDir()
+
+	if _, err := Agent("developer", "t5oc4j", root, "claude-pro"); err != nil {
+		t.Fatalf("Agent: %v", err)
+	}
+	agentPane := tmuxLastPaneID
+	if agentPane == "" {
+		t.Fatal("Agent launch did not record a pane id")
+	}
+
+	if _, err := Quick(root, "claude-pro"); err != nil {
+		t.Fatalf("Quick: %v", err)
+	}
+	if want := "kill-pane -t " + agentPane; !strings.Contains(stub.calls(), want) {
+		t.Errorf("Quick launch did not replace the pane Agent opened (%s):\n%s", agentPane, stub.calls())
 	}
 }
 

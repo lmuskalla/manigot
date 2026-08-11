@@ -32,7 +32,7 @@ func TestSettingsTabTogglesFocus(t *testing.T) {
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != 1 {
-		t.Errorf("after tab, focus = %d, want 1 (tool)", v.focus)
+		t.Errorf("after tab, focus = %d, want 1 (profile)", v.focus)
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != 0 {
@@ -47,7 +47,7 @@ func TestSettingsShiftTabTogglesFocusBackward(t *testing.T) {
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != 1 {
-		t.Errorf("after shift+tab, focus = %d, want 1 (tool)", v.focus)
+		t.Errorf("after shift+tab, focus = %d, want 1 (profile)", v.focus)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != 0 {
@@ -55,29 +55,33 @@ func TestSettingsShiftTabTogglesFocusBackward(t *testing.T) {
 	}
 }
 
-func TestSettingsToolCycleOnlyWhenToolFocused(t *testing.T) {
+func TestSettingsProfileCycleOnlyWhenProfileFocused(t *testing.T) {
 	v := newSettingsView(config.Settings{}, 80, 24)
-	// focus on editor: left/right must not change the tool.
-	before := v.tool
+	// focus on editor: left/right must not change the profile.
+	before := v.profile
 	v.update(key(t, tea.KeyRight))
-	if v.tool != before {
-		t.Errorf("left/right while editor focused changed tool: %d -> %d", before, v.tool)
+	if v.profile != before {
+		t.Errorf("left/right while editor focused changed profile: %d -> %d", before, v.profile)
 	}
 
-	// focus on tool: right cycles claude-code -> opencode -> claude-code.
-	v.update(key(t, tea.KeyTab)) // now focus == tool
+	// focus on profile: right cycles claude-pro -> zai -> opencode-go -> claude-pro.
+	v.update(key(t, tea.KeyTab)) // now focus == profile
 	v.update(key(t, tea.KeyRight))
-	if got := v.settingsValue().Tool; got != config.ToolOpenCode {
-		t.Errorf("after right: tool = %q, want %q", got, config.ToolOpenCode)
+	if got := v.settingsValue().Profile; got != config.ProfileZAI {
+		t.Errorf("after right: profile = %q, want %q", got, config.ProfileZAI)
 	}
 	v.update(key(t, tea.KeyRight))
-	if got := v.settingsValue().Tool; got != config.ToolClaudeCode {
-		t.Errorf("after right wrap: tool = %q, want %q", got, config.ToolClaudeCode)
+	if got := v.settingsValue().Profile; got != config.ProfileOpenCodeGo {
+		t.Errorf("after right: profile = %q, want %q", got, config.ProfileOpenCodeGo)
+	}
+	v.update(key(t, tea.KeyRight))
+	if got := v.settingsValue().Profile; got != config.ProfileClaudePro {
+		t.Errorf("after right wrap: profile = %q, want %q", got, config.ProfileClaudePro)
 	}
 	// left cycles backwards.
 	v.update(key(t, tea.KeyLeft))
-	if got := v.settingsValue().Tool; got != config.ToolOpenCode {
-		t.Errorf("after left: tool = %q, want %q", got, config.ToolOpenCode)
+	if got := v.settingsValue().Profile; got != config.ProfileOpenCodeGo {
+		t.Errorf("after left: profile = %q, want %q", got, config.ProfileOpenCodeGo)
 	}
 }
 
@@ -93,7 +97,7 @@ func TestSettingsRender(t *testing.T) {
 	v := newSettingsView(config.Settings{}, 80, 24)
 	v.update(key(t, tea.KeyRunes, 'a', 'b', 'c'))
 	out := v.render()
-	for _, want := range []string{"Editor:", "claude-code", "opencode", "abc"} {
+	for _, want := range []string{"Editor:", "claude-pro", "zai", "opencode-go", "abc", "Profile"} {
 		if !contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}

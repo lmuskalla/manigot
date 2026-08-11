@@ -45,7 +45,8 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 # Claude Code
 RUN npm install -g @anthropic-ai/claude-code
 
-# OpenCode — alternative agent CLI, selected at runtime with `mg --tool opencode`.
+# OpenCode — alternative agent CLI, selected at runtime by an opencode profile
+# (e.g. `mg --profile zai` / `mg --profile opencode-go`).
 # The npm package pulls the matching prebuilt binary via optional platform deps.
 RUN npm install -g opencode-ai
 

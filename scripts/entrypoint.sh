@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Which agent CLI to start — set by run.sh from its --tool flag.
+# Which agent CLI to start — set by run.sh from the resolved session profile
+# (MANIGOT_TOOL: claude-code or opencode).
 TOOL="${MANIGOT_TOOL:-claude-code}"
 
 if [[ "$TOOL" == "claude-code" ]]; then
@@ -105,6 +106,14 @@ git config --global user.name  "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"
 
 git config --global --add safe.directory /workspace
+
+# --print mode expects a clean stdout stream (see run.sh and the
+# --output-format json branch below) — this thematic line is purely
+# cosmetic, so it's skipped there rather than risking a caller mis-parsing
+# it as part of the agent's own output.
+if [[ "${MANIGOT_PRINT:-false}" != "true" ]]; then
+    echo "Starting session — you're made, welcome to the crew."
+fi
 
 if [[ "$TOOL" == "opencode" ]]; then
     exec opencode "$@"

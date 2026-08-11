@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ── Usage ───────────────────────────────────────────────────────────────────────
-# mg init [--tool claude-code|opencode]
+# mg init [--profile claude-pro|zai|opencode-go]   (legacy: --tool claude-code|opencode)
 #
 # Reached via `mg init`. Bootstraps a project for the manigot job workflow:
 # copies project-template/docs/ (AGENTS.md + CLAUDE.md, an empty jobs/, but NOT
@@ -42,16 +42,28 @@ for f in AGENTS.md CLAUDE.md; do
 done
 
 # ── Parse args ──────────────────────────────────────────────────────────────────
+# --profile is the canonical selector. --tool is a legacy alias, mapped to the
+# matching profile: claude-code → claude-pro, opencode → zai (the opencode
+# subscription manigot configured first). When neither is given, run.sh falls
+# back to the default profile set by `mg profiles`.
 TOOL=""
+PROFILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --tool) TOOL="$2"; shift 2 ;;
+        --tool)    TOOL="$2";    shift 2 ;;
+        --profile) PROFILE="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
-if [[ -n "$TOOL" ]]; then
+if [[ -n "$PROFILE" ]]; then
+    case "$PROFILE" in
+        claude-pro|zai|opencode-go) ;;
+        *) echo "Error: --profile must be 'claude-pro', 'zai' or 'opencode-go' (got '$PROFILE')." >&2; exit 1 ;;
+    esac
+elif [[ -n "$TOOL" ]]; then
     case "$TOOL" in
-        claude-code|opencode) ;;
+        claude-code) PROFILE="claude-pro" ;;
+        opencode)    PROFILE="zai" ;;
         *) echo "Error: --tool must be 'claude-code' or 'opencode' (got '$TOOL')." >&2; exit 1 ;;
     esac
 fi
@@ -105,9 +117,9 @@ if [[ "$RUN_PROMPTER" == "yes" ]]; then
     INSTRUCTION="Read this project at /workspace — its directory structure, README, config files, package manifests, build/test commands, and key source files — then rewrite /workspace/docs/AGENTS.md as a clear, specific project context. Keep the existing section structure (the title, the brief description, and the ## Stack, ## Architecture, ## Commands, ## Hard rules headings) and fill each one in with concrete, accurate details about THIS project, replacing the placeholder text. Write it tool-neutral (for \"the agent\", not one vendor) and keep it concise. Do not invent things you cannot verify from the project; where the project doesn't dictate a value, leave a short explicit placeholder rather than guessing."
 
     echo "  Launching @prompter to write your project context…"
-    TOOL_ARGS=()
-    [[ -n "$TOOL" ]] && TOOL_ARGS=(--tool "$TOOL")
-    exec "$SCRIPT_DIR/run.sh" --agent prompter --prompt "$INSTRUCTION" "${TOOL_ARGS[@]+"${TOOL_ARGS[@]}"}"
+    PROFILE_ARGS=()
+    [[ -n "$PROFILE" ]] && PROFILE_ARGS=(--profile "$PROFILE")
+    exec "$SCRIPT_DIR/run.sh" --agent prompter --prompt "$INSTRUCTION" "${PROFILE_ARGS[@]+"${PROFILE_ARGS[@]}"}"
 fi
 
 # ── Next steps ──────────────────────────────────────────────────────────────────

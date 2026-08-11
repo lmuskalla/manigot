@@ -1,8 +1,9 @@
 // Package config persists local TUI preferences across sessions: which
-// editor to open brief.md in, and which agent tool (Claude Code or OpenCode)
-// launch.Agent starts. The settings screen (see ui/settings.go) is the only
-// writer; every other reader treats a missing or unreadable file as "use the
-// defaults" rather than an error.
+// editor to open brief.md in, and which subscription profile (a bundle of
+// agent CLI + credentials + model) launch.Agent starts a session under. The
+// settings screen (see ui/settings.go) is the only writer; every other reader
+// treats a missing or unreadable file as "use the defaults" rather than an
+// error.
 package config
 
 import (
@@ -14,12 +15,84 @@ import (
 	"github.com/lmuskalla/manigot/tui/internal/resolve"
 )
 
-// ToolClaudeCode and ToolOpenCode are the values Settings.Tool holds and the
-// values accepted by scripts/run.sh's --tool flag.
+// ToolClaudeCode and ToolOpenCode are the legacy tool values once held by
+// Settings.Tool (and still accepted by scripts/run.sh's --tool flag). They are
+// kept for migration and for the run.sh contract; new code should use
+// Profiles instead.
 const (
 	ToolClaudeCode = "claude-code"
 	ToolOpenCode   = "opencode"
 )
+
+// ProfileClaudePro, ProfileZAI and ProfileOpenCodeGo are the three supported
+// subscription profiles: Settings.Profile holds one of them, and scripts/run.sh
+// accepts them as --profile values. Keep the IDs in sync with the profile
+// table in scripts/run.sh.
+const (
+	ProfileClaudePro  = "claude-pro"
+	ProfileZAI        = "zai"
+	ProfileOpenCodeGo = "opencode-go"
+)
+
+// Profile describes one of the subscription profiles manigot can run a session
+// under. Each profile bundles the agent CLI to launch, the credentials it is
+// billed against, and the model the CLI should default to — the whole point is
+// that switching profile, not tool, is what changes which subscription is used.
+type Profile struct {
+	// ID is the value Settings.Profile and scripts/run.sh's --profile flag
+	// hold: ProfileClaudePro, ProfileZAI or ProfileOpenCodeGo.
+	ID string
+
+	// Label is a short human name for the settings screen and help text.
+	Label string
+
+	// Tool is the agent CLI this profile launches: ToolClaudeCode or
+	// ToolOpenCode.
+	Tool string
+
+	// Model is the provider/model the opencode profiles default to (empty for
+	// claude-pro, which uses whatever model Claude Code itself defaults to).
+	// The same value is exposed as OPENCODE_MODEL inside the container.
+	Model string
+
+	// Auth names the credential the profile is billed against, for display in
+	// the settings screen and setup help.
+	Auth string
+}
+
+// Profiles is the ordered list of subscription profiles, in the order the TUI
+// settings screen cycles them. Keep the IDs and models in sync with the
+// profile table in scripts/run.sh.
+var profiles = []Profile{
+	{ID: ProfileClaudePro, Label: "Claude Code · Claude Pro", Tool: ToolClaudeCode, Model: "", Auth: "Claude Pro OAuth"},
+	{ID: ProfileZAI, Label: "OpenCode · Z.AI Coding Plan", Tool: ToolOpenCode, Model: "zai-coding-plan/glm-5.2", Auth: "ZHIPU_API_KEY"},
+	{ID: ProfileOpenCodeGo, Label: "OpenCode · Go", Tool: ToolOpenCode, Model: "opencode-go/glm-5.2", Auth: "OPENCODE_API_KEY"},
+}
+
+// Profiles returns the supported subscription profiles. The slice is built
+// fresh so a caller cannot mutate the shared table.
+func Profiles() []Profile {
+	return append([]Profile(nil), profiles...)
+}
+
+// ProfileByID returns the profile with the given ID.
+func ProfileByID(id string) (Profile, bool) {
+	for _, p := range profiles {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return Profile{}, false
+}
+
+// ProfileTool returns the agent CLI a profile runs, defaulting to
+// ToolClaudeCode for an unrecognized ID.
+func ProfileTool(id string) string {
+	if p, ok := ProfileByID(id); ok {
+		return p.Tool
+	}
+	return ToolClaudeCode
+}
 
 // Settings holds the TUI's persisted preferences.
 type Settings struct {
@@ -28,18 +101,23 @@ type Settings struct {
 	// $VISUAL/$EDITOR/nano/vi — see editor.Resolve.
 	Editor string `json:"editor"`
 
-	// Tool selects the agent CLI launch.Agent starts: ToolClaudeCode or
-	// ToolOpenCode. Empty is treated as ToolClaudeCode, matching
-	// scripts/run.sh's own default — see ToolValue.
-	Tool string `json:"tool"`
+	// Profile selects the subscription profile launch.Agent/Quick use:
+	// ProfileClaudePro, ProfileZAI or ProfileOpenCodeGo. Empty is treated as
+	// ProfileClaudePro — see ProfileValue.
+	Profile string `json:"profile,omitempty"`
+
+	// Tool is the legacy pre-profile selector (ToolClaudeCode/ToolOpenCode),
+	// kept only so old tui-settings.json files load. It is migrated into
+	// Profile by Load and never written back.
+	Tool string `json:"tool,omitempty"`
 }
 
-// ToolValue returns s.Tool, defaulting to ToolClaudeCode when unset.
-func (s Settings) ToolValue() string {
-	if s.Tool == "" {
-		return ToolClaudeCode
+// ProfileValue returns s.Profile, defaulting to ProfileClaudePro when unset.
+func (s Settings) ProfileValue() string {
+	if s.Profile == "" {
+		return ProfileClaudePro
 	}
-	return s.Tool
+	return s.Profile
 }
 
 // Dir returns the directory the settings file lives in: config/ inside the
@@ -65,6 +143,9 @@ func Path() string {
 // Load reads the settings file. A file that does not exist yet (nothing has
 // been saved, or the checkout could not be located) is not an error — it
 // yields the zero-value Settings, which every caller treats as "defaults".
+// A file written by an older manigot that only stored the legacy Tool field
+// is migrated: "claude-code" maps to ProfileClaudePro, "opencode" maps to
+// ProfileZAI (the opencode subscription manigot historically configured).
 func Load() (Settings, error) {
 	path := Path()
 	if path == "" {
@@ -81,6 +162,15 @@ func Load() (Settings, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return Settings{}, fmt.Errorf("%s: %w", path, err)
 	}
+	if s.Profile == "" && s.Tool != "" {
+		switch s.Tool {
+		case ToolOpenCode:
+			s.Profile = ProfileZAI
+		default:
+			s.Profile = ProfileClaudePro
+		}
+	}
+	s.Tool = "" // legacy field — not written back
 	return s, nil
 }
 

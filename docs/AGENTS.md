@@ -2,9 +2,12 @@
 
 Isolated agent environment per project: one Docker image, subscription
 billing via mounted OAuth credentials, real filesystem containment, and a
-structured brief → tasks → implementation → verdict job workflow. Vendor-agnostic
-— the same image runs either Claude Code (default) or OpenCode, chosen per
-session with `mg --tool claude-code|opencode`.
+structured brief → tasks → implementation → verdict job workflow. Runs a
+session under one of three subscription profiles — `claude-pro` (Claude Code,
+billed to Claude Pro/Max), `zai` (OpenCode, billed to a Z.AI Coding Plan), and
+`opencode-go` (OpenCode, billed to the OpenCode Go subscription) — chosen per
+session with `mg --profile <name>`, defaulted with `mg profiles`, and
+configured with `mg setup`.
 
 ## Stack
 - Runtime: Docker (single image, built from `Dockerfile`)
@@ -23,11 +26,13 @@ session with `mg --tool claude-code|opencode`.
   Claude Code or OpenCode update via `make rebuild`.
 - `scripts/mg.sh` — the single dispatcher, symlinked as `mg` in PATH. Inspects
   its first argument: `-h`/`--help`/`help` prints usage and exits immediately
-  (no docker/auth setup touched); one of the seven subcommand names
-  (`agents`→`agents.sh`, `job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`,
+  (no docker/auth setup touched); one of the subcommand names
+  (`profiles`→`profiles.sh`, `setup`→`setup.sh`, `agents`→`agents.sh`,
+  `job`→`new-job.sh`, `tui`→`tui.sh`, `jdi`→`jdi.sh`,
   `done`→`finish-job.sh`, `delete`→`delete-job.sh`, `init`→`init.sh`) execs
   the matching sibling script unchanged; anything else (no args, or any other
-  first token, including `run.sh`'s own `--agent`/`--job`/`--tool`/`--print`
+  first token, including `run.sh`'s own
+  `--agent`/`--job`/`--tool`/`--profile`/`--print`
   flags) falls through to `run.sh` with all original args untouched.
 - `scripts/run.sh` — container launcher, reached via bare `mg` (no
   subcommand). Mounts the current project root into the container at
@@ -39,13 +44,24 @@ session with `mg --tool claude-code|opencode`.
   — its absence doesn't block `mg`, it just runs a plain isolated session
   with no project context and no job workflow (job-workflow subcommands
   like `mg job`/`mg jdi` still require it). When no `docs/` is found, the
-  container boundary falls back to the git root, else `$PWD`. Validates auth
-  per tool and passes the choice on as `manigot_TOOL`.
-- `scripts/agents.sh` — reached via `mg agents`. Lists every agent available
-  to the current project — the global `agents/*.md` files, each swapped for
-  its `docs/agents/` override when one exists, plus any project-only
+  container boundary falls back to the git root, else `$PWD`. Resolves the
+  session's subscription profile (`--profile`, else legacy `--tool`, else the
+  `MANIGOT_PROFILE` default set by `mg profiles`, else `claude-pro`), validates
+  the profile's auth, and passes the choice on as `manigot_TOOL`.
+- `scripts/profiles.sh` — reached via `mg profiles`. Lists the three profiles
+  (which are ready, and which is the default); `mg profiles <name>` writes
+  `MANIGOT_PROFILE=<name>` into manigot's own `.env` so bare `mg` runs use it.
+- `scripts/setup.sh` — reached via `mg setup`. Interactive wizard that guides
+  you through configuring each profile's credentials into manigot's `.env`,
+  auto-applying what it can read off the host (e.g. the Claude account from
+  `~/.claude.json`) and letting you paste the rest. `mg setup <name>` for one
+  profile, `mg setup --check` for a non-interactive status report.
+- `scripts/agents.sh` — reached via `mg agents` (thematic alias: `mg crew`,
+  same script, same behavior). Lists every agent available to the current
+  project — the global `agents/*.md` files, each swapped for its
+  `docs/agents/` override when one exists, plus any project-only
   additions — prompts for a numbered selection, then execs `run.sh --agent
-  <name>` with any other args (e.g. `--tool`) passed through. Works without
+  <name>` with any other args (e.g. `--profile`) passed through. Works without
   `docs/` too, same as bare `mg` — it just has no overrides to show.
 - `scripts/new-job.sh` — reached via `mg job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
@@ -56,8 +72,9 @@ session with `mg --tool claude-code|opencode`.
   branch itself (`git branch -D` — no merge, unlike `mg done`).
 - `scripts/tui.sh` — reached via `mg tui`; wrapper around
   `bin/manigot-tui` that exports `manigot_HOME` so the TUI can find the scripts.
-- `scripts/jdi.sh` — reached via `mg jdi`; wrapper around `bin/manigot-jdi`,
-  mirroring `tui.sh` exactly.
+- `scripts/jdi.sh` — reached via `mg jdi` (thematic alias: `mg made-man`,
+  same script, same behavior); wrapper around `bin/manigot-jdi`, mirroring
+  `tui.sh` exactly.
 - `scripts/init.sh` — reached via `mg init`. Bootstraps a project for the job
   workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, and an
   empty `docs/jobs/` — never the example job under it) into the target
@@ -95,11 +112,22 @@ session with `mg --tool claude-code|opencode`.
   its only visibility, and the TUI itself rings the bell on its next poll
   when it notices the status transition into a stopped state.
 - `config/tui-settings.json` (gitignored) — local TUI preferences: which
-  editor opens `brief.md` and which agent tool (`claude-code`/`opencode`)
-  agent launches use. Written by the TUI's settings screen (`s` from the job
-  list), read/written via `tui/internal/config`. Missing is not an error —
+  editor opens `brief.md` and which subscription profile
+  (`claude-pro`/`zai`/`opencode-go`) agent launches use. Written by the TUI's
+  settings screen (`s` from the job list), read/written via
+  `tui/internal/config`. Missing is not an error —
   every reader falls back to defaults (`$VISUAL`/`$EDITOR`/`nano`/`vi` for the
-  editor, `claude-code` for the tool).
+  editor, `claude-pro` for the profile). This is the TUI's own default — it
+  always passes `--profile` explicitly, independent of the `MANIGOT_PROFILE`
+  default in `.env` set by `mg profiles`. A legacy `tool` field in the file is
+  migrated on load (`claude-code`→`claude-pro`, `opencode`→`zai`).
+- `manigot/.env` (gitignored) — holds credentials and defaults for the
+  profiles: `CLAUDE_CODE_OAUTH_TOKEN`/`CLAUDE_ACCOUNT_UUID`/`CLAUDE_EMAIL`/
+  `CLAUDE_ORG_UUID` (claude-pro), `ZHIPU_API_KEY` + `OPENCODE_ZAI_MODEL`
+  (zai), `OPENCODE_API_KEY` + `OPENCODE_GO_MODEL` (opencode-go), and
+  `MANIGOT_PROFILE` (the default profile for bare `mg`, set by `mg profiles`).
+  Written by `mg setup`/`mg profiles`, sourced by `scripts/run.sh`. Never
+  committed.
 - `scripts/entrypoint.sh` — runs inside the container before the agent CLI starts.
   Branches on `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's
   onboarding wizard, pre-accept folder trust for `/workspace`, and start it in
@@ -130,13 +158,8 @@ session with `mg --tool claude-code|opencode`.
   — to change the project context, always edit the source `docs/AGENTS.md`, never
   the mounts `/workspace/AGENTS.md` or `/workspace/.claude/CLAUDE.md`.
   `docs/CLAUDE.md` still works as a fallback for older projects.
-- `.env` (gitignored) — holds `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_ACCOUNT_UUID`,
-  `CLAUDE_EMAIL`, `CLAUDE_ORG_UUID` for Claude Code, and for OpenCode at least one
-  provider key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
-  `GOOGLE_GENERATIVE_AI_API_KEY`, `GROQ_API_KEY`, `XAI_API_KEY`,
-  `DEEPSEEK_API_KEY`, `OPENCODE_API_KEY`, `ZHIPU_API_KEY`) plus optional
-  `OPENCODE_MODEL`. Never
-  committed. Project-level `.env` files are shadowed with `/dev/null` at container start.
+- Project-level `.env` files in a target project are shadowed with `/dev/null`
+  at container start.
 
 ## Commands
 - `mg -h` / `mg --help` / `mg help` — print usage and exit (no docker/auth setup touched)
@@ -149,10 +172,16 @@ session with `mg --tool claude-code|opencode`.
 - `mg` — start an isolated session from inside any project directory; `docs/`
   is optional (see `scripts/run.sh` above) — without it you still get a
   plain agent session, just no project context or job workflow
-- `mg --tool opencode` — same, but running OpenCode instead of Claude Code
+- `mg --profile <name>` — same, but under the given subscription profile
+  (`claude-pro`/`zai`/`opencode-go`); `--tool` is accepted as a legacy alias
+- `mg profiles [name]` — list the profiles and which is the default, or set
+  the default profile bare `mg` uses (`MANIGOT_PROFILE` in manigot's `.env`)
+- `mg setup [name] [--check]` — configure credentials for the profiles,
+  interactively, or report status with `--check`
 - `mg agents` — list available agents (global + any `docs/agents/`
   overrides/additions) and pick one interactively to start a session in
-- `mg init [--tool claude-code|opencode]` — bootstrap a project for the job
+  (thematic alias: `mg crew`, same script/behavior)
+- `mg init [--profile <name>]` — bootstrap a project for the job
   workflow (creates `docs/` if absent, optionally hands off to `@prompter`);
   the only job-workflow command that works without an existing `docs/`
 - `mg job "<title>" [--type fix|chore]` — create a job dir + branch
@@ -161,6 +190,7 @@ session with `mg --tool claude-code|opencode`.
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
 - `mg jdi --job <id>` — drive a job's `@analyst` → `@developer` → `@reviewer`
   sequence end to end, unattended (Claude Code only for v1 — see Job workflow)
+  (thematic alias: `mg made-man --job <id>`, same script/behavior)
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:
@@ -183,7 +213,8 @@ hands control back to a human when: the one allowed bounce back to
 `@developer` after a REJECTED/NEEDS WORK verdict still isn't approved, an
 agent prints the `NEEDS-HUMAN-INPUT:` marker (see the `--print` bullet
 above), or the same agent makes no progress on two consecutive runs. v1 is
-Claude Code only (`--tool opencode` is rejected by `--print`).
+Claude Code only — `mg jdi` pins the `claude-pro` profile, and `--print` is
+rejected for any OpenCode profile.
 
 ## Hard rules
 - NEVER commit `.env` or any file containing OAuth tokens / account UUIDs
