@@ -9,9 +9,11 @@ set -euo pipefail
 # mg profiles zai                 # ...make bare `mg` use the zai profile
 # mg setup                        # configure credentials for your subscriptions
 # mg agents                       # today's agents.sh — pick an agent, then run.sh
+# mg crew                         # thematic alias of `mg agents`, same script
 # mg job "title" [--type ...]     # today's new-job.sh
 # mg tui                          # today's tui.sh
 # mg jdi --job <id>               # today's jdi.sh
+# mg made-man --job <id>          # thematic alias of `mg jdi`, same script
 # mg done <id>                    # today's finish-job.sh
 # mg delete <id>                  # today's delete-job.sh
 # mg init [--tool ...]            # today's init.sh
@@ -26,6 +28,10 @@ set -euo pipefail
 # --agent/--job/--tool/--profile/--print flags) falls through to run.sh with
 # all original args untouched. None of the underlying scripts change their own
 # logic, flags, or behavior — see docs/jobs/9pze1x_better-cli-syntax/brief.md.
+# `crew`/`made-man` are purely thematic aliases of `agents`/`jdi` — same
+# scripts, same behavior, optional flavor only (see
+# docs/jobs/tt45uz_naming-features/brief.md); `agents`/`jdi` remain the
+# documented primary names.
 # init is the one exception to "needs an initialized project" — it creates
 # docs/, so it deliberately works without one already existing.
 
@@ -66,6 +72,7 @@ Commands:
   mg setup [name] [--check]       Configure credentials for your subscriptions,
                                    interactively, or report status with --check
   mg agents                       List available agents and pick one to start
+                                   (thematic alias: mg crew)
   mg init [--profile <name>]      Bootstrap this project for the job workflow
   mg job "<title>" [--type feature|fix|chore]
                                    Create a job directory + branch (off main)
@@ -74,6 +81,7 @@ Commands:
   mg tui                          Terminal UI for browsing jobs and firing agents
   mg jdi --job <id>                Drive a job's analyst -> developer ->
                                    reviewer sequence unattended (Claude Code only)
+                                   (thematic alias: mg made-man)
 
   mg -h, --help, help             Show this help
 
@@ -97,7 +105,7 @@ case "${1:-}" in
         shift
         exec "$SCRIPT_DIR/setup.sh" "$@"
         ;;
-    agents)
+    agents|crew)
         shift
         exec "$SCRIPT_DIR/agents.sh" "$@"
         ;;
@@ -109,7 +117,7 @@ case "${1:-}" in
         shift
         exec "$SCRIPT_DIR/tui.sh" "$@"
         ;;
-    jdi)
+    jdi|made-man)
         shift
         exec "$SCRIPT_DIR/jdi.sh" "$@"
         ;;

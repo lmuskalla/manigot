@@ -173,6 +173,14 @@ type commitMsg struct {
 	err error
 }
 
+// pushMsg reports the outcome of the detail view's "P" push-to-origin
+// action (a `git push -u origin <branch>`, run off the UI thread via
+// pushCmd so a slow/blocked network call doesn't block rendering).
+type pushMsg struct {
+	branch string
+	err    error
+}
+
 // branchFlashDuration is how long the off-branch hint's blink (see
 // detailView.blockedByBranch) lasts before automatically clearing — long
 // enough to register as a reaction to the just-blocked key, short enough not
@@ -311,6 +319,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// (including an already-on-<branch> no-op, which git itself
 			// treats as success) isn't silent.
 			a.status = "switched to " + msg.branch
+		}
+		return a, nil
+	case pushMsg:
+		// Unlike checkoutMsg, a push never changes what the working tree or
+		// job list looks like — only origin's state — so there is nothing to
+		// refresh or rebuild here, just a status line.
+		if a.detail != nil {
+			if msg.err != nil {
+				a.detail.setStatus(cmdErrorText(msg.err))
+			} else {
+				a.detail.setStatus("→ pushed " + msg.branch + " to origin")
+			}
 		}
 		return a, nil
 	case branchFlashDoneMsg:
@@ -816,6 +836,18 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, a.checkoutCmd(a.detail.job.Branch)
+	case "P":
+		// Push this job's branch to origin — the "quick way to push feature
+		// branches" from the "commit-feature-branches" brief. Deliberately
+		// not gated by branchGuard: git.Push pushes the named branch ref
+		// directly (git push origin <branch>), which does not require that
+		// branch to be checked out in the working tree, same as "b" itself
+		// needs no guard.
+		if a.detail.job.Branch == "" {
+			a.detail.setStatus("no branch known for this job")
+			return a, nil
+		}
+		return a, a.pushCmd(a.detail.job.Branch)
 	}
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
@@ -939,6 +971,18 @@ func (a *App) checkoutCmd(branch string) tea.Cmd {
 	return func() tea.Msg {
 		err := git.Checkout(root, branch)
 		return checkoutMsg{branch: branch, err: err}
+	}
+}
+
+// pushCmd returns the tea.Cmd behind the "P" push-to-origin action: like
+// checkoutCmd, this is a plain git call off the UI goroutine — no interactive
+// process, just a git push — and reports the outcome as a pushMsg once it
+// returns.
+func (a *App) pushCmd(branch string) tea.Cmd {
+	root := a.root
+	return func() tea.Msg {
+		err := git.Push(root, branch)
+		return pushMsg{branch: branch, err: err}
 	}
 }
 

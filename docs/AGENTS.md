@@ -56,9 +56,10 @@ configured with `mg setup`.
   auto-applying what it can read off the host (e.g. the Claude account from
   `~/.claude.json`) and letting you paste the rest. `mg setup <name>` for one
   profile, `mg setup --check` for a non-interactive status report.
-- `scripts/agents.sh` — reached via `mg agents`. Lists every agent available
-  to the current project — the global `agents/*.md` files, each swapped for
-  its `docs/agents/` override when one exists, plus any project-only
+- `scripts/agents.sh` — reached via `mg agents` (thematic alias: `mg crew`,
+  same script, same behavior). Lists every agent available to the current
+  project — the global `agents/*.md` files, each swapped for its
+  `docs/agents/` override when one exists, plus any project-only
   additions — prompts for a numbered selection, then execs `run.sh --agent
   <name>` with any other args (e.g. `--profile`) passed through. Works without
   `docs/` too, same as bare `mg` — it just has no overrides to show.
@@ -71,8 +72,9 @@ configured with `mg setup`.
   branch itself (`git branch -D` — no merge, unlike `mg done`).
 - `scripts/tui.sh` — reached via `mg tui`; wrapper around
   `bin/manigot-tui` that exports `manigot_HOME` so the TUI can find the scripts.
-- `scripts/jdi.sh` — reached via `mg jdi`; wrapper around `bin/manigot-jdi`,
-  mirroring `tui.sh` exactly.
+- `scripts/jdi.sh` — reached via `mg jdi` (thematic alias: `mg made-man`,
+  same script, same behavior); wrapper around `bin/manigot-jdi`, mirroring
+  `tui.sh` exactly.
 - `scripts/init.sh` — reached via `mg init`. Bootstraps a project for the job
   workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, and an
   empty `docs/jobs/` — never the example job under it) into the target
@@ -178,6 +180,7 @@ configured with `mg setup`.
   interactively, or report status with `--check`
 - `mg agents` — list available agents (global + any `docs/agents/`
   overrides/additions) and pick one interactively to start a session in
+  (thematic alias: `mg crew`, same script/behavior)
 - `mg init [--profile <name>]` — bootstrap a project for the job
   workflow (creates `docs/` if absent, optionally hands off to `@prompter`);
   the only job-workflow command that works without an existing `docs/`
@@ -187,6 +190,7 @@ configured with `mg setup`.
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
 - `mg jdi --job <id>` — drive a job's `@analyst` → `@developer` → `@reviewer`
   sequence end to end, unattended (Claude Code only for v1 — see Job workflow)
+  (thematic alias: `mg made-man --job <id>`, same script/behavior)
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:

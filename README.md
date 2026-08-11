@@ -205,13 +205,13 @@ its first argument:
 | `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
 | `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg` |
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
-| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in |
+| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same script/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job directory + branch (off `main`); needs `docs/` |
 | `mg done` | archive a finished job; needs `docs/` |
 | `mg delete` | permanently delete a job (directory + branch, no merge); needs `docs/` |
 | `mg tui` | the terminal UI (needs `make tui` first); needs `docs/` |
-| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first); needs `docs/` |
+| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first); needs `docs/` (thematic alias: `mg made-man`, same script/behavior) |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
@@ -366,8 +366,9 @@ enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
 ## Agents
 
 Eight agents are available globally in every project. Call them with `@name` in
-your session, or run `mg agents` from the host to list them (with any
-`docs/agents/` overrides) and pick one to start straight into.
+your session, or run `mg agents` (or its thematic alias, `mg crew`) from the
+host to list them (with any `docs/agents/` overrides) and pick one to start
+straight into.
 
 | Agent | Role | Tools (Claude Code) |
 |---|---|---|
@@ -426,6 +427,26 @@ mg job "add image gallery block"
 Job types: `feature` (default), `fix`, `chore`.
 Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug`.
 
+### How to get a job done
+
+1. **Open the case.** `mg job "job name"` cuts you a directory and a branch.
+2. **Write the brief.** Fill in `brief.md` — the job, and why it needs doing.
+3. **Run it past the boss.** `@product-owner` calls it: SHIP / REVISIT /
+   REJECT.
+4. **Case the job.** `@analyst` breaks it into a task list.
+5. **Read the plan yourself** before anyone touches code.
+6. **Send in the crew.** `mg crew` rounds up an agent — `@developer` does the
+   actual work, one task at a time, committing as it goes, safe inside its
+   own safehouse where nothing outside the project is reachable.
+7. **Get it checked.** `@reviewer`, then `@security`, go over the work and
+   write the verdict.
+8. **Clean up loose ends.** Fix what's blocking, run it past them again.
+9. **Close it out.** Merge once the verdict's APPROVED, mark the brief done.
+
+Don't feel like babysitting the whole thing? Send `mg made-man --job <id>`
+instead — it runs the analyst, the developer, and the reviewer back to back,
+on its own, and still won't touch the merge button without you.
+
 ### Autonomous mode (`mg jdi`)
 
 Steps 4–8 above — `@analyst` → `@developer` → `@reviewer` — can run
@@ -434,6 +455,9 @@ unattended instead of one agent at a time:
 ```bash
 mg jdi --job a3f9k2
 ```
+
+(`mg made-man --job a3f9k2` is a purely thematic alias of the same command —
+same script, same behavior.)
 
 It drives that fixed sequence, the same one regardless of job `type`, in a
 loop: ask what's next given the job's current stage and verdict history, run
@@ -557,6 +581,7 @@ Detail view:
 | `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
 | `x` / `del` | permanently delete the job (runs the host `mg delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `b` | switch to this job's branch (`git checkout`) — needed before `e`/`D`/`j`/`x`/agent keys work on a job that isn't on the current branch |
+| `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull`; unlike `b`/`e`/`D`/`j`/`x`, this works regardless of which branch is currently checked out |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 

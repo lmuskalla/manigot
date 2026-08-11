@@ -107,6 +107,14 @@ git config --global user.email "$GIT_EMAIL"
 
 git config --global --add safe.directory /workspace
 
+# --print mode expects a clean stdout stream (see run.sh and the
+# --output-format json branch below) — this thematic line is purely
+# cosmetic, so it's skipped there rather than risking a caller mis-parsing
+# it as part of the agent's own output.
+if [[ "${MANIGOT_PRINT:-false}" != "true" ]]; then
+    echo "Starting session — you're made, welcome to the crew."
+fi
+
 if [[ "$TOOL" == "opencode" ]]; then
     exec opencode "$@"
 else

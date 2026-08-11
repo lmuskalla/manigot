@@ -366,6 +366,7 @@ fi
 echo "╔══════════════════════════════════════╗" >&3
 echo "║           manigot                   ║" >&3
 echo "╠══════════════════════════════════════╣" >&3
+echo "║  Entering safehouse (isolated session)..." >&3
 echo "║  Project : $(basename "$PROJECT_ROOT")" >&3
 echo "║  Root    : $PROJECT_ROOT" >&3
 if [[ "$DOCS_INITIALIZED" == "true" ]]; then
