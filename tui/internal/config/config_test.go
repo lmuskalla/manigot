@@ -123,6 +123,41 @@ func TestSaveThenLoadRoundTripsRecentActivityCount(t *testing.T) {
 	}
 }
 
+func TestSaveThenLoadRoundTripsTerminal(t *testing.T) {
+	dir := checkout(t)
+	want := Settings{Editor: "vim", Profile: ProfileZAI, Terminal: "kitty"}
+	if err := Save(want); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	settingsData, err := os.ReadFile(filepath.Join(dir, "config", "tui-settings.json"))
+	if err != nil {
+		t.Fatalf("read tui-settings.json: %v", err)
+	}
+	if got := string(settingsData); !contains(got, `"terminal": "kitty"`) {
+		t.Errorf("tui-settings.json missing terminal: %s", got)
+	}
+
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Terminal != want.Terminal {
+		t.Errorf("Terminal after round-trip = %q, want %q", got.Terminal, want.Terminal)
+	}
+}
+
+func TestTerminalDefaultsToEmptyAutoDetect(t *testing.T) {
+	checkout(t)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.Terminal != "" {
+		t.Errorf("zero-value Terminal = %q, want empty (auto-detect)", s.Terminal)
+	}
+}
+
 func TestLoadUnsetRecentActivityCountDefaults(t *testing.T) {
 	// A settings file without the field (an older version's file) loads as 0
 	// → the default, never an error.

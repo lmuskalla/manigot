@@ -705,7 +705,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// new terminal — a quick ad-hoc change that doesn't belong to any
 		// specific job's workflow. Mirrors updateDetail's agent-launch
 		// reporting so the two launch paths feel consistent in the footer.
-		desc, err := launch.Quick(a.root, a.settings.ProfileValue())
+		desc, err := launch.Quick(a.root, a.settings.ProfileValue(), a.settings.Terminal)
 		if err != nil {
 			a.status = cmdErrorText(err)
 		} else {
@@ -822,7 +822,7 @@ func (a *App) updateAgentsPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Mirrors updateDetail's agent-launch status reporting ("→ <agent>
 		// in <desc>") so both launch paths feel consistent in the footer.
-		desc, err := launch.AgentQuick(agent.Name, a.root, a.settings.ProfileValue())
+		desc, err := launch.AgentQuick(agent.Name, a.root, a.settings.ProfileValue(), a.settings.Terminal)
 		if err != nil {
 			a.status = cmdErrorText(err)
 		} else {
@@ -945,7 +945,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
 	if agent := a.agentForKey(msg.String()); agent != "" {
-		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ProfileValue())
+		desc, err := launch.Agent(agent, a.detail.job.ID, a.root, a.settings.ProfileValue(), a.settings.Terminal)
 		if err != nil {
 			a.detail.setStatus(cmdErrorText(err))
 		} else {

@@ -12,6 +12,10 @@
 //     (Fedora's default GNOME terminal since Fedora 41), x-terminal-emulator
 //     (Debian), konsole, xterm.
 //
+// config.Settings.Terminal (r5x2a7) overrides this whole spawn order
+// unconditionally, including the tmux branch: when set, every launch path
+// below invokes it directly instead — see buildOverrideCmd.
+//
 // The command opened is always `<manigot> --agent <agent> --job <jobID>` run
 // from the project root, matching the invocation contract in scripts/run.sh.
 // <manigot> is an absolute path located by the resolve package, not the bare
@@ -35,10 +39,13 @@ import (
 // window (see launchTmuxPane) — that runs manigot with `--profile <profile>
 // --agent <agent> --job <jobID>` in projectRoot. profile is one of the
 // subscription profiles in config.Profiles; an empty value defaults to
-// config.ProfileClaudePro, matching scripts/run.sh's own default. It returns
-// a short human description of where it opened (e.g. "tmux pane",
-// "Terminal.app", "gnome-terminal") so the caller can surface it in a status
-// line.
+// config.ProfileClaudePro, matching scripts/run.sh's own default. terminal is
+// config.Settings.Terminal: when non-empty it overrides the entire spawn
+// order below (including the tmux branch) and that terminal is invoked
+// directly instead — see buildOverrideCmd; empty reproduces today's
+// auto-detect behavior unchanged. It returns a short human description of
+// where it opened (e.g. "tmux pane", "Terminal.app", "gnome-terminal", or the
+// override's own binary name) so the caller can surface it in a status line.
 //
 // The launcher runs from projectRoot (the main worktree) even though the job
 // lives in its own worktree (207bfu_git-worktrees): scripts/run.sh re-derives
@@ -72,13 +79,13 @@ import (
 // already covers the failure mode the brief actually reports (the inner `sc
 // --agent` command failing fast); a launcher-binary-itself failure is a
 // narrower, rarer case left uncovered rather than risk reintroducing UI lag.
-func Agent(agent, jobID, projectRoot, profile string) (string, error) {
+func Agent(agent, jobID, projectRoot, profile, terminal string) (string, error) {
 	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
 	inner := shellCommand(found.Path, agent, jobID, projectRoot, profile)
-	return launchDetached(inner)
+	return launchDetached(inner, terminal)
 }
 
 // Quick opens a new terminal — inside tmux, a split pane in the TUI's current
@@ -87,20 +94,22 @@ func Agent(agent, jobID, projectRoot, profile string) (string, error) {
 // bare session for an ad-hoc change that doesn't belong to any specific
 // job/agent workflow. profile is one of the subscription profiles in
 // config.Profiles; an empty value defaults to config.ProfileClaudePro,
-// matching Agent. It returns the same short human description of where it
-// opened so the caller can surface it in a status line.
+// matching Agent. terminal is config.Settings.Terminal, threaded through to
+// launchDetached exactly like Agent's own terminal parameter — see Agent's
+// doc for the override semantics. It returns the same short human description
+// of where it opened so the caller can surface it in a status line.
 //
 // scripts/run.sh already treats --agent and --job as optional, so a bare `sc
 // --profile <profile>` simply runs claude/opencode against the current project
 // with no agent flag and no job prompt — no container-side changes were needed
 // to support this.
-func Quick(projectRoot, profile string) (string, error) {
+func Quick(projectRoot, profile, terminal string) (string, error) {
 	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
 	inner := quickShellCommand(found.Path, projectRoot, profile)
-	return launchDetached(inner)
+	return launchDetached(inner, terminal)
 }
 
 // AgentQuick opens a new terminal — inside tmux, a split pane in the TUI's
@@ -109,20 +118,23 @@ func Quick(projectRoot, profile string) (string, error) {
 // projectRoot: launching a specific agent for an ad-hoc session that doesn't
 // belong to any particular job. profile is one of the subscription profiles
 // in config.Profiles; an empty value defaults to config.ProfileClaudePro,
-// matching Agent/Quick. It returns the same short human description of where
-// it opened so the caller can surface it in a status line.
+// matching Agent/Quick. terminal is config.Settings.Terminal, threaded
+// through to launchDetached exactly like Agent/Quick's own terminal
+// parameter — see Agent's doc for the override semantics. It returns the
+// same short human description of where it opened so the caller can surface
+// it in a status line.
 //
 // scripts/run.sh already treats --job as optional (see Quick's own doc for
 // the --agent/--job-less case), so `sc --profile <profile> --agent <agent>`
 // simply runs that agent against the current project with no job prompt — no
 // container-side changes were needed to support this.
-func AgentQuick(agent, projectRoot, profile string) (string, error) {
+func AgentQuick(agent, projectRoot, profile, terminal string) (string, error) {
 	found, err := resolve.Resolve(resolve.Manigot())
 	if err != nil {
 		return "", err
 	}
 	inner := agentQuickShellCommand(found.Path, agent, projectRoot, profile)
-	return launchDetached(inner)
+	return launchDetached(inner, terminal)
 }
 
 // Jdi starts `mg-jdi --job <jobID> --profile <profile>` detached in the
@@ -225,7 +237,7 @@ func launchTmuxPane(inner string) (string, error) {
 	// the previous pane is not an error at all (tolerated inside).
 	_ = killPreviousTmuxPane()
 
-	cmd, desc, err := buildCmd(inner)
+	cmd, desc, err := buildCmd(inner, "")
 	if err != nil {
 		return "", err
 	}
@@ -301,24 +313,31 @@ func killPreviousTmuxPane() error {
 // asynchronously so it doesn't zombie (the actual terminal/pane outlives it).
 // It returns the short "where it opened" description buildCmd produces.
 //
-// Inside tmux the launch is handled by launchTmuxPane instead: it implements
-// TASK-3's replace policy (killing the previously manigot-opened pane before
-// splitting a new one) and needs the split-window client's stdout (the new
-// pane's id), so it runs synchronously rather than through the detached tail
-// below. The same tmux detection ($TMUX set and a tmux binary on PATH) is
-// used here and in buildCmd.
+// terminal is config.Settings.Terminal (TASK-1 point 2): when non-empty it
+// takes over unconditionally, bypassing the tmux-detection branch below
+// entirely (not just the macOS/Linux auto-detect chain) — a user who both
+// runs the TUI inside tmux and sets an override loses the split-pane behavior
+// in favor of a plain spawn of their chosen terminal, a deliberate trade-off
+// (see the scope note in docs/jobs/r5x2a7_add-new-global-setting/tasks.md).
+//
+// Inside tmux, with no override set, the launch is handled by launchTmuxPane
+// instead: it implements TASK-3's replace policy (killing the previously
+// manigot-opened pane before splitting a new one) and needs the split-window
+// client's stdout (the new pane's id), so it runs synchronously rather than
+// through the detached tail below. The same tmux detection ($TMUX set and a
+// tmux binary on PATH) is used here and in buildCmd.
 //
 // See Agent's doc comment for why a launcher that starts successfully but then
 // fails on its own (e.g. no display server) is not surfaced here — holdOnFailure
 // covers the inner command's own fast failures instead.
-func launchDetached(inner string) (string, error) {
-	if os.Getenv("TMUX") != "" {
+func launchDetached(inner, terminal string) (string, error) {
+	if terminal == "" && os.Getenv("TMUX") != "" {
 		if _, err := exec.LookPath("tmux"); err == nil {
 			return launchTmuxPane(inner)
 		}
 	}
 
-	cmd, desc, err := buildCmd(inner)
+	cmd, desc, err := buildCmd(inner, terminal)
 	if err != nil {
 		return "", err
 	}
@@ -444,10 +463,81 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// buildCmd constructs the *exec.Cmd for the detected environment. The tmux
-// branch (1) is also the command launchTmuxPane runs synchronously; branches 2
-// and 3 run detached via launchDetached's spawn/reap tail.
-func buildCmd(inner string) (*exec.Cmd, string, error) {
+// terminalCandidates is the Linux terminal-emulator candidate table used both
+// by buildCmd's auto-detect chain (branch 3) and, by name lookup, by
+// buildOverrideCmd's known-name-vs-"-e"-fallback flag-convention choice
+// (TASK-1 point 3): an override whose binary matches one of these names
+// (case-insensitively) reuses that name's own flag convention instead of the
+// "-e" default.
+var terminalCandidates = []struct {
+	name string
+	pre  []string // args between the emulator name and the shell command
+}{
+	{"gnome-terminal", []string{"--"}},
+	{"ptyxis", []string{"--"}},
+	{"x-terminal-emulator", []string{"-e"}},
+	{"konsole", []string{"-e"}},
+	{"xterm", []string{"-e"}},
+}
+
+// buildOverrideCmd constructs the *exec.Cmd for an explicit user-chosen
+// terminal override (config.Settings.Terminal, TASK-1 points 2/3): it takes
+// over the entire spawn order — no tmux/macOS/Linux auto-detect is
+// considered at all once a caller has decided to use it (see launchDetached).
+//
+// terminal's first whitespace-separated token is the binary to run; any
+// remaining tokens are passed as leading arguments before the flag that hands
+// off the inner shell command — mirroring how config.Settings.Editor (and
+// $VISUAL/$EDITOR) already allow trailing args, e.g. "code --wait". The
+// binary is looked up via exec.LookPath exactly like the auto-detect
+// candidates in terminalCandidates, so a typo'd or missing binary surfaces a
+// clear "launch <name>: exec: ... file not found" error here instead of
+// silently falling back to auto-detect.
+//
+// The flag used to hand off the inner command is chosen the same way as the
+// existing candidates: if the binary case-insensitively matches one of
+// terminalCandidates' own names, that name's convention ("--" or "-e") is
+// reused; otherwise "-e" is used, since it is the more common convention
+// among terminals not already in that list (kitty, alacritty, wezterm, rxvt,
+// terminator all accept it). This is a best-effort convention, not a
+// guarantee for every possible terminal emulator — a known limitation, not
+// solved generally, since a fully general solution would need a per-terminal
+// flag field the brief did not ask for.
+func buildOverrideCmd(inner, terminal string) (*exec.Cmd, string, error) {
+	fields := strings.Fields(terminal)
+	if len(fields) == 0 {
+		return nil, "", fmt.Errorf("terminal override is blank")
+	}
+	name := fields[0]
+	leadingArgs := fields[1:]
+
+	if _, err := exec.LookPath(name); err != nil {
+		return nil, "", fmt.Errorf("launch %s: %w", name, err)
+	}
+
+	flag := "-e"
+	for _, c := range terminalCandidates {
+		if strings.EqualFold(c.name, name) {
+			flag = c.pre[0]
+			break
+		}
+	}
+
+	args := append(append([]string{}, leadingArgs...), flag, "bash", "-lc", inner)
+	return exec.Command(name, args...), name, nil
+}
+
+// buildCmd constructs the *exec.Cmd for the detected environment, or — when
+// terminal (config.Settings.Terminal) is non-empty — for the explicit
+// override instead (see buildOverrideCmd), bypassing every branch below
+// entirely. The tmux branch (1) is also the command launchTmuxPane runs
+// synchronously; branches 2 and 3 run detached via launchDetached's
+// spawn/reap tail.
+func buildCmd(inner, terminal string) (*exec.Cmd, string, error) {
+	if terminal != "" {
+		return buildOverrideCmd(inner, terminal)
+	}
+
 	// 1. Inside tmux (works on every OS that has tmux): split a pane off the
 	// TUI's current window (TASK-2), replacing the previously manigot-opened
 	// pane (TASK-3).
@@ -494,17 +584,7 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 
 	// 3. Linux terminal emulators, in order of preference.
 	shellArgs := []string{"bash", "-lc", inner}
-	candidates := []struct {
-		name string
-		pre  []string // args between the emulator name and the shell command
-	}{
-		{"gnome-terminal", []string{"--"}},
-		{"ptyxis", []string{"--"}},
-		{"x-terminal-emulator", []string{"-e"}},
-		{"konsole", []string{"-e"}},
-		{"xterm", []string{"-e"}},
-	}
-	for _, c := range candidates {
+	for _, c := range terminalCandidates {
 		if _, err := exec.LookPath(c.name); err == nil {
 			args := append(append([]string{}, c.pre...), shellArgs...)
 			return exec.Command(c.name, args...), c.name, nil

@@ -23,19 +23,23 @@ var profileOptions = config.Profiles()
 const recentActivityCountMax = 100
 
 // Number of focusable fields in the settings form: editor, base branch,
-// recent activity count, profile — in tab cycle order. Kept as a named
-// constant so the tab/shift+tab cycle and focus comparisons don't all hardcode
-// a literal that has to be kept in sync field by field.
-const stFieldCount = 4
+// recent activity count, profile, terminal — in tab cycle order. Kept as a
+// named constant so the tab/shift+tab cycle and focus comparisons don't all
+// hardcode a literal that has to be kept in sync field by field.
+const stFieldCount = 5
 
 // Focus indices for the settings form's fields, in tab cycle order: editor →
-// base branch → recent activity count → profile → editor. Used by update()
-// and render() instead of bare ints.
+// base branch → recent activity count → profile → terminal → editor. Used by
+// update() and render() instead of bare ints. Terminal was appended after
+// Profile (TASK-1 point 4 of docs/jobs/r5x2a7_add-new-global-setting/tasks.md)
+// rather than inserted next to Editor, so the existing constants keep their
+// values unchanged.
 const (
-	stFocusEditor  = 0
-	stFocusBranch  = 1
-	stFocusCount   = 2
-	stFocusProfile = 3
+	stFocusEditor   = 0
+	stFocusBranch   = 1
+	stFocusCount    = 2
+	stFocusProfile  = 3
+	stFocusTerminal = 4
 )
 
 // stAction is what update returns for the App to act on.
@@ -61,14 +65,15 @@ const (
 // config.Save and project.Save on submit so this stays a pure input
 // component.
 type settingsView struct {
-	editor       textinput.Model
-	baseBranch   textinput.Model
-	recentCount  textinput.Model
-	profile      int // index into profileOptions
-	focus        int // stFocusEditor / stFocusBranch / stFocusCount / stFocusProfile
-	width        int
-	height       int
-	status       string // validation/save error message
+	editor      textinput.Model
+	baseBranch  textinput.Model
+	recentCount textinput.Model
+	terminal    textinput.Model
+	profile     int // index into profileOptions
+	focus       int // stFocusEditor / stFocusBranch / stFocusCount / stFocusProfile / stFocusTerminal
+	width       int
+	height      int
+	status      string // validation/save error message
 }
 
 // newSettingsView builds the form seeded from the current global config and
@@ -99,10 +104,18 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 	recentCount.SetValue(strconv.Itoa(global.RecentActivityCountValue()))
 	recentCount.Width = 60
 
+	terminal := textinput.New()
+	terminal.Placeholder = "blank = auto-detect"
+	terminal.Prompt = "" // we render our own "Terminal:" label
+	terminal.CharLimit = 120
+	terminal.SetValue(global.Terminal)
+	terminal.Width = 60
+
 	v := &settingsView{
 		editor:      editor,
 		baseBranch:  baseBranch,
 		recentCount: recentCount,
+		terminal:    terminal,
 		profile:     profileIndex(global.ProfileValue()),
 		focus:       stFocusEditor,
 		width:       width,
@@ -113,6 +126,7 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 		v.editor.Width = w
 		v.baseBranch.Width = w
 		v.recentCount.Width = w
+		v.terminal.Width = w
 	}
 	return v
 }
@@ -149,6 +163,7 @@ func (v *settingsView) resize(width, height int) {
 		v.editor.Width = w
 		v.baseBranch.Width = w
 		v.recentCount.Width = w
+		v.terminal.Width = w
 	}
 }
 
@@ -178,16 +193,18 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 		return stNone
 	}
 
-	// A text input is focused (editor, base branch or recent count): route
-	// the key to it.
+	// A text input is focused (editor, base branch, recent count or
+	// terminal): route the key to it.
 	var ti *textinput.Model
 	switch v.focus {
 	case stFocusEditor:
 		ti = &v.editor
 	case stFocusBranch:
 		ti = &v.baseBranch
-	default: // stFocusCount
+	case stFocusCount:
 		ti = &v.recentCount
+	default: // stFocusTerminal
+		ti = &v.terminal
 	}
 	m, _ := ti.Update(msg)
 	*ti = m
@@ -195,27 +212,25 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 }
 
 // setFocus moves focus to field i and keeps the text inputs' focus state in
-// sync: only the editor, base branch or recent count holds the text cursor;
-// the profile selector is keyboard-driven (←/→), not a text input.
+// sync: only the editor, base branch, recent count or terminal holds the text
+// cursor; the profile selector is keyboard-driven (←/→), not a text input.
 func (v *settingsView) setFocus(i int) {
 	v.focus = i
+	v.editor.Blur()
+	v.baseBranch.Blur()
+	v.recentCount.Blur()
+	v.terminal.Blur()
 	switch i {
 	case stFocusEditor:
 		v.editor.Focus()
-		v.baseBranch.Blur()
-		v.recentCount.Blur()
 	case stFocusBranch:
-		v.editor.Blur()
 		v.baseBranch.Focus()
-		v.recentCount.Blur()
 	case stFocusCount:
-		v.editor.Blur()
-		v.baseBranch.Blur()
 		v.recentCount.Focus()
+	case stFocusTerminal:
+		v.terminal.Focus()
 	default: // stFocusProfile
-		v.editor.Blur()
-		v.baseBranch.Blur()
-		v.recentCount.Blur()
+		// no text input to focus — the profile selector is keyboard-driven
 	}
 }
 
@@ -242,8 +257,9 @@ func (v *settingsView) recentActivityCount() (int, error) {
 // updateSettings does) so an invalid value never silently reaches disk as 0.
 func (v *settingsView) settingsValue() config.Settings {
 	s := config.Settings{
-		Editor:  strings.TrimSpace(v.editor.Value()),
-		Profile: profileOptions[v.profile].ID,
+		Editor:   strings.TrimSpace(v.editor.Value()),
+		Profile:  profileOptions[v.profile].ID,
+		Terminal: strings.TrimSpace(v.terminal.Value()),
 	}
 	if n, err := v.recentActivityCount(); err == nil {
 		s.RecentActivityCount = n
@@ -331,6 +347,18 @@ func (v *settingsView) render() string {
 	b.WriteString(dimStyle.Render("    saved as MANIGOT_PROFILE in manigot/.env — shared with the CLI (bare mg / mg profiles)"))
 	b.WriteString("\n\n")
 
+	// Terminal row (global): the command used to spawn an agent session's
+	// terminal, overriding launch's auto-detect spawn order when set.
+	terminalLabel := "  Terminal: "
+	if v.focus == stFocusTerminal {
+		b.WriteString(terminalLabel + v.terminal.View())
+	} else {
+		b.WriteString(dimStyle.Render(terminalLabel) + dimStyle.Render(v.terminal.View()))
+	}
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("           blank = auto-detect (tmux / Terminal.app / gnome-terminal / ...) · stored in config/tui-settings.json"))
+	b.WriteString("\n\n")
+
 	// Footer: status or a focus-aware hint.
 	if v.status != "" {
 		b.WriteString(statusStyle.Render(v.status))
@@ -351,7 +379,9 @@ func (v *settingsView) hint() string {
 		return "tab/shift+tab recent activity · " + prefix
 	case stFocusCount:
 		return "tab/shift+tab profile · " + prefix
-	default: // stFocusProfile
-		return "←/→ change profile · tab/shift+tab editor · " + prefix
+	case stFocusProfile:
+		return "←/→ change profile · tab/shift+tab terminal · " + prefix
+	default: // stFocusTerminal
+		return "tab/shift+tab editor · " + prefix
 	}
 }
