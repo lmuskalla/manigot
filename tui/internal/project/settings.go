@@ -18,7 +18,7 @@ import (
 )
 
 // Settings holds the project-scoped manigot conventions, read from / written
-// to docs/manigot.json in the target project's root. Only fields with a
+// to .manigot/manigot.json in the target project's root. Only fields with a
 // project-wide (committable, shareable) lifecycle belong here; anything
 // personal (editor, subscription profile) stays in the global config package.
 type Settings struct {
@@ -30,7 +30,7 @@ type Settings struct {
 
 // BaseBranchValue returns s.BaseBranch, defaulting to "main" when unset so
 // every reader (the TUI's "m" checkout, scripts/new-job.sh) gets a usable ref
-// even when docs/manigot.json is absent or doesn't set the key.
+// even when .manigot/manigot.json is absent or doesn't set the key.
 func (s Settings) BaseBranchValue() string {
 	if s.BaseBranch == "" {
 		return "main"
@@ -39,11 +39,11 @@ func (s Settings) BaseBranchValue() string {
 }
 
 // Path returns the project settings file's path under the given project root:
-// <root>/docs/manigot.json. The root is the target project root the TUI was
-// launched in (App.root), not the manigot checkout — these settings travel
-// with the project being worked on, not with the tool.
+// <root>/.manigot/manigot.json. The root is the target project root the TUI
+// was launched in (App.root), not the manigot checkout — these settings
+// travel with the project being worked on, not with the tool.
 func Path(root string) string {
-	return filepath.Join(root, "docs", "manigot.json")
+	return filepath.Join(root, ".manigot", "manigot.json")
 }
 
 // Load reads the project settings file under root. A file that does not exist
@@ -66,12 +66,13 @@ func Load(root string) (Settings, error) {
 	return s, nil
 }
 
-// Save writes s to the project settings file under root. The docs/ directory
-// is created if it doesn't already exist, but in any initialized project
-// (which is the TUI's baseline — jobs live in docs/jobs/) it always does.
+// Save writes s to the project settings file under root. The .manigot/
+// directory is created if it doesn't already exist — it may not (the TUI's
+// baseline is an initialized project whose docs/ exists, but .manigot/ is
+// only created once the first project setting is saved).
 // The file is committable: it holds only a public ref name, no secrets.
 func Save(root string, s Settings) error {
-	dir := filepath.Join(root, "docs")
+	dir := filepath.Join(root, ".manigot")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

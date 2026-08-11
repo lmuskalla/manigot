@@ -24,7 +24,7 @@ func TestSaveThenLoadRoundTrips(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	path := filepath.Join(root, "docs", "manigot.json")
+	path := filepath.Join(root, ".manigot", "manigot.json")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("settings file not written at %s: %v", path, err)
 	}

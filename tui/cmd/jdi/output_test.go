@@ -405,8 +405,8 @@ func TestEnsureSidecarIgnoredWritesExcludeFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading .git/info/exclude: %v", err)
 	}
-	if !strings.Contains(string(data), "docs/jobs/.jdi-status/") {
-		t.Errorf(".git/info/exclude = %q, want it to contain docs/jobs/.jdi-status/", string(data))
+	if !strings.Contains(string(data), ".manigot/jdi-status/") {
+		t.Errorf(".git/info/exclude = %q, want it to contain .manigot/jdi-status/", string(data))
 	}
 }
 
@@ -424,7 +424,7 @@ func TestEnsureSidecarIgnoredIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := strings.Count(string(data), "docs/jobs/.jdi-status/")
+	count := strings.Count(string(data), ".manigot/jdi-status/")
 	if count != 1 {
 		t.Errorf("pattern appears %d times after two calls, want exactly 1 (idempotent)", count)
 	}
@@ -452,7 +452,7 @@ func TestEnsureSidecarIgnoredPreservesExistingContent(t *testing.T) {
 	if !strings.Contains(got, "*.local") {
 		t.Errorf(".git/info/exclude lost its pre-existing content: %q", got)
 	}
-	if !strings.Contains(got, "docs/jobs/.jdi-status/") {
+	if !strings.Contains(got, ".manigot/jdi-status/") {
 		t.Errorf(".git/info/exclude missing the sidecar pattern: %q", got)
 	}
 }
@@ -467,7 +467,7 @@ func TestEnsureSidecarIgnoredActuallyWorksWithGit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sidecarFile := filepath.Join(root, "docs", "jobs", ".jdi-status", "aaaa01_x", "status")
+	sidecarFile := filepath.Join(root, ".manigot", "jdi-status", "aaaa01_x", "status")
 	if err := os.MkdirAll(filepath.Dir(sidecarFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +491,7 @@ func TestEnsureSidecarIgnoredActuallyWorksWithGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	staged := string(out)
-	if strings.Contains(staged, ".jdi-status") {
+	if strings.Contains(staged, "jdi-status") {
 		t.Errorf("git add -A staged the sidecar despite ensureSidecarIgnored:\n%s", staged)
 	}
 	if !strings.Contains(staged, "docs/jobs/aaaa01_x/tasks.md") {

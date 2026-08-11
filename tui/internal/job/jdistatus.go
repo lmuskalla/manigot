@@ -9,12 +9,19 @@ import (
 	"time"
 )
 
+// ManigotRelDir is manigot's own directory inside a target project, relative
+// to the project root: the home for host-side tooling state that is not job
+// content and does not belong in docs/. .manigot/manigot.json holds the
+// committable project settings (see the project package); .manigot/jdi-status/
+// holds mg-jdi's ephemeral run state (gitignored, see .gitignore).
+const ManigotRelDir = ".manigot"
+
 // JDISidecarDirName is the sidecar directory (Decision 4 in the "fully
 // autonomous mode" brief) mg-jdi writes its per-job status and run log
-// into, under JobsRelDir — deliberately outside any job's own directory
+// into, under ManigotRelDir — deliberately outside any job's own directory
 // (docs/jobs/<name>/) so it can never be swept into an agent's own
 // `git add -A`, and gitignored entirely (see .gitignore).
-const JDISidecarDirName = ".jdi-status"
+const JDISidecarDirName = "jdi-status"
 
 // jdiStatusFileName / jdiRunLogFileName are the two files living under each
 // job's JDIStatusDir.
@@ -64,7 +71,7 @@ type jdiStatusFile struct {
 
 // JDIStatusDir returns the sidecar directory for job jobName under root.
 func JDIStatusDir(root, jobName string) string {
-	return filepath.Join(root, JobsRelDir, JDISidecarDirName, jobName)
+	return filepath.Join(root, ManigotRelDir, JDISidecarDirName, jobName)
 }
 
 // JDIStatusPath returns the status file path within JDIStatusDir.

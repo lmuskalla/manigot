@@ -16,14 +16,17 @@ import (
 // sidecarExcludePattern is the .gitignore-syntax line ensureSidecarIgnored
 // adds to a project's .git/info/exclude — every job's status sidecar, not
 // just one, since the pattern is directory-shaped
-// ("docs/jobs/.jdi-status/").
-var sidecarExcludePattern = filepath.ToSlash(filepath.Join(job.JobsRelDir, job.JDISidecarDirName)) + "/"
+// (".manigot/jdi-status/"). Rebuilt from the same constants
+// (job.ManigotRelDir + job.JDISidecarDirName) the Go path construction
+// uses, so the exclude pattern can never drift from where the sidecar is
+// actually written.
+var sidecarExcludePattern = filepath.ToSlash(filepath.Join(job.ManigotRelDir, job.JDISidecarDirName)) + "/"
 
 // ensureSidecarIgnored appends sidecarExcludePattern to root's
 // .git/info/exclude if not already present.
 //
 // This matters because the status/run.log sidecar (Decision 4) lives inside
-// the *target project's* docs/jobs/ — not manigot's own checkout — and the
+// the *target project's* .manigot/ — not manigot's own checkout — and the
 // whole point of keeping it outside every job's own directory is so it can
 // never be swept into an agent's own `git add -A`. That only actually holds
 // if *this project's* git configuration excludes it: manigot's own

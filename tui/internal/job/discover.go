@@ -63,9 +63,11 @@ func FindProjectRoot() (string, error) {
 //
 // A directory under docs/jobs/ only counts as a job if it has a brief.md —
 // the file new-job.sh's scaffold always writes. This is what keeps the main
-// worktree's non-job content (the .jdi-status sidecar directory, or a stray
-// empty directory) from being mislisted as a job, matching the pre-worktree
-// enumeration, which only ever saw tracked job directories via `git ls-tree`.
+// worktree's non-job content (a stray empty directory, or anything else
+// without a brief.md) from being mislisted as a job — mg-jdi's status/run.log
+// sidecar lives under .manigot/jdi-status/, outside docs/jobs/ entirely —
+// matching the pre-worktree enumeration, which only ever saw tracked job
+// directories via `git ls-tree`.
 //
 // Graceful fallback: a non-repo (git unavailable) or a repo with no branches
 // yet (an unborn HEAD, before worktrees are even possible) falls back to the
@@ -98,9 +100,10 @@ func Discover(root string) ([]Job, error) {
 			}
 			jobDir := filepath.Join(jobsDir, e.Name())
 			if _, serr := os.Stat(filepath.Join(jobDir, "brief.md")); serr != nil {
-				// No brief.md — not a job (sidecar dirs like .jdi-status,
-				// or a stray empty directory). ReadJob's half-formed-job
-				// tolerance still applies once a job dir is identified.
+				// No brief.md — not a job (a stray empty directory, or
+				// anything else without a brief.md). ReadJob's
+				// half-formed-job tolerance still applies once a job dir
+				// is identified.
 				continue
 			}
 			j, _ := ReadJob(jobDir) // ReadJob never hard-fails; see its doc.

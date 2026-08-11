@@ -158,20 +158,22 @@ func TestDiscoverListsTransitionalMainWorktreeJob(t *testing.T) {
 }
 
 // TestDiscoverIgnoresNonJobDirsInMainWorktree confirms the main worktree's
-// docs/jobs/ content that is not a job — the .jdi-status sidecar directory,
-// or a stray empty directory — is not mislisted as a job. The pre-worktree
-// enumeration never saw these (git ls-tree only lists tracked content); the
-// brief.md requirement reproduces that for the disk-based worktree scan.
+// docs/jobs/ content that is not a job — a stray empty directory, or the
+// mg-jdi status sidecar (which, since the .manigot/ move, lives under
+// .manigot/jdi-status/, outside docs/jobs/ entirely) — is not mislisted as
+// a job. The pre-worktree enumeration never saw these (git ls-tree only
+// lists tracked content); the brief.md requirement reproduces that for the
+// disk-based worktree scan.
 func TestDiscoverIgnoresNonJobDirsInMainWorktree(t *testing.T) {
 	dir, _ := gitInitRepo(t)
 
 	// Main worktree on a job branch (transitional layout), with the job plus
-	// a .jdi-status sidecar dir and a stray empty dir sitting next to it.
+	// a .manigot/jdi-status sidecar dir and a stray empty dir next to it.
 	gitRun(t, dir, "checkout", "-q", "-b", "feature/aaa01_a")
 	jobDir := filepath.Join(dir, "docs", "jobs", "aaa01_a")
 	os.MkdirAll(jobDir, 0o755)
 	os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte(briefWith("Aaa", "aaa01", "feature/aaa01_a", "2026-01-01")), 0o644)
-	os.MkdirAll(filepath.Join(dir, "docs", "jobs", ".jdi-status", "aaa01_a"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".manigot", "jdi-status", "aaa01_a"), 0o755)
 	os.MkdirAll(filepath.Join(dir, "docs", "jobs", "stray_empty_dir"), 0o755)
 	gitRun(t, dir, "add", "-A")
 	gitRun(t, dir, "commit", "-q", "-m", "job aaa01_a + sidecar + stray")

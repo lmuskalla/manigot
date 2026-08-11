@@ -55,7 +55,7 @@ const (
 //     default shared between CLI and TUI (bare `mg` resolves to it, `mg
 //     profiles` writes it, and this form reads/writes the same key); and
 //   - the project.Settings (base branch) — shared project convention,
-//     committable, in the target project's docs/manigot.json.
+//     committable, in the target project's .manigot/manigot.json.
 //
 // Like newJobView, it does not persist anything itself — the App calls
 // config.Save and project.Save on submit so this stays a pure input
@@ -277,7 +277,7 @@ func (v *settingsView) render() string {
 	b.WriteString("\n\n")
 
 	// Base branch row (project). Labeled project-scoped so it's clear this
-	// writes a different file (docs/manigot.json, committable) than the
+	// writes a different file (.manigot/manigot.json, committable) than the
 	// editor/profile rows above and below it.
 	branchLabel := "  Base branch (project): "
 	if v.focus == stFocusBranch {
@@ -286,7 +286,7 @@ func (v *settingsView) render() string {
 		b.WriteString(dimStyle.Render(branchLabel) + dimStyle.Render(v.baseBranch.View()))
 	}
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = main · stored in docs/manigot.json, shared with your team"))
+	b.WriteString(dimStyle.Render("           blank = main · stored in .manigot/manigot.json, shared with your team"))
 	b.WriteString("\n\n")
 
 	// Recent activity count row (global): the maximum number of entries the

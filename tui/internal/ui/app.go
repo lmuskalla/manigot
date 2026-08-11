@@ -65,7 +65,7 @@ type App struct {
 	settings config.Settings
 
 	// projectSettings holds the project-scoped conventions (base branch),
-	// read from docs/manigot.json in the target project root. Unlike
+	// read from .manigot/manigot.json in the target project root. Unlike
 	// settings, this file is meant to be committed and shared across a
 	// team — it travels with the project, not the user. Loaded once at
 	// startup and updated in place whenever the settings form is submitted.
@@ -635,7 +635,7 @@ var ringBell = func() {
 
 // refresh does refreshJobs, plus reloads the open detail view's files (if
 // any) so changes an agent made outside the TUI show up — used by "ctrl+r".
-// It also re-reads the project settings, so a docs/manigot.json edited
+// It also re-reads the project settings, so a .manigot/manigot.json edited
 // outside the TUI (e.g. base branch changed by hand or pulled from origin)
 // is picked up without an app restart. The settings form's own submit path
 // is the only writer to a.projectSettings and it never runs concurrently

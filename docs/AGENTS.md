@@ -81,7 +81,7 @@ configured with `mg setup`.
 - `scripts/new-job.sh` — reached via `mg job`. Creates a new job directory
   under `docs/jobs/<id>_<slug>/` and a matching git branch, always branched from
   the configured base branch (regardless of the branch the user is currently
-  on). The base branch comes from `docs/manigot.json` (default `main`); the
+  on). The base branch comes from `.manigot/manigot.json` (default `main`); the
   `--base-branch <name>` flag overrides it for one invocation. The branch is
   created as the job's own git worktree (207bfu_git-worktrees, Decision 1/3) at
   `<dirname(PROJECT_ROOT)>/.manigot-worktrees/<basename(PROJECT_ROOT)>/<id>_<slug>`,
@@ -111,10 +111,12 @@ configured with `mg setup`.
   same script, same behavior); wrapper around `bin/manigot-jdi`, mirroring
   `tui.sh` exactly.
 - `scripts/init.sh` — reached via `mg init`. Bootstraps a project for the job
-  workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, a seeded
-  `manigot.json`, and an empty `docs/jobs/` — never the example job under it)
-  into the target project's `docs/` if absent, reporting "already initialized"
-  and skipping the copy otherwise, then optionally hands off to `@prompter`
+  workflow: copies `project-template/docs/` (`AGENTS.md`, `CLAUDE.md`, and an
+  empty `docs/jobs/` — never the example job under it) into the target
+  project's `docs/`, plus `project-template/.manigot/manigot.json` (the
+  seeded project settings) into the target's `.manigot/`, if `docs/` is
+  absent — reporting "already initialized" and skipping the copy otherwise —
+  then optionally hands off to `@prompter`
   (via `run.sh`'s `--prompt` flag) to draft a concrete `docs/AGENTS.md`. Unlike
   every other job-workflow subcommand, it deliberately works **without** an
   existing `docs/` — it's the one that creates it.
@@ -135,7 +137,7 @@ configured with `mg setup`.
   the job's own worktree itself, 207bfu_git-worktrees). Every
   invocation's captured output and a `running`/`stopped:finished`/
   `stopped:needs-human` status are written to a sidecar directory,
-  `docs/jobs/.jdi-status/<job-name>/`, outside every job's own directory so
+  `.manigot/jdi-status/<job-name>/`, outside every job's own directory so
   it can never be swept into an agent's `git add -A`: `status` (polled by
   the TUI's list-row badge) and `run.log` (polled by the TUI's detail-view
   log tab). This directory lives in the *target project*, not manigot's own
@@ -157,7 +159,7 @@ configured with `mg setup`.
   the job list) reads and writes that value via `tui/internal/config`, the same
   key `mg profiles` writes and bare `mg` resolves to. Project-scoped
   conventions (currently: the base branch) are NOT here either — they live in
-  the target project's `docs/manigot.json` (see next bullet), so they travel
+  the target project's `.manigot/manigot.json` (see next bullet), so they travel
   with the project and are shared across a team rather than being a per-user
   pref. Written by the TUI's settings screen, read/written
   via `tui/internal/config`. Missing is not an error —
@@ -167,7 +169,7 @@ configured with `mg setup`.
   is honored as a migration fallback while `.env` has no `MANIGOT_PROFILE` yet,
   and the older `tool` field still migrates (`claude-code`→`claude-pro`,
   `opencode`→`zai`); neither is written back.
-- `docs/manigot.json` (in the target project, committable) — project-scoped
+- `.manigot/manigot.json` (in the target project, committable) — project-scoped
   manigot conventions, the project-level counterpart to the personal
   `config/tui-settings.json`. Currently holds `baseBranch`: the ref new job
   branches are cut from (`scripts/new-job.sh`), defaulting to `main` when
@@ -177,6 +179,12 @@ configured with `mg setup`.
   `jq` dependency yet). Seeded by `mg init` and created on first TUI settings
   save; contains only a public ref name, no secrets, so it's meant to be
   committed and shared across a team.
+- `.manigot/` (in the target project) — manigot's own directory for host-side
+  tooling state that is not job content and does not belong in docs/: the
+  committable `.manigot/manigot.json` project settings (previous bullet) and
+  the gitignored `.manigot/jdi-status/` ephemeral mg-jdi run state (see the
+  `tui/cmd/jdi` bullet). Nothing else belongs here, and host-side tooling is
+  the only writer.
 - `manigot/.env` (gitignored) — holds credentials and defaults for the
   profiles: `CLAUDE_CODE_OAUTH_TOKEN`/`CLAUDE_ACCOUNT_UUID`/`CLAUDE_EMAIL`/
   `CLAUDE_ORG_UUID` (claude-pro), `ZHIPU_API_KEY` + `OPENCODE_ZAI_MODEL`
@@ -259,7 +267,7 @@ configured with `mg setup`.
   the only job-workflow command that works without an existing `docs/`
 - `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
   dir + branch (the branch is cut from the configured base branch — see
-  `docs/manigot.json`; `--base-branch` overrides it for one invocation; the
+  `.manigot/manigot.json`; `--base-branch` overrides it for one invocation; the
   branch is checked out in the job's own git worktree, see Job workflow)
 - `mg done <id>` — archive a finished job (merges it into the base branch and
   removes its worktree)
@@ -303,7 +311,12 @@ way `@name` launches do.
 ## Hard rules
 - NEVER commit `.env` or any file containing OAuth tokens / account UUIDs
 - NEVER touch a mounted project's files outside its `docs/` directory from
-  within manigot tooling itself
+  within manigot tooling itself — the one deliberate exception is the target
+  project's `.manigot/` directory, which host-side manigot tooling itself
+  owns and writes: `.manigot/manigot.json` (project settings) and
+  `.manigot/jdi-status/` (mg-jdi run state). Agents must treat `.manigot/`
+  like any other tool-managed state: read the settings file if needed, but
+  never edit either path by hand.
 - NEVER edit the read-only context mounts `/workspace/AGENTS.md` or
   `/workspace/.claude/CLAUDE.md` — they are read-only overlays of `docs/AGENTS.md`.
   Change the canonical source `docs/AGENTS.md` instead

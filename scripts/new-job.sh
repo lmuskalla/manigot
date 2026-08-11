@@ -7,7 +7,7 @@ set -euo pipefail
 # mg-job "add gallery" --base-branch develop
 # mg-job "upgrade dependencies" --type chore
 #
-# The base branch new jobs are cut from is read from docs/manigot.json
+# The base branch new jobs are cut from is read from .manigot/manigot.json
 # (defaulting to "main"); --base-branch overrides it for one invocation.
 #
 # Every job gets its own git worktree (207bfu_git-worktrees, Decision 1/3):
@@ -71,7 +71,7 @@ fi
 
 # ── Resolve base branch ─────────────────────────────────────────────────────────
 # The base branch new jobs are cut from is configured per-project in
-# docs/manigot.json (baseBranch key), defaulting to "main". This reads the
+# .manigot/manigot.json (baseBranch key), defaulting to "main". This reads the
 # same file the TUI writes, so `mg job` and the TUI's "m" checkout agree on
 # what "base branch" means for this project. The --base-branch flag overrides
 # the file for a single invocation (an ad-hoc one-off, e.g. spiking a branch
@@ -80,7 +80,7 @@ fi
 # The JSON extraction is a guarded sed regex against the single known key —
 # revisit (add jq) only if more project keys appear.
 BASE_BRANCH="$DEFAULT_BASE_BRANCH"
-SETTINGS_FILE="$PROJECT_ROOT/docs/manigot.json"
+SETTINGS_FILE="$PROJECT_ROOT/.manigot/manigot.json"
 if [[ -f "$SETTINGS_FILE" ]]; then
     # Match "baseBranch": "value" anywhere on a line, so both the
     # pretty-printed JSON project.Save writes and a hand-written one-liner

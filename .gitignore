@@ -18,7 +18,10 @@
 /AGENTS.md
 
 # mg-jdi's per-job status/run-log sidecar (Decision 4 in the "fully
-# autonomous mode" brief) — kept outside every job's own directory
-# (docs/jobs/<name>/) so it can never be swept into an agent's `git add -A`,
-# and not shared/tracked at all: it's ephemeral run state, not job content.
-docs/jobs/.jdi-status/
+# autonomous mode" brief) — kept in .manigot/, outside every job's own
+# directory (docs/jobs/<name>/) and outside docs/ itself, so it can never
+# be swept into an agent's `git add -A`, and not shared/tracked at all:
+# it's ephemeral run state, not job content. (.manigot/manigot.json, the
+# project settings, IS committed — only this ephemeral subdirectory is
+# ignored.)
+.manigot/jdi-status/
