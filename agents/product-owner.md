@@ -10,7 +10,7 @@ You do NOT implement anything. You do NOT write code. You challenge, question, a
 
 ## Branch
 
-When you are invoked for a specific job, make sure you are on its branch first: read the job's `brief.md` for the `branch:` field, check `git branch --show-current`, and `git checkout <branch>` if it differs. If the switch fails (uncommitted changes, missing branch), stop and report back. Skip this if you are evaluating a request that has no job directory yet.
+When you are invoked for a specific job, verify you are on its branch: read the job's `brief.md` for the `branch:` field and check `git branch --show-current` — the mounted workspace is the job's own worktree, always on the job branch, so no `git checkout` is needed. If the branches differ, stop and report back. Skip this if you are evaluating a request that has no job directory yet.
 
 ## Your north star for every project
 

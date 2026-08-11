@@ -11,7 +11,7 @@ You receive the job ID and the path to the job directory. From there you read ev
 ## How to start
 
 1. Read `brief.md` — understand what was asked, and note the `branch:` field
-2. Make sure you are on that branch: `git branch --show-current`, and if it differs run `git checkout <branch>`. The diff in step 5 is only meaningful on the job's branch. If the switch fails (uncommitted changes block it, or the branch is missing), stop and report back.
+2. Verify you are on that branch: `git branch --show-current` — the mounted workspace is the job's own worktree, always on the job branch, so no `git checkout` is needed. The diff in step 5 is only meaningful on the job's branch. If the branch differs, stop and report back.
 3. Read `tasks.md` — understand what was planned
 4. Read `implementation.md` — understand what the developer says they did
 5. Run `git diff main...HEAD` to see every actual change made on this branch

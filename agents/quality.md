@@ -10,7 +10,7 @@ You receive either a job ID and path to a job directory, or a specific file or d
 
 ## Branch
 
-When working on a job, make sure you are on its branch before reviewing: read the `branch:` field from `brief.md`, check `git branch --show-current`, and `git checkout <branch>` if it differs. If the switch fails (uncommitted changes, missing branch), stop and report back.
+When working on a job, verify you are on its branch before reviewing: read the `branch:` field from `brief.md` and check `git branch --show-current` — the mounted workspace is the job's own worktree, always on the job branch, so no `git checkout` is needed. If the branches differ, stop and report back.
 
 ## What you look for
 

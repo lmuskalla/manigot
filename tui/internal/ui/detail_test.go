@@ -493,11 +493,9 @@ func TestDetailTabsDoNotRepeatTitleOrFrontmatter(t *testing.T) {
 	}
 }
 
-// TestDetailViewReadsOffBranchJobViaGit (existing, off-branch fixture) already
-// asserts "TASK-1" survives inside "## Task breakdown" for the tasks tab —
-// re-confirmed here isn't necessary, just noted: that assertion is the
-// over-strip regression guard for the git-show read path specifically, this
-// test's is for the working-tree read path.
+// TestDetailTabsDoNotRepeatTitleOrFrontmatter's "TASK-1: real work here"
+// case asserts "TASK-1" survives inside "## Task breakdown" for the tasks tab —
+// the over-strip regression guard for a TASK-shaped line in the body.
 
 // TestFilePlaceholderHasNoOwnHeading confirms filePlaceholder no longer
 // renders its own "# <label>" heading (TASK-6): the chrome's title line

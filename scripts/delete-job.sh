@@ -140,6 +140,19 @@ WORKTREE_PATH="${WORKTREE_PATH%/}"
 JOB_DIR="$WORKTREE_PATH/$JOBS_DIR/$JOB_NAME"
 JOB_TITLE=$(head -1 "$JOB_DIR/brief.md" 2>/dev/null | sed 's/^# Brief: *//' || true)
 
+# Is the resolved worktree the main worktree itself? Needed here (before the
+# confirmation, for accurate wording) and again below (to decide whether
+# worktree removal is even possible). The transitional main-worktree case is a
+# job whose branch is checked out in the main worktree — no separate worktree
+# to remove, and the switch off the branch may carry uncommitted changes onto
+# the default branch instead of discarding them.
+MAIN_WORKTREE="$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_ROOT")"
+if [[ "$WORKTREE_PATH" == "$MAIN_WORKTREE" ]]; then
+    MAIN_WORKTREE_CASE="true"
+else
+    MAIN_WORKTREE_CASE="false"
+fi
+
 # Deleting the worktree discards its working tree wholesale — surface that
 # explicitly in the confirmation below rather than erroring out (unlike
 # mg-done, there is no "commit first" requirement for a delete).
@@ -155,7 +168,12 @@ echo "  Title    : ${JOB_TITLE:-$JOB_NAME}"
 echo "  Worktree : $WORKTREE_PATH"
 echo "  Branch   : $BRANCH (will be deleted, unmerged)"
 if [[ "$DIRTY" == "true" ]]; then
-    echo "  Warning  : this worktree has uncommitted changes — they will be discarded."
+    if [[ "$MAIN_WORKTREE_CASE" == "true" ]]; then
+        echo "  Warning  : the main worktree has uncommitted changes — the switch off $BRANCH will carry"
+        echo "             them onto the default branch if they don't conflict, or abort (deleting nothing)."
+    else
+        echo "  Warning  : this worktree has uncommitted changes — they will be discarded."
+    fi
 fi
 echo ""
 echo "This cannot be undone."
@@ -190,8 +208,7 @@ fi
 # a main working tree") — the main working tree cannot be removed. The branch
 # delete alone suffices there: switching the main worktree off the branch (just
 # done) is all the cleanup a main-worktree job needs.
-MAIN_WORKTREE="$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_ROOT")"
-if [[ "$WORKTREE_PATH" == "$MAIN_WORKTREE" ]]; then
+if [[ "$MAIN_WORKTREE_CASE" == "true" ]]; then
     echo ""
     echo "→ Job's worktree is the main worktree — skipping worktree removal."
 else

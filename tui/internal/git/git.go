@@ -220,11 +220,15 @@ func RecentCommits(root string, n int) ([]Commit, error) {
 }
 
 // Checkout switches the working tree at root to branch (short name), via
-// `git checkout <branch>`. It is the host-side mutation behind the TUI's
-// "switch to this job's branch" action (detail-view key "c"). A checkout that
-// git refuses (e.g. uncommitted changes that would be overwritten) returns the
-// wrapped error including git's stderr so the caller can surface the reason in
-// the status line.
+// `git checkout <branch>`. A checkout that git refuses (e.g. uncommitted
+// changes that would be overwritten) returns the wrapped error including git's
+// stderr so the caller can surface the reason in the status line.
+//
+// Currently unused: the worktree model (207bfu_git-worktrees) removed its only
+// two callers (the TUI's "switch to this job's branch" action and mg-jdi's
+// ensureOnBranch), since a job's own worktree is always already on the job
+// branch. Kept deliberately (with its tests) in case a branch-switch action is
+// needed again.
 func Checkout(root, branch string) error {
 	_, stderr, err := run(root, "checkout", branch)
 	if err != nil {

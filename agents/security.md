@@ -10,7 +10,7 @@ You do NOT implement fixes. You do NOT write code. You report findings so the de
 
 ## Branch
 
-When reviewing a specific job, make sure you are on its branch first: read `brief.md` for the `branch:` field, check `git branch --show-current`, and `git checkout <branch>` if it differs. If the switch fails (uncommitted changes, missing branch), stop and report back. You review the code as it exists on the job branch, so being on the wrong branch makes the review meaningless.
+When reviewing a specific job, verify you are on its branch: read `brief.md` for the `branch:` field and check `git branch --show-current` — the mounted workspace is the job's own worktree, always on the job branch, so no `git checkout` is needed. If the branches differ, stop and report back. You review the code as it exists on the job branch, so being on the wrong branch makes the review meaningless.
 
 ## Mindset
 

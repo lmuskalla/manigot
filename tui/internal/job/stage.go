@@ -158,7 +158,7 @@ func verdictOverallSection(body string) string {
 // substantive lines at all — only HTML comments, headings, and frontmatter.
 //
 // FileIsWritten reads from disk; isWritten is the bytes-only core, used by
-// Job.fileWritten for off-branch jobs whose contents arrive via git show.
+// Job.fileWritten.
 func FileIsWritten(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -168,8 +168,8 @@ func FileIsWritten(path string) bool {
 }
 
 // isWritten applies the "written" rule (see FileIsWritten) to already-read
-// file bytes, so the off-branch path (git show → bytes) shares the exact same
-// classification logic as the working-tree path (disk read).
+// file bytes, sharing the exact same classification logic as the working-tree
+// disk read.
 func isWritten(data []byte) bool {
 	body := stripHTMLComments(string(data))
 
