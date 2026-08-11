@@ -113,6 +113,7 @@ git config --global --add safe.directory /workspace
 # it as part of the agent's own output.
 if [[ "${MANIGOT_PRINT:-false}" != "true" ]]; then
     echo "Starting session — you're made, welcome to the crew."
+    [[ -n "${MANIGOT_QUOTE:-}" ]] && echo "\"$MANIGOT_QUOTE\""
 fi
 
 if [[ "$TOOL" == "opencode" ]]; then

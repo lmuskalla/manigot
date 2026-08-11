@@ -362,6 +362,19 @@ if [[ ${#ENV_MOUNTS[@]} -eq 0 ]]; then
     echo "  Shadowed : none (no .env files found)" >&3
 fi
 
+# ── Flavor quote ──────────────────────────────────────────────────────────────
+# Picked once per session from docs/quotes.json (see docs/NAMING.md) and handed
+# to entrypoint.sh via env var, which prints it alongside its welcome line.
+# Missing/empty file just means no quote this session — not an error.
+MANIGOT_QUOTE=""
+QUOTES_FILE="$MANIGOT_ROOT/docs/quotes.json"
+if [[ -f "$QUOTES_FILE" ]]; then
+    mapfile -t QUOTES < <(grep -oE '"[^"]*"' "$QUOTES_FILE" | sed 's/^"\(.*\)"$/\1/')
+    if [[ ${#QUOTES[@]} -gt 0 ]]; then
+        MANIGOT_QUOTE="${QUOTES[$((RANDOM % ${#QUOTES[@]}))]}"
+    fi
+fi
+
 # ── Info ────────────────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════╗" >&3
 echo "║           manigot                   ║" >&3
@@ -372,7 +385,7 @@ echo "║  Root    : $PROJECT_ROOT" >&3
 if [[ "$DOCS_INITIALIZED" == "true" ]]; then
     echo "║  Docs    : $PROJECT_DOCS_DIR" >&3
 else
-    echo "║  Docs    : (none — job workflow unavailable)" >&3
+    echo "║  Docs    : (none — job workflow unavailable, running off the books)" >&3
 fi
 [[ -n "$CONTEXT_FILE" ]] && echo "║  Context : $CONTEXT_FILE → $CONTEXT_TARGET" >&3
 [[ -n "$PROFILE" ]] && echo "║  Profile : $PROFILE" >&3
@@ -409,6 +422,7 @@ docker run "${DOCKER_TTY_FLAGS[@]+"${DOCKER_TTY_FLAGS[@]}"}" --rm \
     -e GIT_AUTHOR_EMAIL_CFG="$GIT_AUTHOR_EMAIL_CFG" \
     -e MANIGOT_TOOL="$TOOL" \
     -e MANIGOT_PRINT="$PRINT" \
+    -e MANIGOT_QUOTE="$MANIGOT_QUOTE" \
     --network=bridge \
     --memory=2g \
     --security-opt=no-new-privileges \
