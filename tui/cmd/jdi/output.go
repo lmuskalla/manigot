@@ -135,7 +135,11 @@ var sectionPrefix = []byte("===")
 // A non-header write (a header's following reason line, or an invocation's
 // agent text, each of which arrives as its own write that does not start
 // with sectionPrefix) passes through untouched — it belongs to the section
-// that just began and must stay flush against its header.
+// that just began. sectionWriter itself never inserts blank lines inside a
+// section; any body/header separation beyond the header's own trailing
+// newline is the caller's own writes (logInvocation, for one, emits two
+// blank lines of its own between the "finished" header and the agent text —
+// see its doc).
 type sectionWriter struct {
 	w            io.Writer
 	wroteSection bool
@@ -238,6 +242,14 @@ func normalizeWhitespace(s string) string {
 // (orchestrate.ResultText) — not the raw --output-format json blob, so a
 // human reading either destination sees prose, not JSON.
 //
+// Two blank lines separate the "finished" header from the agent's output
+// (brief: jdi logs new line): without them the output reads as glued to the
+// finished statement — on a wrapped terminal, and in the TUI's log tab,
+// which renders run.log's raw content — as if it began on the same line.
+// The blank lines are written unconditionally, before whichever body variant
+// follows (real text, "(no output)", or the dedup "(output matches ...,
+// omitted)" note below), so the separation is the same in every case.
+//
 // Honesty note (Decision 7's caveat, carried into scripts/entrypoint.sh's
 // own comment): this is exactly the agent's *final response text* per
 // invocation, not a blow-by-blow of every tool call/file edit — that's all
@@ -254,7 +266,10 @@ func normalizeWhitespace(s string) string {
 // sees an invoked/finished pair either way. targetFile == "" (e.g. an
 // unrecognized agent, or the file couldn't be read) simply skips the check.
 func logInvocation(w io.Writer, agent string, attempt int, raw []byte, targetFile, targetContent string) {
-	fmt.Fprintf(w, "=== %s %s finished (attempt %d) ===\n", time.Now().Format(time.RFC3339), agent, attempt)
+	// "\n\n\n" = the header's own trailing newline plus two blank lines, so
+	// the agent's output starts two lines below the "finished" statement
+	// (brief: jdi logs new line).
+	fmt.Fprintf(w, "=== %s %s finished (attempt %d) ===\n\n\n", time.Now().Format(time.RFC3339), agent, attempt)
 	text := orchestrate.ResultText(raw)
 	switch {
 	case text == "":

@@ -268,7 +268,9 @@ func TestRunLogSeparationAcrossRuns(t *testing.T) {
 // section header (a fresh log — the first run ever written to it) gets no
 // leading blank line, while every subsequent header gets "\n\n", and
 // non-header writes (an agent-text or reason body following its header)
-// pass through untouched so they stay flush against their header.
+// pass through untouched — sectionWriter never inserts blank lines inside a
+// section. The invocation body's two blank lines of separation (brief: jdi
+// logs new line) are logInvocation's own writes, asserted below.
 func TestSectionWriterSeparatesHeadersButNotFirstRunEver(t *testing.T) {
 	var buf bytes.Buffer
 	w := &sectionWriter{w: &buf, wroteSection: false}
@@ -292,10 +294,16 @@ func TestSectionWriterSeparatesHeadersButNotFirstRunEver(t *testing.T) {
 	if n := strings.Count(got, "\n\n\n==="); n != 3 {
 		t.Errorf("got %d blank-line separators, want 3 (one before every header but the first):\n%q", n, got)
 	}
-	// The invocation body must stay flush against its "finished" header —
-	// the blank line goes before the header, not between header and body.
-	if strings.Contains(got, "finished (attempt 1)\n\nwrote tasks.md") {
-		t.Errorf("blank line leaked between a finished header and its body, got:\n%q", got)
+	// The invocation body is deliberately separated from its "finished"
+	// header by two blank lines (brief: jdi logs new line): the header's own
+	// trailing newline plus the two blank lines reads as
+	// "finished (attempt 1) ===\n\n\nwrote tasks.md", so the agent's output
+	// no longer looks glued to the finished statement.
+	if !strings.Contains(got, "finished (attempt 1) ===\n\n\nwrote tasks.md") {
+		t.Errorf("expected two blank lines between the finished header and its body, got:\n%q", got)
+	}
+	if strings.Contains(got, "finished (attempt 1) ===\n\n\n\nwrote tasks.md") {
+		t.Errorf("more than two blank lines between the finished header and its body, got:\n%q", got)
 	}
 }
 
