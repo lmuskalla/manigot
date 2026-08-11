@@ -19,9 +19,17 @@ directly instead.
 ## Changes
 
 TASK-1: No code change — the analyst's scope-decision write-up in `tasks.md`
-was already in place before this run started (storage field, tmux-override
-semantics, flag-convention fallback, settings-form field placement). Adopted
-as-is; see that file's "TASK-1 scope decision (confirmed)" section.
+(storage field, tmux-override semantics, flag-convention fallback,
+settings-form field placement) is recorded in its own `[r5x2a7] TASK-1: ...`
+commit, adopted as-is; see that file's "TASK-1 scope decision (confirmed)"
+section. (Correction from an earlier revision of this note: the write-up was
+originally committed together with TASK-2's code change rather than in its
+own commit; per the reviewer's first-pass feedback, the branch's history was
+rebuilt — via cherry-picks onto a temp branch, verified byte-for-byte
+tree-identical to the pre-split tip at every step, with the original tip kept
+under a local `backup-r5x2a7-presplit` branch/reflog until the split was
+confirmed safe — so tasks.md's TASK-1 content and config.go's TASK-2 change
+now each have their own commit, matching every other task in this job.)
 
 TASK-2: Added `Settings.Terminal string \`json:"terminal,omitempty"\`` to
 `tui/internal/config/config.go`, with a doc comment matching `Editor`'s.
@@ -121,3 +129,18 @@ TASK-7: Updated documentation:
   didn't ask for; documented as a known limitation rather than solved.
 - No other scope changes or surprises came up; all seven tasks from
   `tasks.md` were completed as scoped.
+
+## Re-review fixes (post first verdict)
+
+`verdict.md`'s first pass ("NEEDS WORK") flagged two small issues, both
+addressed:
+
+1. **TASK-1 commit split.** TASK-1's `tasks.md` write-up had landed in the
+   same commit as TASK-2's `config.go` change (`faec77a`). The branch history
+   was rebuilt so each now has its own commit (see the corrected TASK-1 note
+   above) — content is byte-for-byte identical to before the split, only the
+   commit boundaries changed.
+2. **gofmt.** `gofmt -w tui/internal/ui/settings.go` fixed the struct-field
+   alignment `gofmt -l` flagged after the `terminal` field was added;
+   `gofmt -l` now reports nothing. No functional change; `go build`/`go
+   vet`/`go test ./...` all still pass.
