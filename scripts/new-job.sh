@@ -13,10 +13,14 @@ set -euo pipefail
 # Every job gets its own git worktree (207bfu_git-worktrees, Decision 1/3):
 # created alongside the branch at
 # <dirname(PROJECT_ROOT)>/.manigot-worktrees/<basename(PROJECT_ROOT)>/<id>_<slug>,
-# sibling to PROJECT_ROOT rather than nested inside it. PROJECT_ROOT itself is
-# never switched — it stays on whatever branch it was already on. A
-# non-git-repo project keeps the pre-worktree behavior: no branch, no
-# worktree, the scaffold is written straight into PROJECT_ROOT.
+# sibling to PROJECT_ROOT rather than nested inside it. When PROJECT_ROOT is
+# itself a mount point (its parent is on a different filesystem), the sibling
+# would land outside the project's persistent storage, so the worktree is
+# nested at <PROJECT_ROOT>/.manigot-worktrees/<id>_<slug> instead and
+# excluded from the main worktree's git status. PROJECT_ROOT itself is never
+# switched — it stays on whatever branch it was already on. A non-git-repo
+# project keeps the pre-worktree behavior: no branch, no worktree, the
+# scaffold is written straight into PROJECT_ROOT.
 #
 # Installed as `mg-job`. See `make install`.
 
@@ -112,11 +116,41 @@ if [[ -n "$CURRENT_BRANCH" ]]; then
         echo "Error: base branch '${BASE_BRANCH}' does not exist; cannot create job branch from it." >&2
         exit 1
     fi
-    # Sibling to PROJECT_ROOT, not nested inside it — see scripts/lib/worktree.sh's
-    # doc for why. This naming convention is only ever computed here, at
-    # creation time; every other touch point looks the worktree up dynamically
-    # via worktree_path_for_branch instead of recomputing this path.
-    WORKTREE_PARENT="$(dirname "$PROJECT_ROOT")/.manigot-worktrees/$(basename "$PROJECT_ROOT")"
+    # Sibling to PROJECT_ROOT by default, not nested inside it — see
+    # scripts/lib/worktree.sh's doc and 207bfu_git-worktrees Decision 1 for
+    # why. This naming convention is only ever computed here, at creation
+    # time; every other touch point looks the worktree up dynamically via
+    # worktree_path_for_branch instead of recomputing this path.
+    #
+    # Fallback for a PROJECT_ROOT that is itself a mount point: its parent
+    # then lives on a different filesystem — one the project's own persistent
+    # storage doesn't necessarily extend to (e.g. the ephemeral container
+    # layer above a mounted /workspace). A sibling there would silently
+    # vanish when that filesystem is wiped while the project and its git repo
+    # survive. Detect this by comparing the device of PROJECT_ROOT with the
+    # device of its parent: if they differ, PROJECT_ROOT crosses a mount
+    # boundary, so nest the worktrees inside PROJECT_ROOT instead and exclude
+    # that path from the main worktree's status — a `git add -A` in
+    # PROJECT_ROOT must never sweep the nested checkouts' content into a
+    # commit.
+    WORKTREE_PARENT_SIBLING="$(dirname "$PROJECT_ROOT")/.manigot-worktrees/$(basename "$PROJECT_ROOT")"
+    if [[ "$(stat -c %d "$(dirname "$PROJECT_ROOT")")" != "$(stat -c %d "$PROJECT_ROOT")" ]]; then
+        WORKTREE_PARENT="$PROJECT_ROOT/.manigot-worktrees"
+        EXCLUDE_FILE="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-path info/exclude 2>/dev/null || true)"
+        if [[ -z "$EXCLUDE_FILE" ]]; then
+            # Pre-2.31 git fallback: --git-path without --path-format returns
+            # a path relative to PROJECT_ROOT.
+            EXCLUDE_FILE="$(git -C "$PROJECT_ROOT" rev-parse --git-path info/exclude 2>/dev/null || true)"
+            [[ -n "$EXCLUDE_FILE" && "$EXCLUDE_FILE" != /* ]] && EXCLUDE_FILE="$PROJECT_ROOT/$EXCLUDE_FILE"
+        fi
+        if [[ -n "$EXCLUDE_FILE" ]]; then
+            mkdir -p "$(dirname "$EXCLUDE_FILE")"
+            [[ -f "$EXCLUDE_FILE" ]] || : > "$EXCLUDE_FILE"
+            grep -qxF '.manigot-worktrees/' "$EXCLUDE_FILE" || printf '%s\n' '.manigot-worktrees/' >> "$EXCLUDE_FILE"
+        fi
+    else
+        WORKTREE_PARENT="$WORKTREE_PARENT_SIBLING"
+    fi
     WORKTREE_PATH="$WORKTREE_PARENT/${ID}_${SLUG}"
     mkdir -p "$WORKTREE_PARENT"
     git -C "$PROJECT_ROOT" worktree add "$WORKTREE_PATH" -b "$BRANCH" "$BASE_BRANCH"

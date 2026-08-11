@@ -87,8 +87,15 @@ configured with `mg setup`.
   `<dirname(PROJECT_ROOT)>/.manigot-worktrees/<basename(PROJECT_ROOT)>/<id>_<slug>`,
   a sibling of `PROJECT_ROOT` rather than nested inside it — every file-write
   and the scaffold commit happen there, and `PROJECT_ROOT` itself is never
-  switched. A non-git-repo project keeps the pre-worktree fallback: no branch,
-  no worktree, the scaffold is written straight into `PROJECT_ROOT`.
+  switched. When `PROJECT_ROOT` is itself a mount point (its parent is on a
+  different filesystem — e.g. `/workspace` mounted into a container), the
+  sibling would land outside the project's persistent storage, so the
+  worktree is nested at `<PROJECT_ROOT>/.manigot-worktrees/<id>_<slug>`
+  instead and that path is excluded from the main worktree's git status via
+  `.git/info/exclude` (so a `git add -A` there never sweeps the nested
+  checkouts' content into a commit). A non-git-repo project keeps the
+  pre-worktree fallback: no branch, no worktree, the scaffold is written
+  straight into `PROJECT_ROOT`.
 - `scripts/finish-job.sh` — reached via `mg done`. Archives a finished job:
   the clean-tree check, the archive move, and the archive commit all run
   inside the job's own worktree; `PROJECT_ROOT` (the main worktree) is used

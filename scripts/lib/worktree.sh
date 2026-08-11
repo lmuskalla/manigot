@@ -10,7 +10,11 @@
 #
 # Decision 1's naming convention
 # (<dirname(PROJECT_ROOT)>/.manigot-worktrees/<basename(PROJECT_ROOT)>/<id>_<slug>)
-# is used exactly once, at creation time in new-job.sh. Every other touch
+# is used exactly once, at creation time in new-job.sh — and only when
+# PROJECT_ROOT's parent is on the same filesystem. A PROJECT_ROOT that is
+# itself a mount point (parent on a different device) nests its worktrees at
+# <PROJECT_ROOT>/.manigot-worktrees/<id>_<slug> instead, so they never land
+# outside the project's persistent storage. Every other touch
 # point — including this file — asks git directly rather than recomputing
 # that path, so a worktree moved or relocated by hand is still found.
 #
