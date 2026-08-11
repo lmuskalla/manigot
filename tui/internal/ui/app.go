@@ -1227,7 +1227,7 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	return dimStyle.Render("  ") + line
 }
 
-// jdiStatusBadge renders a short "[mg jdi: ...]" tag for a job's list row
+// jdiStatusBadge renders a short "[...]" tag for a job's list row
 // when an autonomous run has something to report (Decision 4/4a/TASK-8):
 // running (naming the active agent), or one of the two stop reasons.
 // Renders "" when there's nothing to show — no sidecar status file for this
@@ -1243,15 +1243,15 @@ func jdiStatusBadge(root string, j job.Job) string {
 	}
 	switch st.State {
 	case job.JDIRunning:
-		label := "mg jdi: running"
+		label := "running"
 		if st.Agent != "" {
 			label += " @" + st.Agent
 		}
 		return accentStyle.Render("[" + label + "]")
 	case job.JDIStoppedFinished:
-		return statusDoneStyle.Render("[mg jdi: finished]")
+		return statusDoneStyle.Render("[finished]")
 	case job.JDIStoppedNeedsHuman:
-		return warnStyle.Render("[mg jdi: needs human]")
+		return warnStyle.Render("[needs human]")
 	default:
 		return ""
 	}

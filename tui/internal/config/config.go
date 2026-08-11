@@ -50,23 +50,20 @@ type Profile struct {
 	// ToolOpenCode.
 	Tool string
 
-	// Model is the provider/model the opencode profiles default to (empty for
-	// claude-pro, which uses whatever model Claude Code itself defaults to).
-	// The same value is exposed as OPENCODE_MODEL inside the container.
-	Model string
-
 	// Auth names the credential the profile is billed against, for display in
 	// the settings screen and setup help.
 	Auth string
 }
 
 // Profiles is the ordered list of subscription profiles, in the order the TUI
-// settings screen cycles them. Keep the IDs and models in sync with the
-// profile table in scripts/run.sh.
+// settings screen cycles them. Keep the IDs in sync with the profile table in
+// scripts/run.sh. No model is listed here: the opencode profiles' model comes
+// from the OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL values in manigot's .env,
+// which the TUI does not read — showing a compiled-in default would mislead.
 var profiles = []Profile{
-	{ID: ProfileClaudePro, Label: "Claude Code · Claude Pro", Tool: ToolClaudeCode, Model: "", Auth: "Claude Pro OAuth"},
-	{ID: ProfileZAI, Label: "OpenCode · Z.AI Coding Plan", Tool: ToolOpenCode, Model: "zai-coding-plan/glm-5.2", Auth: "ZHIPU_API_KEY"},
-	{ID: ProfileOpenCodeGo, Label: "OpenCode · Go", Tool: ToolOpenCode, Model: "opencode-go/glm-5.2", Auth: "OPENCODE_API_KEY"},
+	{ID: ProfileClaudePro, Label: "Claude Code · Claude Pro", Tool: ToolClaudeCode, Auth: "Claude Pro OAuth"},
+	{ID: ProfileZAI, Label: "OpenCode · Z.AI Coding Plan", Tool: ToolOpenCode, Auth: "ZHIPU_API_KEY"},
+	{ID: ProfileOpenCodeGo, Label: "OpenCode · Go", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
 }
 
 // Profiles returns the supported subscription profiles. The slice is built

@@ -249,12 +249,11 @@ func (v *settingsView) render() string {
 		b.WriteString("    " + mark + id + rest)
 		b.WriteString("\n")
 	}
-	// Describe the selected profile: tool, model, and what it bills against.
+	// Describe the selected profile: which agent CLI it launches and what it
+	// bills against. The model is deliberately not shown — the opencode
+	// profiles' model lives in manigot's .env, which the TUI does not read.
 	sel := profileOptions[v.profile]
 	selDesc := "tool: " + sel.Tool
-	if sel.Model != "" {
-		selDesc += " · model: " + sel.Model
-	}
 	selDesc += " · billed via " + sel.Auth
 	b.WriteString(dimStyle.Render("    " + selDesc))
 	b.WriteString("\n\n")

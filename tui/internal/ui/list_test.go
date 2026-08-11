@@ -317,7 +317,7 @@ func TestRenderListShowsJDIRunningBadge(t *testing.T) {
 	a.width, a.height = 80, 24
 
 	got := a.renderList()
-	if !strings.Contains(got, "mg jdi: running @developer") {
+	if !strings.Contains(got, "running @developer") {
 		t.Errorf("renderList missing the running badge:\n%s", got)
 	}
 }
@@ -335,7 +335,7 @@ func TestRenderListShowsJDINeedsHumanBadge(t *testing.T) {
 	a.width, a.height = 80, 24
 
 	got := a.renderList()
-	if !strings.Contains(got, "mg jdi: needs human") {
+	if !strings.Contains(got, "needs human") {
 		t.Errorf("renderList missing the needs-human badge:\n%s", got)
 	}
 }
@@ -349,7 +349,9 @@ func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 	a.width, a.height = 80, 24
 
 	got := a.renderList()
-	if strings.Contains(got, "mg jdi:") {
-		t.Errorf("renderList should not mention mg jdi with no status sidecar:\n%s", got)
+	for _, badge := range []string{"[running", "[finished]", "[needs human]"} {
+		if strings.Contains(got, badge) {
+			t.Errorf("renderList should not render the %s badge with no status sidecar:\n%s", badge, got)
+		}
 	}
 }

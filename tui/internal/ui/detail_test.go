@@ -786,7 +786,7 @@ func TestDetailVimKeysAreInert(t *testing.T) {
 // jdi instances" job) -----------------------------------------------------
 
 // TestDetailActionBarShowsJDIRunningBadge confirms the detail view's action
-// bar renders the same "[mg jdi: running @<agent>]" badge the job-list row
+// bar renders the same "[running @<agent>]" badge the job-list row
 // already shows, right alongside the "[j] just do it" button, when the
 // sidecar reports job.JDIRunning.
 func TestDetailActionBarShowsJDIRunningBadge(t *testing.T) {
@@ -799,7 +799,7 @@ func TestDetailActionBarShowsJDIRunningBadge(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if !strings.Contains(bar, "mg jdi: running @developer") {
+	if !strings.Contains(bar, "running @developer") {
 		t.Errorf("action bar missing the running badge:\n%s", bar)
 	}
 }
@@ -816,7 +816,7 @@ func TestDetailActionBarShowsJDIFinishedBadge(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if !strings.Contains(bar, "mg jdi: finished") {
+	if !strings.Contains(bar, "[finished]") {
 		t.Errorf("action bar missing the finished badge:\n%s", bar)
 	}
 }
@@ -833,7 +833,7 @@ func TestDetailActionBarShowsJDINeedsHumanBadge(t *testing.T) {
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if !strings.Contains(bar, "mg jdi: needs human") {
+	if !strings.Contains(bar, "[needs human]") {
 		t.Errorf("action bar missing the needs-human badge:\n%s", bar)
 	}
 }
@@ -841,15 +841,17 @@ func TestDetailActionBarShowsJDINeedsHumanBadge(t *testing.T) {
 // TestDetailActionBarOmitsJDIBadgeWhenNoStatus confirms there is no badge at
 // all — not even an empty one — when there is no sidecar status file yet for
 // the job. The plain "[j] just do it" button label is expected to still be
-// present; only the colon-bearing "mg jdi:" badge text must be absent.
+// present; only the badge's own bracket-wrapped text must be absent.
 func TestDetailActionBarOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 	root := t.TempDir()
 	j := discoverOneJob(t, root, "aaaa05_n")
 
 	d := newDetailView(j, 80, 24)
 	bar := d.renderActionBar()
-	if strings.Contains(bar, "mg jdi:") {
-		t.Errorf("action bar should not mention mg jdi: with no status sidecar:\n%s", bar)
+	for _, badge := range []string{"[running", "[finished]", "[needs human]"} {
+		if strings.Contains(bar, badge) {
+			t.Errorf("action bar should not render the %s badge with no status sidecar:\n%s", badge, bar)
+		}
 	}
 	if !strings.Contains(bar, "just do it") {
 		t.Errorf("action bar should still show the [j] just do it button itself:\n%s", bar)

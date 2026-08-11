@@ -668,8 +668,8 @@ Two places show you what it's doing instead, both polled the same
 refresh-triggered way as everything else in the TUI (pressing `ctrl+r`,
 returning to the list, etc. — no separate live-streaming subsystem):
 
-- **List-row badge** — a `[mg jdi: running @<agent>]`,
-  `[mg jdi: finished]`, or `[mg jdi: needs human]` tag next to a job's row,
+- **List-row badge** — a `[running @<agent>]`, `[finished]`, or
+  `[needs human]` tag next to a job's row,
   next to its branch tag. Shown only while there's something live or recent
   to report; a stale status left behind by a killed `mg jdi` process is
   never shown as if it were current.
