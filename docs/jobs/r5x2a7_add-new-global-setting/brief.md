@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-<!-- What needs to be done? Be specific. -->
+Let's add a new global setting: which terminal to call. Similarly to how we can select vim for editing. Keep what we have now as default, but let me define a terminal of my choice if I want to.
 
 ## Why
 
