@@ -804,6 +804,70 @@ func TestDetailActionBarShowsJDIRunningBadge(t *testing.T) {
 	}
 }
 
+// TestDetailActionBarRunningBadgeShowsSpinnerFrame verifies the action bar's
+// running badge shows the animated activity-indicator frame next to
+// "[running @...]" (TASK-3), driven by the detail view's threaded
+// spinnerStep — a different step renders a different frame.
+func TestDetailActionBarRunningBadgeShowsSpinnerFrame(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa02_r")
+
+	if err := job.WriteJDIStatus(root, j.Name, job.JDIRunning, "developer"); err != nil {
+		t.Fatal(err)
+	}
+
+	d := newDetailView(j, 80, 24)
+	bar := d.renderActionBar()
+	if !strings.Contains(bar, "running @developer") {
+		t.Errorf("action bar missing the running badge:\n%s", bar)
+	}
+	if !strings.Contains(bar, activityFrame(0)) {
+		t.Errorf("action bar missing the spinner frame %q next to the running badge:\n%s", activityFrame(0), bar)
+	}
+
+	d.spinnerStep = 2
+	bar = d.renderActionBar()
+	if !strings.Contains(bar, activityFrame(2)) {
+		t.Errorf("action bar missing the advanced spinner frame %q:\n%s", activityFrame(2), bar)
+	}
+	if strings.Contains(bar, activityFrame(0)) {
+		t.Errorf("action bar still shows frame %q after advancing to step 2:\n%s", activityFrame(0), bar)
+	}
+}
+
+// TestDetailActionBarStoppedBadgesShowNoSpinnerFrame verifies the finished
+// and needs-human action-bar badges render no spinner frame — nothing is
+// animating — even when the view's step counter is non-zero.
+func TestDetailActionBarStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa03_f")
+
+	d := newDetailView(j, 80, 24)
+	d.spinnerStep = 4
+
+	if err := job.WriteJDIStatus(root, j.Name, job.JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	bar := d.renderActionBar()
+	if !strings.Contains(bar, "[finished]") {
+		t.Errorf("action bar missing the finished badge:\n%s", bar)
+	}
+	if strings.Contains(bar, activityFrame(4)) {
+		t.Errorf("finished badge unexpectedly shows the spinner frame %q:\n%s", activityFrame(4), bar)
+	}
+
+	if err := job.WriteJDIStatus(root, j.Name, job.JDIStoppedNeedsHuman, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	bar = d.renderActionBar()
+	if !strings.Contains(bar, "[needs human]") {
+		t.Errorf("action bar missing the needs-human badge:\n%s", bar)
+	}
+	if strings.Contains(bar, activityFrame(4)) {
+		t.Errorf("needs-human badge unexpectedly shows the spinner frame %q:\n%s", activityFrame(4), bar)
+	}
+}
+
 // TestDetailActionBarShowsJDIFinishedBadge confirms the finished variant
 // renders too.
 func TestDetailActionBarShowsJDIFinishedBadge(t *testing.T) {

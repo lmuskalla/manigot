@@ -107,7 +107,31 @@ type App struct {
 	// no visible indicator anywhere (the sidecar-driven badges correctly show
 	// nothing running) explaining why. Keyed the same as jdiSeen.
 	jdiSeenAt map[string]time.Time
+
+	// spinnerStep is the current activity-indicator frame index (see
+	// activity.go), advanced once per spinnerTickMsg while any mg-jdi run is
+	// active. Threaded into the running badges (jdiStatusBadge) and into the
+	// open detail view (detailView.spinnerStep) so both the list row and the
+	// action-bar badge animate off the same counter. 0 (the zero value) is
+	// the first frame; nothing special about it.
+	spinnerStep int
+
+	// spinnerTicking guards the activity-indicator tick chain: true while a
+	// spinnerTickMsg is scheduled or in flight, so no second concurrent chain
+	// can be started (startSpinnerIfRunning is a no-op while it's set). Cleared
+	// by the tick handler itself the moment no job is running any more — the
+	// chain self-terminates, so a run ending is all it takes to stop the
+	// redraws and return the app to its idle (no timer) behaviour.
+	spinnerTicking bool
 }
+
+// spinnerTickMsg advances the activity indicator one frame. It is the app's
+// only timer-driven message — the one narrow exception to "no separate
+// timer-driven tick" (see pollJDIBell's doc, and the README's "mg jdi status
+// & log" section): a ~activityInterval redraw that exists only while an
+// mg-jdi run is active, so a watched run visibly indicates it's alive instead
+// of sitting as a static badge.
+type spinnerTickMsg struct{}
 
 // jdiSeenFallbackTTL bounds how long jdiAlreadyRunning trusts a jdiSeen
 // JDIRunning entry that has no corroborating on-disk sidecar file at all.
@@ -159,8 +183,13 @@ func NewApp(root string, jobs []job.Job) *App {
 	return a
 }
 
-// Init starts the program. No initial commands are needed.
-func (a *App) Init() tea.Cmd { return nil }
+// Init starts the program. No initial commands are needed — except the
+// activity-indicator tick chain when an mg-jdi run is already active at
+// startup (startSpinnerIfRunning), so a TUI opened mid-run animates its
+// badge without waiting for a keypress or refresh.
+func (a *App) Init() tea.Cmd {
+	return a.startSpinnerIfRunning()
+}
 
 // editorDoneMsg reports the outcome of the "e" edit-shortcut's tea.ExecProcess
 // once the suspended editor process returns.
@@ -278,7 +307,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// that was declined or failed is still there. A non-zero exit (the
 		// script itself erroring, e.g. uncommitted changes) still surfaces
 		// through cmdErrorText first, same as any other host-command failure.
-		a.refreshJobs()
+		spinnerCmd := a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
 		if msg.err != nil {
@@ -286,13 +315,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.status = "refreshed"
 		}
-		return a, nil
+		return a, spinnerCmd
 	case deleteMsg:
 		// Same reasoning as doneMsg: delete-job.sh's own read -rp confirmation
 		// exits 0 on decline too, so a declined/aborted delete just leaves the
 		// job present in the re-read list — refreshJobs and returning to the
 		// list handles both outcomes uniformly.
-		a.refreshJobs()
+		spinnerCmd := a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
 		if msg.err != nil {
@@ -300,7 +329,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.status = "refreshed"
 		}
-		return a, nil
+		return a, spinnerCmd
 	case checkoutMsg:
 		if msg.err != nil {
 			// Checkout refused (e.g. uncommitted changes it would clobber)
@@ -317,7 +346,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// re-discover (branch tags / OnCurrentBranch change for every job)
 		// and, if a detail view is open, rebuild it against the same job id
 		// so its tabs switch from git-show reads to the working tree.
-		a.refreshJobs()
+		spinnerCmd := a.refreshJobs()
 		if a.detail != nil {
 			id := a.detail.job.ID
 			if j, ok := a.jobByID(id); ok {
@@ -342,7 +371,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// treats as success) isn't silent.
 			a.status = "switched to " + msg.branch
 		}
-		return a, nil
+		return a, spinnerCmd
 	case pushMsg:
 		// Unlike checkoutMsg, a push never changes what the working tree or
 		// job list looks like — only origin's state — so there is nothing to
@@ -360,6 +389,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.detail.branchFlash = false
 		}
 		return a, nil
+	case spinnerTickMsg:
+		// Advance the activity indicator. The step always moves (even on the
+		// tick that observes the run has ended — the check below happens
+		// after), but the chain only continues while a job is actually
+		// running: the moment every sidecar has flipped to a stopped state
+		// (or the in-session jdiSeen fallback expired), return nil and clear
+		// the guard so no further timer-driven redraws happen. The guard is
+		// (re)asserted on the continuing path too, not just by
+		// startSpinnerIfRunning, so "guard set" stays equivalent to "chain
+		// alive" no matter how a tick reached the handler.
+		a.spinnerStep++
+		if a.detail != nil {
+			a.detail.spinnerStep = a.spinnerStep
+		}
+		if !a.anyJDIRunning() {
+			a.spinnerTicking = false
+			return a, nil
+		}
+		a.spinnerTicking = true
+		return a, a.spinnerTickCmd()
 	case tea.KeyMsg:
 		// Global keys handled in every state.
 		switch msg.String() {
@@ -521,7 +570,14 @@ func clamp(n, lo, hi int) int {
 // an open detail view — see refresh for that, and updateDetail's
 // "esc"/"backspace" case, which uses refreshJobs alone because the detail
 // view it would otherwise reload is about to be discarded anyway.
-func (a *App) refreshJobs() {
+//
+// It also returns the activity-indicator tick cmd when a refresh just
+// (re)discovered an mg-jdi run while the tick chain wasn't already going
+// (startSpinnerIfRunning) — the "run started somewhere other than this
+// session's 'j' key" path, e.g. ctrl+r picking up a run another TUI or a
+// direct mg-jdi launch started. Callers propagate the cmd; the spinnerTicking
+// guard makes it a no-op (nil) when the chain is already live.
+func (a *App) refreshJobs() tea.Cmd {
 	if jobs, err := job.Discover(a.root); err == nil {
 		a.jobs = jobs
 	}
@@ -534,6 +590,7 @@ func (a *App) refreshJobs() {
 		a.cursor = 0
 	}
 	a.pollJDIBell()
+	return a.startSpinnerIfRunning()
 }
 
 // pollJDIBell is the TUI-side half of the stop notification (Decision
@@ -541,10 +598,12 @@ func (a *App) refreshJobs() {
 // ring `\a` into (see tui/cmd/jdi's own CLI-path bell), so instead the TUI
 // rings it on its own next poll — this function, called from refreshJobs,
 // which is every "poll tick" this app has (ctrl+r, returning to list, a
-// checkout, etc.; there is no separate timer-driven tick, per the brief's
-// "no new event-streaming subsystem" constraint) — the first time it
-// observes a job's status transition into a stopped:* state it hadn't
-// already notified for.
+// checkout, etc.) — the first time it observes a job's status transition
+// into a stopped:* state it hadn't already notified for. The one exception
+// to "refresh-triggered polling only" is the activity indicator's
+// spinnerTickMsg: a narrow timer-driven redraw that runs only while an
+// mg-jdi run is active (see spinnerTickMsg's doc), deliberately kept out of
+// the notification path — a run stopping is exactly when that timer ends.
 //
 // Dedup is in-memory (a.jdiSeen) and keyed by job Name: the first
 // observation of any given job only seeds the map, never rings, even if
@@ -605,6 +664,48 @@ func (a *App) jdiAlreadyRunning(j job.Job) (job.JDIStatus, bool) {
 	return job.JDIStatus{}, false
 }
 
+// anyJDIRunning reports whether any job in the current list has an mg-jdi
+// run in progress, using the same combined source of truth jdiAlreadyRunning
+// uses per job: the on-disk sidecar first (job.ReadJDIStatus — which also
+// degrades a stale "running" away), falling back to the in-session
+// jdiSeen/jdiSeenAt dedup map only while no sidecar exists yet, so a
+// just-launched run whose mg-jdi process hasn't written its first status file
+// animates immediately (see jdiAlreadyRunning's doc for the fallback's TTL).
+// This is the spinner tick chain's liveness check: the chain keeps going
+// while it returns true and self-terminates the moment it returns false.
+func (a *App) anyJDIRunning() bool {
+	for _, j := range a.jobs {
+		if _, running := a.jdiAlreadyRunning(j); running {
+			return true
+		}
+	}
+	return false
+}
+
+// spinnerTickCmd returns the tea.Cmd that delivers the next spinnerTickMsg
+// after activityInterval — one frame of the activity indicator.
+func (a *App) spinnerTickCmd() tea.Cmd {
+	return tea.Tick(activityInterval, func(time.Time) tea.Msg {
+		return spinnerTickMsg{}
+	})
+}
+
+// startSpinnerIfRunning starts the activity-indicator tick chain when (a)
+// it isn't already going (the spinnerTicking guard — no duplicate concurrent
+// chains) and (b) some job is currently running. Returns nil otherwise, so
+// callers can `return a, a.startSpinnerIfRunning()` and keep their previous
+// nil-cmd behaviour unchanged when there is nothing to animate. The chain is
+// stopped by the tick handler itself once anyJDIRunning turns false, so a
+// run ending (sidecar flipping to a stopped state) is what ends the timer —
+// no separate stop call needed.
+func (a *App) startSpinnerIfRunning() tea.Cmd {
+	if a.spinnerTicking || !a.anyJDIRunning() {
+		return nil
+	}
+	a.spinnerTicking = true
+	return a.spinnerTickCmd()
+}
+
 // ringBell writes a bare terminal bell character. A BEL byte reaches the
 // terminal (and triggers whatever bell/notification behavior it's
 // configured for) regardless of Bubble Tea's alt-screen rendering state, so
@@ -622,14 +723,19 @@ var ringBell = func() {
 // is picked up without an app restart. The settings form's own submit path
 // is the only writer to a.projectSettings and it never runs concurrently
 // with refresh() — ctrl+r isn't routed here while the form is open.
-func (a *App) refresh() {
-	a.refreshJobs()
+//
+// Returns the activity-indicator tick cmd refreshJobs produced (a ctrl+r is
+// a discovery point for runs started outside this session's "j" key), so the
+// callers can propagate it.
+func (a *App) refresh() tea.Cmd {
+	spinnerCmd := a.refreshJobs()
 	if ps, err := project.Load(a.root); err == nil {
 		a.projectSettings = ps
 	}
 	if a.detail != nil {
 		a.detail.reload()
 	}
+	return spinnerCmd
 }
 
 // updateList handles keys while the job list is showing.
@@ -653,8 +759,14 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.cursor = len(a.jobs) - 1
 		}
 	case "ctrl+r":
-		a.refresh()
+		// Refresh first, then report the *post*-refresh job count — the
+		// original ordering (see main), preserved across TASK-2's return-value
+		// refactor. The refresh is the discovery point for runs started
+		// outside this session (its returned tick cmd is propagated below),
+		// and len(a.jobs) must reflect the re-read list, not the stale one.
+		spinnerCmd := a.refresh()
 		a.status = fmt.Sprintf("refreshed · %d job(s)", len(a.jobs))
+		return a, spinnerCmd
 	case "enter", "l", "right":
 		if j, ok := a.selectedJob(); ok {
 			a.detail = newDetailView(j, a.width, a.height)
@@ -768,17 +880,17 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// (a job may have been archived, or its status/title changed) —
 		// reloading the detail view we're about to throw away would be pure
 		// waste, and used to be a real source of lag (see refreshJobs' doc).
-		a.refreshJobs()
+		spinnerCmd := a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
 		a.status = "refreshed"
-		return a, nil
+		return a, spinnerCmd
 	case "q":
 		return a, tea.Quit
 	case "ctrl+r":
-		a.refresh()
+		spinnerCmd := a.refresh()
 		a.detail.setStatus("refreshed")
-		return a, nil
+		return a, spinnerCmd
 	case "e":
 		// Only the tabs marked editable in jobFiles (currently brief.md
 		// only) respond — for any other tab this falls through to the
@@ -835,17 +947,23 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if err := launch.Jdi(a.detail.job.ID, a.root, a.settings.ProfileValue()); err != nil {
 			a.detail.setStatus(cmdErrorText(err))
-		} else {
-			// Seed the stop-notification dedup (TASK-11) as "running" right
-			// away rather than waiting for the first poll to discover it —
-			// otherwise a run that finishes before the next refresh would
-			// look like a first-ever observation of an already-stopped job
-			// and never ring.
-			a.jdiSeen[a.detail.job.Name] = job.JDIRunning
-			a.jdiSeenAt[a.detail.job.Name] = jdiNow()
-			a.detail.setStatus("→ mg jdi started in the background — see the log tab or list badge")
+			return a, nil
 		}
-		return a, nil
+		// Seed the stop-notification dedup (TASK-11) as "running" right
+		// away rather than waiting for the first poll to discover it —
+		// otherwise a run that finishes before the next refresh would
+		// look like a first-ever observation of an already-stopped job
+		// and never ring.
+		a.jdiSeen[a.detail.job.Name] = job.JDIRunning
+		a.jdiSeenAt[a.detail.job.Name] = jdiNow()
+		a.detail.setStatus("→ mg jdi started in the background — see the log tab or list badge")
+		// Start the activity-indicator tick chain so the just-launched run
+		// animates immediately — the sidecar doesn't exist yet, but the
+		// jdiSeen entry seeded above is enough for anyJDIRunning (via
+		// jdiAlreadyRunning's fallback). startSpinnerIfRunning is a no-op
+		// (nil cmd) when a chain is already going, keeping this a plain
+		// `return a, nil` in that case.
+		return a, a.startSpinnerIfRunning()
 	case "delete", "x":
 		// Permanently delete the job. Bound to both the physical Delete/Entf
 		// key and "x": the forward-delete key's escape sequence (CSI 3~) is
@@ -1218,7 +1336,7 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	if j.Branch != "" && !j.OnCurrentBranch {
 		line += "  " + dimStyle.Render("· "+j.Branch)
 	}
-	if badge := jdiStatusBadge(a.root, j); badge != "" {
+	if badge := jdiStatusBadge(a.root, j, a.spinnerStep); badge != "" {
 		line += "  " + badge
 	}
 	if selected {
@@ -1236,7 +1354,13 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 // mid-run — see job.ReadJDIStatus's own doc, which is the sole gate here;
 // this function only formats what it returns, on the same
 // derived-from-polling-job-files basis every other list-row element uses).
-func jdiStatusBadge(root string, j job.Job) string {
+//
+// spinnerStep drives the animated activity-indicator frame prefixed to the
+// running badge (`⠋ [running @<agent>]`) — see activity.go. It is threaded
+// from the App (list row) or the open detailView (action bar) so both badge
+// call sites animate off the same counter and can't drift apart. The
+// [finished] / [needs human] variants render no frame: nothing is happening.
+func jdiStatusBadge(root string, j job.Job, spinnerStep int) string {
 	st, ok := job.ReadJDIStatus(root, j.Name)
 	if !ok {
 		return ""
@@ -1247,7 +1371,11 @@ func jdiStatusBadge(root string, j job.Job) string {
 		if st.Agent != "" {
 			label += " @" + st.Agent
 		}
-		return accentStyle.Render("[" + label + "]")
+		// The frame goes *around* the label, not inside it: tests assert on
+		// the "running @developer" substring, so the glyph must not replace
+		// the label's own text. Styled with the badge's own accentStyle so
+		// the whole tag reads as one unit.
+		return accentStyle.Render(activityFrame(spinnerStep) + " [" + label + "]")
 	case job.JDIStoppedFinished:
 		return statusDoneStyle.Render("[finished]")
 	case job.JDIStoppedNeedsHuman:

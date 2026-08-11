@@ -86,6 +86,13 @@ type detailView struct {
 	// an earlier blocked attempt can't cut short a flash a later attempt
 	// (re)started in the meantime — see app.go's branchFlashDoneMsg handler.
 	branchFlashGen int
+
+	// spinnerStep is the current activity-indicator frame index (see
+	// activity.go), threaded in from the App by the spinnerTickMsg handler so
+	// the action-bar's running badge animates in sync with the list row.
+	// Defaults to 0 for a freshly built view; the next tick re-syncs it even
+	// if the App was already mid-animation when the view opened.
+	spinnerStep int
 }
 
 // newDetailView loads all four job files, plus TASK-9's fifth "log" tab, for
@@ -619,11 +626,14 @@ func (d *detailView) renderActionBar() string {
 	// job.ReadJDIStatus-backed jdiStatusBadge formatting the job-list row
 	// already renders, so a user sitting in the detail view — exactly where
 	// "j" is pressed, and where TASK-1's block message appears — can see at
-	// a glance whether mg-jdi is still going, not only from the list. Like
-	// the list badge, this has no polling timer of its own: it reads the
-	// sidecar fresh on every render() call, so it updates whenever Bubble
-	// Tea next re-renders (any keypress), not continuously.
-	if badge := jdiStatusBadge(d.job.Root, d.job); badge != "" {
+	// a glance whether mg-jdi is still going, not only from the list. The
+	// running variant's animated frame comes from d.spinnerStep, threaded in
+	// by the App's spinnerTickMsg handler, so it animates in sync with the
+	// list row while a run is active. Like the list badge, the underlying
+	// status has no polling timer of its own: it reads the sidecar fresh on
+	// every render() call, so it updates whenever Bubble Tea next re-renders
+	// (the spinner tick, or any keypress).
+	if badge := jdiStatusBadge(d.job.Root, d.job, d.spinnerStep); badge != "" {
 		stageLine.WriteString(sep)
 		stageLine.WriteString(badge)
 	}

@@ -666,11 +666,18 @@ terminal window at all** — `mg jdi` has no interactive session for a human
 or a subprocess to attach to, so it runs fully detached in the background.
 Two places show you what it's doing instead, both polled the same
 refresh-triggered way as everything else in the TUI (pressing `ctrl+r`,
-returning to the list, etc. — no separate live-streaming subsystem):
+returning to the list, etc. — no separate live-streaming subsystem). The one
+exception is a narrow timer-driven redraw that runs *only while a run is
+active*, driving the animated indicator below:
 
 - **List-row badge** — a `[running @<agent>]`, `[finished]`, or
   `[needs human]` tag next to a job's row,
-  next to its branch tag. Shown only while there's something live or recent
+  next to its branch tag. While a run is active the running badge is prefixed
+  with an animated activity indicator — a small spinner
+  (`⠋ [running @<agent>]`), the same idea as the one opencode shows in its
+  bottom-left corner — so a watched run visibly indicates it's alive instead
+  of sitting as a static tag that only changes on the next refresh. Shown
+  only while there's something live or recent
   to report; a stale status left behind by a killed `mg jdi` process is
   never shown as if it were current.
 - **Log tab** — see [Keybindings](#keybindings) above.

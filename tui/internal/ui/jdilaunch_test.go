@@ -41,8 +41,8 @@ func TestJdiKeyLaunchesDetachedAndSeedsBellDedup(t *testing.T) {
 	a.state = stateDetail
 
 	_, cmd := a.updateDetail(keyMsg("j"))
-	if cmd != nil {
-		t.Errorf("updateDetail(j) returned a non-nil cmd, want nil (Jdi runs synchronously to Start(), no tea.Cmd needed)")
+	if cmd == nil {
+		t.Errorf("updateDetail(j) returned a nil cmd, want the activity-indicator tick (the launch seeds jdiSeen=running, so the spinner must start)")
 	}
 	if !strings.Contains(a.detail.status, "mg jdi") {
 		t.Errorf("status = %q, want it to mention mg jdi starting", a.detail.status)

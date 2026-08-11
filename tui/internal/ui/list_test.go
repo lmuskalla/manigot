@@ -266,6 +266,49 @@ func TestListFooterKeepsHintAlongsideStatus(t *testing.T) {
 	}
 }
 
+// TestListCtrlRStatusShowsRefreshedJobCount is a regression test for the
+// reviewer bounce-back of the "loading indicator for jdi" job: TASK-2's
+// refactor of the "ctrl+r" handler to return the spinner-tick cmd moved the
+// status line *before* a.refresh(), so the footer showed a stale job count
+// whenever the refresh changed the job list (e.g. a job created or archived
+// by another process since the last refresh). The count must be read after
+// the refresh.
+func TestListCtrlRStatusShowsRefreshedJobCount(t *testing.T) {
+	root := t.TempDir()
+	mkJob := func(name string) {
+		dir := filepath.Join(root, "docs", "jobs", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "brief.md"),
+			[]byte("# Brief: "+name+"\n\nstatus: open\ndate: 2026-01-01\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkJob("aa0001_a")
+
+	jobs, _ := job.Discover(root)
+	a := NewApp(root, jobs)
+	a.width, a.height = 80, 24
+	if len(a.jobs) != 1 {
+		t.Fatalf("setup: want 1 job discovered, got %d", len(a.jobs))
+	}
+
+	// A second job appears out-of-band after the TUI's last discovery.
+	mkJob("bb0002_b")
+
+	model, _ := a.updateList(keyMsg("ctrl+r"))
+	got := model.(*App)
+
+	want := fmt.Sprintf("refreshed · %d job(s)", len(got.jobs))
+	if got.status != want {
+		t.Errorf("status = %q, want the post-refresh count %q", got.status, want)
+	}
+	if strings.Contains(got.status, "refreshed · 1 job(s)") {
+		t.Errorf("status shows the stale pre-refresh count: %q", got.status)
+	}
+}
+
 // --- empty-list invitation (TASK-11) ----------------------------------------
 
 // TestRenderListEmptyStateInvitesNewJob is a regression test for TASK-10:
@@ -353,5 +396,76 @@ func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 		if strings.Contains(got, badge) {
 			t.Errorf("renderList should not render the %s badge with no status sidecar:\n%s", badge, got)
 		}
+	}
+}
+
+// TestRenderListRunningBadgeShowsSpinnerFrame verifies the running badge's
+// animated activity-indicator frame renders next to "[running @...]" in the
+// list row (TASK-3), and that the badge is actually driven by the App's
+// spinnerStep counter — a different step renders a different frame.
+func TestRenderListRunningBadgeShowsSpinnerFrame(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+
+	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIRunning, "developer"); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	cols := listColumns()
+
+	row := a.renderJobRow(jobs[0], cols, false)
+	if !strings.Contains(row, "running @developer") {
+		t.Errorf("row missing the running badge:\n%s", row)
+	}
+	if !strings.Contains(row, activityFrame(0)) {
+		t.Errorf("row missing the spinner frame %q next to the running badge:\n%s", activityFrame(0), row)
+	}
+
+	a.spinnerStep = 1
+	row = a.renderJobRow(jobs[0], cols, false)
+	if !strings.Contains(row, activityFrame(1)) {
+		t.Errorf("row missing the advanced spinner frame %q:\n%s", activityFrame(1), row)
+	}
+	if strings.Contains(row, activityFrame(0)) {
+		t.Errorf("row still shows frame %q after advancing to step 1:\n%s", activityFrame(0), row)
+	}
+}
+
+// TestRenderListStoppedBadgesShowNoSpinnerFrame verifies the finished and
+// needs-human badges render exactly as before — no spinner frame, since
+// nothing is animating — even when the App's step counter is non-zero.
+func TestRenderListStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	gitCommitJob(t, dir, "aaaa01_a", "# Brief: A\n\nstatus: open\nid: aaaa01\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.spinnerStep = 3
+	cols := listColumns()
+
+	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	row := a.renderJobRow(jobs[0], cols, false)
+	if !strings.Contains(row, "[finished]") {
+		t.Errorf("finished badge missing:\n%s", row)
+	}
+	if strings.Contains(row, activityFrame(3)) {
+		t.Errorf("finished badge unexpectedly shows the spinner frame %q:\n%s", activityFrame(3), row)
+	}
+
+	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIStoppedNeedsHuman, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	row = a.renderJobRow(jobs[0], cols, false)
+	if !strings.Contains(row, "[needs human]") {
+		t.Errorf("needs-human badge missing:\n%s", row)
+	}
+	if strings.Contains(row, activityFrame(3)) {
+		t.Errorf("needs-human badge unexpectedly shows the spinner frame %q:\n%s", activityFrame(3), row)
 	}
 }
