@@ -5,7 +5,7 @@
 // stays gitignored and per-user.
 //
 // The first such project convention is the base branch: the ref new job
-// branches are cut from and the TUI's "m" quick-checkout lands on. It lives
+// branches are cut from and the TUI's "b" quick-checkout lands on. It lives
 // here rather than in config because base branch is a shared project
 // convention, not a personal preference.
 package project
@@ -23,7 +23,7 @@ import (
 // personal (editor, subscription profile) stays in the global config package.
 type Settings struct {
 	// BaseBranch is the ref new job branches are cut from and the TUI's
-	// list-view "m" quick-checkout lands on. Empty is treated as "main" —
+	// list-view "b" quick-checkout lands on. Empty is treated as "main" —
 	// see BaseBranchValue.
 	BaseBranch string `json:"baseBranch,omitempty"`
 }

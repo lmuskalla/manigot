@@ -165,7 +165,7 @@ func TestOpenRunLogCreatesSidecarAndAppends(t *testing.T) {
 	root := t.TempDir()
 	const jobName = "aaaa01_test-job"
 
-	f, err := openRunLog(root, jobName)
+	f, _, err := openRunLog(root, jobName)
 	if err != nil {
 		t.Fatalf("openRunLog: %v", err)
 	}
@@ -176,9 +176,12 @@ func TestOpenRunLogCreatesSidecarAndAppends(t *testing.T) {
 
 	// A second open must append, not truncate — a fresh mg-jdi run
 	// continues the same job's transcript.
-	f2, err := openRunLog(root, jobName)
+	f2, hadContent, err := openRunLog(root, jobName)
 	if err != nil {
 		t.Fatalf("openRunLog (second): %v", err)
+	}
+	if !hadContent {
+		t.Error("second open of a non-empty run.log reported hadContent=false, want true")
 	}
 	if _, err := f2.WriteString("second run\n"); err != nil {
 		t.Fatal(err)
@@ -192,6 +195,164 @@ func TestOpenRunLogCreatesSidecarAndAppends(t *testing.T) {
 	got := string(data)
 	if !strings.Contains(got, "first run") || !strings.Contains(got, "second run") {
 		t.Errorf("run.log = %q, want both writes present (append, not truncate)", got)
+	}
+}
+
+func TestOpenRunLogReportsEmptyFreshLog(t *testing.T) {
+	root := t.TempDir()
+	const jobName = "aaaa02_test-job"
+
+	f, hadContent, err := openRunLog(root, jobName)
+	if err != nil {
+		t.Fatalf("openRunLog: %v", err)
+	}
+	if hadContent {
+		t.Error("first open of a fresh run.log reported hadContent=true, want false")
+	}
+	f.Close()
+}
+
+// TestRunLogSeparationAcrossRuns wires openRunLog and sectionWriter together
+// exactly as main() does, across two runs of the same job: the first run
+// ever written to the log starts it at the top (no leading blank line), and
+// the second run's first header picks up the separating blank line.
+func TestRunLogSeparationAcrossRuns(t *testing.T) {
+	root := t.TempDir()
+	const jobName = "aaaa03_test-job"
+
+	run := func() {
+		f, hadContent, err := openRunLog(root, jobName)
+		if err != nil {
+			t.Fatalf("openRunLog: %v", err)
+		}
+		defer f.Close()
+		w := &sectionWriter{w: f, wroteSection: hadContent}
+		logStarted(w, jobName, "claude-pro")
+		logJobFinished(w, orchestrate.StopFinished, "verdict APPROVED", true)
+	}
+
+	run()
+	data, err := os.ReadFile(job.JDIRunLogPath(root, jobName))
+	if err != nil {
+		t.Fatalf("reading run.log: %v", err)
+	}
+	first := string(data)
+	if strings.HasPrefix(first, "\n") {
+		t.Errorf("first run ever must not open the log with a blank line, got:\n%q", first)
+	}
+	if n := sectionHeaderCount(first); n != 2 {
+		t.Fatalf("first run wrote %d headers, want 2:\n%q", n, first)
+	}
+	if n := strings.Count(first, "\n\n\n==="); n != 1 {
+		t.Errorf("first run should have exactly 1 separator (between its two headers), got %d:\n%q", n, first)
+	}
+
+	run()
+	data, err = os.ReadFile(job.JDIRunLogPath(root, jobName))
+	if err != nil {
+		t.Fatalf("reading run.log: %v", err)
+	}
+	both := string(data)
+	if n := sectionHeaderCount(both); n != 4 {
+		t.Fatalf("after two runs got %d headers, want 4:\n%q", n, both)
+	}
+	if n := strings.Count(both, "\n\n\n==="); n != 3 {
+		t.Errorf("second run should add 2 separators (1 between its own headers + 1 from the prior run's last header), got %d:\n%q", n, both)
+	}
+}
+
+// --- sectionWriter -----------------------------------------------------------
+
+// TestSectionWriterSeparatesHeadersButNotFirstRunEver covers the two
+// sectionWriter behaviors together: within a single writer, the very first
+// section header (a fresh log — the first run ever written to it) gets no
+// leading blank line, while every subsequent header gets "\n\n", and
+// non-header writes (an agent-text or reason body following its header)
+// pass through untouched so they stay flush against their header.
+func TestSectionWriterSeparatesHeadersButNotFirstRunEver(t *testing.T) {
+	var buf bytes.Buffer
+	w := &sectionWriter{w: &buf, wroteSection: false}
+
+	logStarted(w, "aaaa01_test-job", "claude-pro")
+	logAgentInvoked(w, "analyst", 1)
+	logInvocation(w, "analyst", 1, []byte("wrote tasks.md"), "", "")
+	logJobFinished(w, orchestrate.StopFinished, "verdict APPROVED", true)
+
+	got := buf.String()
+	if strings.HasPrefix(got, "\n") {
+		t.Errorf("fresh log must start at the top with no leading blank line, got:\n%q", got)
+	}
+	// Every header line after the first must be preceded by a blank line —
+	// the separator is "\n\n" on top of the preceding header's own trailing
+	// newline, so between two headers the text reads "\n\n\n===", and that
+	// separator must appear exactly once per header after the first.
+	if n := sectionHeaderCount(got); n != 4 {
+		t.Fatalf("got %d section headers, want 4:\n%q", n, got)
+	}
+	if n := strings.Count(got, "\n\n\n==="); n != 3 {
+		t.Errorf("got %d blank-line separators, want 3 (one before every header but the first):\n%q", n, got)
+	}
+	// The invocation body must stay flush against its "finished" header —
+	// the blank line goes before the header, not between header and body.
+	if strings.Contains(got, "finished (attempt 1)\n\nwrote tasks.md") {
+		t.Errorf("blank line leaked between a finished header and its body, got:\n%q", got)
+	}
+}
+
+// TestSectionWriterJoinsPriorRunWithBlankLine covers the "second run" case:
+// a run.log that already has content (wroteSection seeded true) must get the
+// separating blank line before its very first header too.
+func TestSectionWriterJoinsPriorRunWithBlankLine(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteString("=== 2026-01-01T00:00:00Z mg jdi started: job aaaa01, profile claude-pro ===\n")
+	w := &sectionWriter{w: &buf, wroteSection: true}
+
+	logStarted(w, "aaaa01_test-job", "claude-pro")
+	logAgentInvoked(w, "reviewer", 1)
+
+	got := buf.String()
+	if n := sectionHeaderCount(got); n != 3 {
+		t.Fatalf("got %d section headers, want 3:\n%q", n, got)
+	}
+	if n := strings.Count(got, "\n\n\n==="); n != 2 {
+		t.Errorf("got %d blank-line separators, want 2 (before both of this run's headers — the prior run's own header was the first ever written, so it correctly has none):\n%q", n, got)
+	}
+}
+
+// sectionHeaderCount counts the "=== ... ===" state-log header lines in s —
+// lines that begin (at the very start, or right after a newline) with "===".
+// Counting occurrences of the "===" literal itself would overcount, since
+// each header line both opens and closes with it.
+func sectionHeaderCount(s string) int {
+	n := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, "===") {
+			n++
+		}
+	}
+	return n
+}
+
+// TestSectionWriterPassesThroughNonHeaders ensures a write that does not
+// begin with the "===" literal — e.g. an invocation's agent text or a stop
+// reason — is never prefixed, so blank lines only ever separate sections.
+func TestSectionWriterPassesThroughNonHeaders(t *testing.T) {
+	var buf bytes.Buffer
+	w := &sectionWriter{w: &buf, wroteSection: true}
+
+	// A reason line written straight through must not pick up a prefix.
+	if _, err := w.Write([]byte("brief.md is not written yet\n")); err != nil {
+		t.Fatal(err)
+	}
+	// A subsequent real header still gets separated from it.
+	logImmediateStop(w, "brief.md is not written yet")
+
+	got := buf.String()
+	if !strings.HasPrefix(got, "brief.md is not written yet\n") {
+		t.Errorf("non-header write was not passed through verbatim, got:\n%q", got)
+	}
+	if n := strings.Count(got, "\n\n\n==="); n != 1 {
+		t.Errorf("got %d separators, want exactly 1 (only before the header):\n%q", n, got)
 	}
 }
 

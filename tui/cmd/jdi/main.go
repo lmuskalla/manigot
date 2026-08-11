@@ -119,12 +119,19 @@ func main() {
 	// unconditionally is simplest and harmless: os.Stdout always exists as
 	// a file descriptor whether or not anything is reading it.
 	logDest := io.Writer(os.Stdout)
-	if logFile, ferr := openRunLog(root, j.Name); ferr != nil {
+	wroteSection := false
+	if logFile, hadContent, ferr := openRunLog(root, j.Name); ferr != nil {
 		fmt.Fprintf(os.Stderr, "mg jdi: warning: could not open run log, continuing with stdout only: %v\n", ferr)
 	} else {
 		defer logFile.Close()
 		logDest = io.MultiWriter(os.Stdout, logFile)
+		wroteSection = hadContent
 	}
+	// Wrap the destination in a sectionWriter (see output.go) so every
+	// "=== ... ===" state-log header is preceded by a blank line instead of
+	// the events getting crumbled together — the very first run ever written
+	// to a fresh log excepted, which is what wroteSection captures.
+	logDest = &sectionWriter{w: logDest, wroteSection: wroteSection}
 
 	// Status sidecar (Decision 4/4a/TASK-8): best-effort — a write failure
 	// (e.g. a read-only filesystem) must not abort the loop itself, only

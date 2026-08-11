@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -86,17 +87,70 @@ func containsLine(body, pattern string) bool {
 // (creating if necessary) run.log for appending — a fresh mg-jdi run
 // continues the same job's transcript rather than truncating it, so a human
 // can see the full history of every run against this job, not just the most
-// recent one.
-func openRunLog(root, jobName string) (*os.File, error) {
+// recent one. It also reports whether the log already had content when it
+// was opened (hadContent), which main() feeds to sectionWriter so the very
+// first run ever written to a log starts it cleanly without a leading blank
+// line (see sectionWriter's own doc).
+func openRunLog(root, jobName string) (*os.File, bool, error) {
 	dir := job.JDIStatusDir(root, jobName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("create sidecar dir %s: %w", dir, err)
+		return nil, false, fmt.Errorf("create sidecar dir %s: %w", dir, err)
 	}
 	f, err := os.OpenFile(job.JDIRunLogPath(root, jobName), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("open run log: %w", err)
+		return nil, false, fmt.Errorf("open run log: %w", err)
 	}
-	return f, nil
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, false, fmt.Errorf("stat run log: %w", err)
+	}
+	return f, st.Size() > 0, nil
+}
+
+// sectionPrefix is the literal every "=== ... ===" state-log header in this
+// file starts with — the five log* functions (logStarted, logAgentInvoked,
+// logInvocation, logJobFinished, logImmediateStop) all emit their event
+// headers as a line beginning with it. sectionWriter keys off it so it only
+// inserts blank lines between actual sections, never inside one (the agent
+// text and stop-reason bodies that follow their headers are separate writes
+// that don't match).
+var sectionPrefix = []byte("===")
+
+// sectionWriter is the writer mg-jdi's log destinations (stdout and the
+// sidecar run.log) are wrapped in before anything is logged: it inserts a
+// blank line before every "=== ... ===" section header written through it,
+// so the log's events don't get crumbled together — either between the
+// state events of a single run, or between consecutive mg-jdi runs of the
+// same job appending to the same run.log.
+//
+// wroteSection seeds the writer with the pre-existing state of the
+// underlying destination — whether run.log already had content when it was
+// opened (see openRunLog). true means the first header written through this
+// writer still needs its separating blank line (it's joining prior runs'
+// output); false means this is the very first run ever written to the log,
+// and the first header starts it at the top of the file with no leading
+// blank line. Either way, every subsequent header gets the blank line.
+//
+// A non-header write (a header's following reason line, or an invocation's
+// agent text, each of which arrives as its own write that does not start
+// with sectionPrefix) passes through untouched — it belongs to the section
+// that just began and must stay flush against its header.
+type sectionWriter struct {
+	w            io.Writer
+	wroteSection bool
+}
+
+func (s *sectionWriter) Write(p []byte) (int, error) {
+	if bytes.HasPrefix(p, sectionPrefix) {
+		if s.wroteSection {
+			if _, err := io.WriteString(s.w, "\n\n"); err != nil {
+				return 0, err
+			}
+		}
+		s.wroteSection = true
+	}
+	return s.w.Write(p)
 }
 
 // logStarted writes a "mg jdi started" event to w, once, at the very top of

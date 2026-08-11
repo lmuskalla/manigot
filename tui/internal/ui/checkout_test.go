@@ -195,10 +195,10 @@ func TestMainKeySwitchesToMainFromList(t *testing.T) {
 		t.Fatalf("currentBranch = %q, want feature/off10_o", a.currentBranch)
 	}
 
-	model, cmd := a.updateList(keyMsg("m"))
+	model, cmd := a.updateList(keyMsg("b"))
 	got := model.(*App)
 	if cmd == nil {
-		t.Fatal("expected \"m\" to return a tea.Cmd, got nil")
+		t.Fatal("expected \"b\" to return a tea.Cmd, got nil")
 	}
 
 	msg := cmd()
@@ -254,10 +254,10 @@ func TestMainKeyAlreadyOnMainStillReportsStatus(t *testing.T) {
 	a.width, a.height = 80, 24
 	a.state = stateList
 
-	model, cmd := a.updateList(keyMsg("m"))
+	model, cmd := a.updateList(keyMsg("b"))
 	got := model.(*App)
 	if cmd == nil {
-		t.Fatal("expected \"m\" to return a tea.Cmd even when already on main")
+		t.Fatal("expected \"b\" to return a tea.Cmd, got nil")
 	}
 	msg := cmd()
 	checkoutM := msg.(checkoutMsg)
@@ -303,10 +303,10 @@ func TestMainKeyRefusedCheckoutSurfacesStatusInList(t *testing.T) {
 	}
 }
 
-// TestMainKeyUsesConfiguredBaseBranch verifies the "m" quick-checkout honors
+// TestMainKeyUsesConfiguredBaseBranch verifies the "b" quick-checkout honors
 // a non-default base branch configured in docs/manigot.json (the whole point
 // of the project-scoped settings file). With baseBranch set to "develop", the
-// "m" key checks out develop rather than the literal "main".
+// "b" key checks out develop rather than the literal "main".
 func TestMainKeyUsesConfiguredBaseBranch(t *testing.T) {
 	dir, def := gitInitRepo(t)
 	// Set up a project whose base branch is "develop", not main, and commit
@@ -342,10 +342,10 @@ func TestMainKeyUsesConfiguredBaseBranch(t *testing.T) {
 		t.Fatalf("BaseBranchValue = %q, want develop", got)
 	}
 
-	model, cmd := a.updateList(keyMsg("m"))
+	model, cmd := a.updateList(keyMsg("b"))
 	got := model.(*App)
 	if cmd == nil {
-		t.Fatal("expected \"m\" to return a tea.Cmd, got nil")
+		t.Fatal("expected \"b\" to return a tea.Cmd, got nil")
 	}
 	msg := cmd()
 	checkoutM, ok := msg.(checkoutMsg)

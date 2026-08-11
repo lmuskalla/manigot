@@ -681,7 +681,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.status = "→ quick session in " + desc
 		}
-	case "m":
+	case "b":
 		// Quick "back to base branch" checkout — the one friction point
 		// the brief calls out (finishing a job branch and wanting a quick
 		// launch against the base branch without manually switching
@@ -1262,7 +1262,7 @@ func jdiStatusBadge(root string, j job.Job) string {
 // after "ctrl+r"), the status alongside it rather than replacing it — a
 // status message must never leave the user not knowing what keys exist.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · o quick · n new · m base branch · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · o quick · n new · b base branch · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
 	}

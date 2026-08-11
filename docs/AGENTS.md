@@ -129,7 +129,7 @@ configured with `mg setup`.
 - `docs/manigot.json` (in the target project, committable) — project-scoped
   manigot conventions, the project-level counterpart to the personal
   `config/tui-settings.json`. Currently holds `baseBranch`: the ref new job
-  branches are cut from (`scripts/new-job.sh`) and the TUI list view's "m"
+  branches are cut from (`scripts/new-job.sh`) and the TUI list view's "b"
   quick-checkout lands on, defaulting to `main` when unset. Read by the TUI
   (via `tui/internal/project`, loaded at startup and on ctrl+r refresh) and
   by `scripts/new-job.sh` directly (guarded single-key `sed` extraction — no
