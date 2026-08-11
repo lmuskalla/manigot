@@ -237,7 +237,7 @@ func TestBuildCmdTmuxUsesSplitWindow(t *testing.T) {
 	t.Setenv("PATH", dir)
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
 
-	cmd, desc, err := buildCmd("echo hi")
+	cmd, desc, err := buildCmd("echo hi", "")
 	if err != nil {
 		t.Fatalf("buildCmd: %v", err)
 	}
@@ -563,7 +563,7 @@ func TestLaunchDetachedRoutesToTmuxPane(t *testing.T) {
 	t.Cleanup(func() { tmuxLastPaneID = "" })
 	tmuxLastPaneID = ""
 
-	desc, err := launchDetached("echo hi")
+	desc, err := launchDetached("echo hi", "")
 	if err != nil {
 		t.Fatalf("launchDetached: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestAgentAndQuickShareOneTrackedPane(t *testing.T) {
 	t.Setenv("MANIGOT_BIN", manigot)
 	root := t.TempDir()
 
-	if _, err := Agent("developer", "t5oc4j", root, "claude-pro"); err != nil {
+	if _, err := Agent("developer", "t5oc4j", root, "claude-pro", ""); err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
 	agentPane := tmuxLastPaneID
@@ -622,7 +622,7 @@ func TestAgentAndQuickShareOneTrackedPane(t *testing.T) {
 		t.Fatal("Agent launch did not record a pane id")
 	}
 
-	if _, err := Quick(root, "claude-pro"); err != nil {
+	if _, err := Quick(root, "claude-pro", ""); err != nil {
 		t.Fatalf("Quick: %v", err)
 	}
 	if want := "kill-pane -t " + agentPane; !strings.Contains(stub.calls(), want) {
@@ -633,7 +633,7 @@ func TestAgentAndQuickShareOneTrackedPane(t *testing.T) {
 func TestBuildCmdSmoke(t *testing.T) {
 	// buildCmd must not panic and must return either a runnable command or a
 	// descriptive error, depending on what is installed in this environment.
-	cmd, desc, err := buildCmd("echo hi")
+	cmd, desc, err := buildCmd("echo hi", "")
 	if err != nil {
 		if !strings.Contains(err.Error(), "terminal launcher") {
 			t.Errorf("unexpected error: %v", err)
@@ -652,6 +652,213 @@ func TestBuildCmdSmoke(t *testing.T) {
 	}
 	if desc == "" {
 		t.Error("returned cmd has empty description")
+	}
+}
+
+// --- terminal override (config.Settings.Terminal, TASK-3) ------------------
+
+// stubBinary writes an executable no-op shell script at dir/name and returns
+// its path, so exec.LookPath(name) resolves it when dir is on $PATH.
+func stubBinary(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestBuildCmdOverrideBypassesTmux confirms an override takes over even
+// inside tmux (TASK-1 point 2): with $TMUX set and a tmux binary present,
+// buildCmd must still invoke the override, not the tmux split-pane branch.
+func TestBuildCmdOverrideBypassesTmux(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "tmux")
+	kitty := stubBinary(t, dir, "kitty")
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
+
+	cmd, desc, err := buildCmd("echo hi", "kitty")
+	if err != nil {
+		t.Fatalf("buildCmd: %v", err)
+	}
+	if desc != "kitty" {
+		t.Errorf("desc = %q, want %q", desc, "kitty")
+	}
+	if cmd.Path != kitty {
+		t.Errorf("cmd.Path = %q, want %q", cmd.Path, kitty)
+	}
+}
+
+// TestLaunchDetachedOverrideBypassesTmuxPane confirms the same at the
+// launchDetached level, which is what actually decides whether to route to
+// launchTmuxPane at all.
+func TestLaunchDetachedOverrideBypassesTmuxPane(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "tmux")
+	stubBinary(t, dir, "kitty")
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	desc, err := launchDetached("echo hi", "kitty")
+	if err != nil {
+		t.Fatalf("launchDetached: %v", err)
+	}
+	if desc != "kitty" {
+		t.Errorf("desc = %q, want %q (tmux must be bypassed)", desc, "kitty")
+	}
+	if tmuxLastPaneID != "" {
+		t.Errorf("tmuxLastPaneID = %q, want empty (tmux path must not have run)", tmuxLastPaneID)
+	}
+}
+
+// TestBuildOverrideCmdKnownNameReusesConvention confirms an override whose
+// binary matches one of terminalCandidates' own names reuses that name's
+// existing flag convention rather than defaulting to -e (TASK-1 point 3).
+func TestBuildOverrideCmdKnownNameReusesConvention(t *testing.T) {
+	dir := t.TempDir()
+	konsole := stubBinary(t, dir, "konsole")
+	gnomeTerminal := stubBinary(t, dir, "gnome-terminal")
+	t.Setenv("PATH", dir)
+
+	cmd, desc, err := buildOverrideCmd("echo hi", "konsole")
+	if err != nil {
+		t.Fatalf("buildOverrideCmd: %v", err)
+	}
+	if desc != "konsole" {
+		t.Errorf("desc = %q, want %q", desc, "konsole")
+	}
+	want := []string{"konsole", "-e", "bash", "-lc", "echo hi"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, want)
+	}
+	for i, a := range want {
+		if cmd.Args[i] != a {
+			t.Errorf("cmd.Args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], a, cmd.Args)
+		}
+	}
+	if cmd.Path != konsole {
+		t.Errorf("cmd.Path = %q, want %q", cmd.Path, konsole)
+	}
+
+	cmd, desc, err = buildOverrideCmd("echo hi", "gnome-terminal")
+	if err != nil {
+		t.Fatalf("buildOverrideCmd: %v", err)
+	}
+	if desc != "gnome-terminal" {
+		t.Errorf("desc = %q, want %q", desc, "gnome-terminal")
+	}
+	want = []string{"gnome-terminal", "--", "bash", "-lc", "echo hi"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, want)
+	}
+	for i, a := range want {
+		if cmd.Args[i] != a {
+			t.Errorf("cmd.Args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], a, cmd.Args)
+		}
+	}
+	if cmd.Path != gnomeTerminal {
+		t.Errorf("cmd.Path = %q, want %q", cmd.Path, gnomeTerminal)
+	}
+}
+
+// TestBuildOverrideCmdKnownNameCaseInsensitive confirms the known-name match
+// is case-insensitive.
+func TestBuildOverrideCmdKnownNameCaseInsensitive(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "Xterm")
+	t.Setenv("PATH", dir)
+
+	cmd, _, err := buildOverrideCmd("echo hi", "Xterm")
+	if err != nil {
+		t.Fatalf("buildOverrideCmd: %v", err)
+	}
+	if len(cmd.Args) < 2 || cmd.Args[1] != "-e" {
+		t.Errorf("cmd.Args = %v, want [Xterm -e ...] (case-insensitive known-name match)", cmd.Args)
+	}
+}
+
+// TestBuildOverrideCmdUnknownNameDefaultsToDashE confirms an override binary
+// not in terminalCandidates falls back to the -e convention (TASK-1 point 3).
+func TestBuildOverrideCmdUnknownNameDefaultsToDashE(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "alacritty")
+	t.Setenv("PATH", dir)
+
+	cmd, desc, err := buildOverrideCmd("echo hi", "alacritty")
+	if err != nil {
+		t.Fatalf("buildOverrideCmd: %v", err)
+	}
+	if desc != "alacritty" {
+		t.Errorf("desc = %q, want %q", desc, "alacritty")
+	}
+	want := []string{"alacritty", "-e", "bash", "-lc", "echo hi"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, want)
+	}
+	for i, a := range want {
+		if cmd.Args[i] != a {
+			t.Errorf("cmd.Args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], a, cmd.Args)
+		}
+	}
+}
+
+// TestBuildOverrideCmdPassesLeadingArgs confirms trailing tokens in the
+// override value (e.g. "alacritty --some-flag") are passed through as leading
+// args before the flag convention, mirroring config.Settings.Editor's own
+// "trailing args" allowance.
+func TestBuildOverrideCmdPassesLeadingArgs(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "alacritty")
+	t.Setenv("PATH", dir)
+
+	cmd, _, err := buildOverrideCmd("echo hi", "alacritty --some-flag")
+	if err != nil {
+		t.Fatalf("buildOverrideCmd: %v", err)
+	}
+	want := []string{"alacritty", "--some-flag", "-e", "bash", "-lc", "echo hi"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, want)
+	}
+	for i, a := range want {
+		if cmd.Args[i] != a {
+			t.Errorf("cmd.Args[%d] = %q, want %q (full: %v)", i, cmd.Args[i], a, cmd.Args)
+		}
+	}
+}
+
+// TestBuildOverrideCmdMissingBinaryErrors confirms a typo'd/missing override
+// binary surfaces a clear error instead of silently falling back to
+// auto-detect (TASK-1 point 3).
+func TestBuildOverrideCmdMissingBinaryErrors(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // empty PATH: nothing resolves
+
+	_, _, err := buildOverrideCmd("echo hi", "not-a-real-terminal")
+	if err == nil {
+		t.Fatal("expected an error for a missing override binary")
+	}
+	if !strings.Contains(err.Error(), "not-a-real-terminal") {
+		t.Errorf("error should name the missing binary, got: %v", err)
+	}
+}
+
+// TestBuildCmdUnsetTerminalUnchanged is a smoke check that buildCmd with an
+// empty terminal still goes through the auto-detect chain (not the override
+// path) — the substantive coverage is TestBuildCmdSmoke/TestBuildCmdTmux*,
+// this just confirms an empty string doesn't accidentally match
+// buildOverrideCmd's "blank" guard as a real override.
+func TestBuildCmdUnsetTerminalUnchanged(t *testing.T) {
+	cmd, desc, err := buildCmd("echo hi", "")
+	if err != nil {
+		if !strings.Contains(err.Error(), "terminal launcher") {
+			t.Errorf("unexpected error for empty terminal: %v", err)
+		}
+		return
+	}
+	if cmd == nil || desc == "" {
+		t.Errorf("buildCmd with empty terminal returned incomplete result: cmd=%v desc=%q", cmd, desc)
 	}
 }
 

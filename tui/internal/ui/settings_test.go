@@ -44,8 +44,12 @@ func TestSettingsTabCyclesFocus(t *testing.T) {
 		t.Errorf("after third tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
 	}
 	v.update(key(t, tea.KeyTab))
+	if v.focus != stFocusTerminal {
+		t.Errorf("after fourth tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
+	}
+	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusEditor {
-		t.Errorf("after fourth tab (wrap), focus = %d, want %d (editor)", v.focus, stFocusEditor)
+		t.Errorf("after fifth tab (wrap), focus = %d, want %d (editor)", v.focus, stFocusEditor)
 	}
 }
 
@@ -54,22 +58,26 @@ func TestSettingsShiftTabCyclesFocusBackward(t *testing.T) {
 	if v.focus != stFocusEditor {
 		t.Fatal("expected initial focus editor")
 	}
-	// shift+tab from editor wraps back to profile.
+	// shift+tab from editor wraps back to terminal.
+	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusTerminal {
+		t.Errorf("after shift+tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
+	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusProfile {
-		t.Errorf("after shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
+		t.Errorf("after second shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusCount {
-		t.Errorf("after second shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
+		t.Errorf("after third shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusBranch {
-		t.Errorf("after third shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
+		t.Errorf("after fourth shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusEditor {
-		t.Errorf("after fourth shift+tab, focus = %d, want %d (editor)", v.focus, stFocusEditor)
+		t.Errorf("after fifth shift+tab, focus = %d, want %d (editor)", v.focus, stFocusEditor)
 	}
 }
 
@@ -161,10 +169,47 @@ func TestSettingsRender(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
 	v.update(key(t, tea.KeyRunes, 'a', 'b', 'c'))
 	out := v.render()
-	for _, want := range []string{"Editor:", "Base branch", "Recent activity:", "claude-pro", "zai", "opencode-go", "abc", "Profile", "recent activity strip"} {
+	for _, want := range []string{"Editor:", "Base branch", "Recent activity:", "claude-pro", "zai", "opencode-go", "abc", "Profile", "recent activity strip", "Terminal:", "auto-detect"} {
 		if !contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
+	}
+}
+
+func TestSettingsTerminalSeeded(t *testing.T) {
+	v := newSettingsView(config.Settings{Terminal: "kitty"}, project.Settings{}, 80, 24)
+	if got := v.terminal.Value(); got != "kitty" {
+		t.Errorf("terminal seed = %q, want kitty", got)
+	}
+	if got := v.settingsValue().Terminal; got != "kitty" {
+		t.Errorf("settingsValue().Terminal = %q, want kitty", got)
+	}
+}
+
+func TestSettingsTerminalEdits(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	v.update(key(t, tea.KeyTab)) // editor -> base branch
+	v.update(key(t, tea.KeyTab)) // base branch -> recent activity count
+	v.update(key(t, tea.KeyTab)) // recent activity count -> profile
+	v.update(key(t, tea.KeyTab)) // profile -> terminal
+	if v.focus != stFocusTerminal {
+		t.Fatalf("focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
+	}
+	v.update(key(t, tea.KeyRunes, 'a', 'l', 'a', 'c', 'r', 'i', 't', 't', 'y'))
+	if got := v.terminal.Value(); got != "alacritty" {
+		t.Errorf("terminal after typing = %q, want alacritty", got)
+	}
+	// Typing into terminal must not leak into the other fields.
+	if got := v.editor.Value(); got != "" {
+		t.Errorf("editor leaked = %q, want empty", got)
+	}
+}
+
+func TestSettingsTerminalValueTrims(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	v.terminal.SetValue("  kitty  ")
+	if got := v.settingsValue().Terminal; got != "kitty" {
+		t.Errorf("settingsValue().Terminal = %q, want trimmed kitty", got)
 	}
 }
 
