@@ -1,6 +1,7 @@
 // Package config persists local TUI preferences across sessions: which
-// editor to open brief.md in, and which subscription profile (a bundle of
-// agent CLI + credentials + model) launch.Agent starts a session under.
+// editor to open brief.md in, how many entries the dashboard's recent-activity
+// strip may show, and which subscription profile (a bundle of agent CLI +
+// credentials + model) launch.Agent starts a session under.
 //
 // The editor lives in config/tui-settings.json in the manigot checkout. The
 // profile lives in manigot/.env as MANIGOT_PROFILE — the same value
@@ -38,6 +39,11 @@ const (
 	ProfileZAI        = "zai"
 	ProfileOpenCodeGo = "opencode-go"
 )
+
+// DefaultRecentActivityCount is the maximum number of entries the dashboard's
+// recent-activity strip may show when Settings.RecentActivityCount is unset
+// (zero) — the pre-existing fixed ceiling of 5.
+const DefaultRecentActivityCount = 5
 
 // Profile describes one of the subscription profiles manigot can run a session
 // under. Each profile bundles the agent CLI to launch, the credentials it is
@@ -111,6 +117,13 @@ type Settings struct {
 	// as ProfileClaudePro — see ProfileValue.
 	Profile string `json:"profile,omitempty"`
 
+	// RecentActivityCount is the maximum number of entries the dashboard's
+	// recent-activity strip may show (git.RecentCommits' fetch count and the
+	// clamp upper bound in recentActivityShown). 0 (unset — the JSON zero
+	// value) means DefaultRecentActivityCount — see RecentActivityCountValue.
+	// Valid user-set range is 1–100, enforced by the settings form.
+	RecentActivityCount int `json:"recentActivityCount"`
+
 	// Tool is the legacy pre-profile selector (ToolClaudeCode/ToolOpenCode),
 	// kept only so old tui-settings.json files load. It is migrated into
 	// Profile by Load and never written back.
@@ -123,6 +136,15 @@ func (s Settings) ProfileValue() string {
 		return ProfileClaudePro
 	}
 	return s.Profile
+}
+
+// RecentActivityCountValue returns s.RecentActivityCount, defaulting to
+// DefaultRecentActivityCount when unset (≤ 0, the JSON zero value).
+func (s Settings) RecentActivityCountValue() int {
+	if s.RecentActivityCount <= 0 {
+		return DefaultRecentActivityCount
+	}
+	return s.RecentActivityCount
 }
 
 // EnvFile returns the manigot checkout's .env file path, or "" if Dir does.

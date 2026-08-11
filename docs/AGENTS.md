@@ -149,7 +149,9 @@ configured with `mg setup`.
   its only visibility, and the TUI itself rings the bell on its next poll
   when it notices the status transition into a stopped state.
 - `config/tui-settings.json` (gitignored) — local TUI **personal** preferences:
-  which editor opens `brief.md`. The subscription profile is NOT stored here —
+  which editor opens `brief.md`, and how many entries the dashboard's
+  recent-activity strip may show (`recentActivityCount`, default 5, valid
+  1–100). The subscription profile is NOT stored here —
   it lives in manigot's `.env` as `MANIGOT_PROFILE` (see the `.env` bullet), the
   one default shared between CLI and TUI: the TUI's settings screen (`s` from
   the job list) reads and writes that value via `tui/internal/config`, the same
@@ -160,7 +162,8 @@ configured with `mg setup`.
   pref. Written by the TUI's settings screen, read/written
   via `tui/internal/config`. Missing is not an error —
   every reader falls back to defaults (`$VISUAL`/`$EDITOR`/`nano`/`vi` for the
-  editor, `claude-pro` for the profile). A legacy `profile` field in the file
+  editor, `claude-pro` for the profile, 5 for the recent-activity count). A
+  legacy `profile` field in the file
   is honored as a migration fallback while `.env` has no `MANIGOT_PROFILE` yet,
   and the older `tool` field still migrates (`claude-code`→`claude-pro`,
   `opencode`→`zai`); neither is written back.

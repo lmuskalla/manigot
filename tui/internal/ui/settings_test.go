@@ -36,12 +36,16 @@ func TestSettingsTabCyclesFocus(t *testing.T) {
 		t.Errorf("after tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
 	}
 	v.update(key(t, tea.KeyTab))
+	if v.focus != stFocusCount {
+		t.Errorf("after second tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
+	}
+	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusProfile {
-		t.Errorf("after second tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
+		t.Errorf("after third tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusEditor {
-		t.Errorf("after third tab (wrap), focus = %d, want %d (editor)", v.focus, stFocusEditor)
+		t.Errorf("after fourth tab (wrap), focus = %d, want %d (editor)", v.focus, stFocusEditor)
 	}
 }
 
@@ -56,12 +60,16 @@ func TestSettingsShiftTabCyclesFocusBackward(t *testing.T) {
 		t.Errorf("after shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
 	}
 	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusCount {
+		t.Errorf("after second shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
+	}
+	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusBranch {
-		t.Errorf("after second shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
+		t.Errorf("after third shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusEditor {
-		t.Errorf("after third shift+tab, focus = %d, want %d (editor)", v.focus, stFocusEditor)
+		t.Errorf("after fourth shift+tab, focus = %d, want %d (editor)", v.focus, stFocusEditor)
 	}
 }
 
@@ -74,9 +82,10 @@ func TestSettingsProfileCycleOnlyWhenProfileFocused(t *testing.T) {
 		t.Errorf("left/right while editor focused changed profile: %d -> %d", before, v.profile)
 	}
 
-	// focus on profile (two tabs away now): right cycles claude-pro -> zai -> opencode-go -> claude-pro.
+	// focus on profile (three tabs away now): right cycles claude-pro -> zai -> opencode-go -> claude-pro.
 	v.update(key(t, tea.KeyTab)) // editor -> base branch
-	v.update(key(t, tea.KeyTab)) // base branch -> profile
+	v.update(key(t, tea.KeyTab)) // base branch -> recent activity count
+	v.update(key(t, tea.KeyTab)) // recent activity count -> profile
 	// left/right must not mutate the text inputs while profile is focused either.
 	branchBefore := v.baseBranch.Value()
 	v.update(key(t, tea.KeyRight))
@@ -141,9 +150,10 @@ func TestSettingsProjectValueTrimsAndStaysSeparateFromGlobal(t *testing.T) {
 	if got := v.projectValue(); got != (project.Settings{BaseBranch: "trunk"}) {
 		t.Errorf("projectValue = %+v, want {trunk}", got)
 	}
-	// Global settings are unaffected by base branch edits.
-	if got := v.settingsValue(); got != (config.Settings{Editor: "vim", Profile: config.ProfileZAI}) {
-		t.Errorf("settingsValue leaked from base branch = %+v, want {vim zai}", got)
+	// Global settings are unaffected by base branch edits (the recent-activity
+	// count field carries its seeded default).
+	if got := v.settingsValue(); got != (config.Settings{Editor: "vim", Profile: config.ProfileZAI, RecentActivityCount: config.DefaultRecentActivityCount}) {
+		t.Errorf("settingsValue leaked from base branch = %+v, want {vim zai count:%d}", got, config.DefaultRecentActivityCount)
 	}
 }
 
@@ -151,9 +161,96 @@ func TestSettingsRender(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
 	v.update(key(t, tea.KeyRunes, 'a', 'b', 'c'))
 	out := v.render()
-	for _, want := range []string{"Editor:", "Base branch", "claude-pro", "zai", "opencode-go", "abc", "Profile"} {
+	for _, want := range []string{"Editor:", "Base branch", "Recent activity:", "claude-pro", "zai", "opencode-go", "abc", "Profile", "recent activity strip"} {
 		if !contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
+	}
+}
+
+func TestSettingsRecentCountSeeded(t *testing.T) {
+	// An explicit value seeds the field with the resolved number.
+	v := newSettingsView(config.Settings{RecentActivityCount: 12}, project.Settings{}, 80, 24)
+	if got := v.recentCount.Value(); got != "12" {
+		t.Errorf("recent count seed = %q, want 12", got)
+	}
+	// Unset (0) seeds with the default, so the user always sees the effective
+	// value.
+	v = newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	if got := v.recentCount.Value(); got != "5" {
+		t.Errorf("recent count default seed = %q, want 5", got)
+	}
+}
+
+func TestSettingsRecentCountEdits(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	v.update(key(t, tea.KeyTab)) // editor -> base branch
+	v.update(key(t, tea.KeyTab)) // base branch -> recent activity count
+	v.recentCount.SetValue("")   // clear the seeded default
+	v.update(key(t, tea.KeyRunes, '3'))
+	if got := v.recentCount.Value(); got != "3" {
+		t.Errorf("recent count after typing = %q, want 3", got)
+	}
+	// Typing into recent count must not leak into the other fields.
+	if got := v.editor.Value(); got != "" {
+		t.Errorf("editor leaked = %q, want empty", got)
+	}
+	if got := v.baseBranch.Value(); got != "" {
+		t.Errorf("base branch leaked = %q, want empty", got)
+	}
+}
+
+func TestSettingsRecentCountValidation(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+
+	// Blank -> default.
+	v.recentCount.SetValue("")
+	if n, err := v.recentActivityCount(); err != nil || n != config.DefaultRecentActivityCount {
+		t.Errorf("blank count = (%d, %v), want (%d, nil)", n, err, config.DefaultRecentActivityCount)
+	}
+
+	// Valid integer in range -> parsed, and reflected in settingsValue.
+	v.recentCount.SetValue("12")
+	if n, err := v.recentActivityCount(); err != nil || n != 12 {
+		t.Errorf("12 = (%d, %v), want (12, nil)", n, err)
+	}
+	if got := v.settingsValue().RecentActivityCount; got != 12 {
+		t.Errorf("settingsValue().RecentActivityCount = %d, want 12", got)
+	}
+
+	// Anything else -> error, and settingsValue must not smuggle it out.
+	for _, bad := range []string{"abc", "0", "-1", "101", "12.5"} {
+		v.recentCount.SetValue(bad)
+		if _, err := v.recentActivityCount(); err == nil {
+			t.Errorf("count %q accepted, want an error", bad)
+		}
+		if got := v.settingsValue().RecentActivityCount; got != 0 {
+			t.Errorf("invalid count %q leaked into settingsValue as %d, want 0", bad, got)
+		}
+	}
+}
+
+func TestSettingsSubmitInvalidCountKeepsFormOpen(t *testing.T) {
+	root := t.TempDir()
+	a := NewApp(root, nil)
+	a.width, a.height = 80, 24
+	a.settings.RecentActivityCount = 7 // pin regardless of on-disk settings
+	a.updateList(keyMsg("s"))          // open the settings form
+	if a.settingsView == nil {
+		t.Fatal("settings view did not open")
+	}
+
+	a.settingsView.recentCount.SetValue("abc")
+	a.updateSettings(key(t, tea.KeyEnter)) // submit
+
+	// The form must stay open with a status message, and nothing persisted.
+	if a.settingsView == nil {
+		t.Fatal("settings form closed despite an invalid recent activity count")
+	}
+	if a.settingsView.status == "" {
+		t.Error("status not set for an invalid recent activity count")
+	}
+	if a.settings.RecentActivityCount != 7 {
+		t.Errorf("in-memory settings changed on invalid submit: RecentActivityCount = %d, want 7", a.settings.RecentActivityCount)
 	}
 }

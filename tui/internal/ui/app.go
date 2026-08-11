@@ -59,9 +59,9 @@ type App struct {
 	width  int
 	height int
 
-	// settings holds the persisted TUI preferences (editor, subscription
-	// profile). It is loaded once at startup and updated in place whenever the
-	// settings form is submitted.
+	// settings holds the persisted TUI preferences (editor, recent-activity
+	// count, subscription profile). It is loaded once at startup and updated
+	// in place whenever the settings form is submitted.
 	settings config.Settings
 
 	// projectSettings holds the project-scoped conventions (base branch),
@@ -164,13 +164,16 @@ var jdiNow = time.Now
 // surfaces the error in the footer instead.
 func NewApp(root string, jobs []job.Job) *App {
 	a := &App{root: root, jobs: jobs, state: stateList, jdiSeen: map[string]job.JDIState{}, jdiSeenAt: map[string]time.Time{}}
-	a.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
-	a.refreshRecentCommits()
 	settings, err := config.Load()
 	a.settings = settings
 	if err != nil {
 		a.status = cmdErrorText(err)
 	}
+	a.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
+	// Settings must be loaded before the initial recent-commits fetch so the
+	// strip honors the configured maximum count on the very first render —
+	// not just after the first settings submit.
+	a.refreshRecentCommits()
 	// Project settings (base branch) live in the target project, not the
 	// manigot checkout, so a missing file is the normal pre-first-save state
 	// and project.Load already degrades it to a zero value — only a real I/O
@@ -397,15 +400,13 @@ func (a *App) selectedJob() (job.Job, bool) {
 
 // --- List view --------------------------------------------------------------
 
-// recentActivityFloor / recentActivityCeiling bound how many commits the
-// bottom-of-screen "recent activity" strip can show. The floor (1) is the
-// strip's minimum footprint. The ceiling (5) is fixed at fetch time
-// regardless of how many will actually render — see recentActivityShown for
-// the part of this that scales with available room.
-const (
-	recentActivityFloor   = 1
-	recentActivityCeiling = 5
-)
+// recentActivityFloor bounds how few commits the bottom-of-screen "recent
+// activity" strip can show: the strip's minimum footprint, so it never
+// pushes job rows down further than the pre-existing header already did. The
+// upper bound is configurable — Settings.RecentActivityCountValue
+// (DefaultRecentActivityCount = 5) — see recentActivityShown for the part of
+// this that scales with available room.
+const recentActivityFloor = 1
 
 // dashboardFixedChrome is the number of renderList rows that are always
 // present outside the job rows, the job-summary line, and the recent-activity
@@ -415,19 +416,20 @@ const (
 const dashboardFixedChrome = 7
 
 // refreshRecentCommits re-reads the recent-activity strip from git, always
-// fetching up to the ceiling. How many of those cached commits actually get
-// rendered is decided later, at render time, by recentActivityShown — not
-// here. This split matters because refreshRecentCommits runs before the first
-// tea.WindowSizeMsg ever arrives (see NewApp), when a.width/a.height are still
-// zero; sizing the *fetch* against that would size against a stale terminal
-// height on first render. Fetching a fixed ceiling and deciding the display
-// count at render time (once layout is known) avoids that hazard.
+// fetching up to the configured maximum (Settings.RecentActivityCountValue).
+// How many of those cached commits actually get rendered is decided later, at
+// render time, by recentActivityShown — not here. This split matters because
+// refreshRecentCommits runs before the first tea.WindowSizeMsg ever arrives
+// (see NewApp), when a.width/a.height are still zero; sizing the *fetch*
+// against that would size against a stale terminal height on first render.
+// Fetching the configured maximum and deciding the display count at render
+// time (once layout is known) avoids that hazard.
 //
 // Like currentBranch, an error (e.g. a non-repo project) degrades to an empty
 // strip rather than surfacing in the status line — this is decorative,
 // optional header content, not an action the user asked for.
 func (a *App) refreshRecentCommits() {
-	commits, err := git.RecentCommits(a.root, recentActivityCeiling)
+	commits, err := git.RecentCommits(a.root, a.settings.RecentActivityCountValue())
 	if err != nil {
 		a.recentCommits = nil
 		return
@@ -437,11 +439,11 @@ func (a *App) refreshRecentCommits() {
 
 // recentActivityShown returns how many of a.recentCommits should actually be
 // rendered, given the current terminal height and job count. It scales
-// between recentActivityFloor and recentActivityCeiling based on how much
-// vertical room is spare, per the brief's resolution: a full list keeps the
-// floor's 1-line footprint (never pushing job rows down further than the
-// pre-existing header already did); a sparse list shows more, up to the
-// ceiling.
+// between recentActivityFloor and the configured maximum
+// (Settings.RecentActivityCountValue) based on how much vertical room is
+// spare, per the brief's resolution: a full list keeps the floor's 1-line
+// footprint (never pushing job rows down further than the pre-existing header
+// already did); a sparse list shows more, up to the configured maximum.
 //
 // The fixed chrome outside the job rows and the strip itself — title line,
 // blank spacer beneath it, "jobs" headline, divider, blank line before the
@@ -458,7 +460,7 @@ func (a *App) recentActivityShown() int {
 		return recentActivityFloor
 	}
 	spare := a.height - dashboardFixedChrome - len(a.jobs)
-	n := clamp(spare, recentActivityFloor, recentActivityCeiling)
+	n := clamp(spare, recentActivityFloor, a.settings.RecentActivityCountValue())
 	if n > len(a.recentCommits) {
 		// Fewer real commits than the computed count — render whatever's
 		// available, same graceful-degrade rule renderRecentActivity already
@@ -693,8 +695,9 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.state = stateNewJob
 	case "s":
 		// Edit the persisted TUI settings: the global personal prefs
-		// (editor, subscription profile) and the project base branch.
-		// Both are seeded from their on-disk files (see NewApp).
+		// (editor, recent activity count, subscription profile) and the
+		// project base branch. Both are seeded from their on-disk files
+		// (see NewApp).
 		a.settingsView = newSettingsView(a.settings, a.projectSettings, a.width, a.height)
 		a.state = stateSettings
 	case "o":
@@ -737,11 +740,18 @@ func (a *App) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.settingsView = nil
 		a.state = stateList
 	case stSubmit:
-		// Persist both files: the global personal prefs (config.Save)
-		// and the project base branch (project.Save). Surface whichever
-		// fails first in the form's status, leaving the form open so the
-		// user can retry without retyping; only update the in-memory
-		// copies and return to the list once both succeed.
+		// Validate the recent-activity count field first (blank = default;
+		// anything unparseable or outside 1–100 keeps the form open with a
+		// status message and persists nothing). Persist both files — the
+		// global personal prefs (config.Save) and the project base branch
+		// (project.Save). Surface whichever fails first in the form's status,
+		// leaving the form open so the user can retry without retyping; only
+		// update the in-memory copies and return to the list once both
+		// succeed.
+		if _, err := a.settingsView.recentActivityCount(); err != nil {
+			a.settingsView.status = cmdErrorText(err)
+			return a, nil
+		}
 		s := a.settingsView.settingsValue()
 		ps := a.settingsView.projectValue()
 		if err := config.Save(s); err != nil {
@@ -754,6 +764,9 @@ func (a *App) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.settings = s
 		a.projectSettings = ps
+		// The recent-activity strip's maximum may have just changed — refetch
+		// so the list reflects the new count immediately on return.
+		a.refreshRecentCommits()
 		a.settingsView = nil
 		a.status = "settings saved"
 		a.state = stateList

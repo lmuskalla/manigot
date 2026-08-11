@@ -133,13 +133,15 @@ func TestRenderListRecentActivityShowsMostRecentAcrossBranches(t *testing.T) {
 
 // TestRenderListRecentActivityScalesWithSpareRoom is TASK-1's core coverage:
 // a sparse (1-job) list at a generous terminal height shows more than the
-// pre-existing 1-line floor, up to the 5-entry ceiling.
+// pre-existing 1-line floor, up to the configured maximum count.
 func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 	dir, def := gitInitRepo(t)
 	commitEmptyAt(t, dir, "c2", 1)
 	commitEmptyAt(t, dir, "c3", 2)
 	commitEmptyAt(t, dir, "c4", 3)
 	commitEmptyAt(t, dir, "c5", 4)
+	commitEmptyAt(t, dir, "c6", 5)
+	commitEmptyAt(t, dir, "c7", 6)
 	wts := t.TempDir()
 	addJobWorktree(t, dir, wts, "feature/aaaa02_a", "aaaa02_a", "# Brief: A\n\nstatus: open\nid: aaaa02\nbranch: feature/aaaa02_a\ndate: 2026-01-01\n")
 
@@ -148,10 +150,16 @@ func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 		t.Fatalf("job.Discover: got %d jobs, want 1", len(jobs))
 	}
 	a := NewApp(dir, jobs)
+	// Pin the configured count explicitly — NewApp loads the real on-disk
+	// settings, so without this the test would depend on whatever
+	// tui-settings.json the developer has locally. Re-fetch so the pinned
+	// count drives the fetch too, not just the render-time clamp.
+	a.settings.RecentActivityCount = 7
+	a.refreshRecentCommits()
 	a.width, a.height = 80, 40 // generous height — plenty of spare room
 
-	if got := a.recentActivityShown(); got != recentActivityCeiling {
-		t.Fatalf("recentActivityShown() = %d, want the ceiling %d given ample spare room", got, recentActivityCeiling)
+	if got := a.recentActivityShown(); got != 7 {
+		t.Fatalf("recentActivityShown() = %d, want the configured max 7 given ample spare room", got)
 	}
 
 	got := a.renderList()

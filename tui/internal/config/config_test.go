@@ -85,6 +85,57 @@ func TestProfileValueDefaultsToClaudePro(t *testing.T) {
 	}
 }
 
+func TestRecentActivityCountValueDefaultsToFive(t *testing.T) {
+	if got := (Settings{}).RecentActivityCountValue(); got != DefaultRecentActivityCount {
+		t.Errorf("zero-value RecentActivityCountValue = %d, want %d", got, DefaultRecentActivityCount)
+	}
+	if got := (Settings{RecentActivityCount: 10}).RecentActivityCountValue(); got != 10 {
+		t.Errorf("RecentActivityCountValue = %d, want 10", got)
+	}
+	// A negative value (never produced by the form, but not worth trusting
+	// from a hand-edited file) is treated as unset too.
+	if got := (Settings{RecentActivityCount: -3}).RecentActivityCountValue(); got != DefaultRecentActivityCount {
+		t.Errorf("negative RecentActivityCountValue = %d, want %d", got, DefaultRecentActivityCount)
+	}
+}
+
+func TestSaveThenLoadRoundTripsRecentActivityCount(t *testing.T) {
+	dir := checkout(t)
+	want := Settings{Editor: "vim", Profile: ProfileZAI, RecentActivityCount: 12}
+	if err := Save(want); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	settingsData, err := os.ReadFile(filepath.Join(dir, "config", "tui-settings.json"))
+	if err != nil {
+		t.Fatalf("read tui-settings.json: %v", err)
+	}
+	if got := string(settingsData); !contains(got, `"recentActivityCount": 12`) {
+		t.Errorf("tui-settings.json missing recentActivityCount: %s", got)
+	}
+
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.RecentActivityCount != want.RecentActivityCount {
+		t.Errorf("RecentActivityCount after round-trip = %d, want %d", got.RecentActivityCount, want.RecentActivityCount)
+	}
+}
+
+func TestLoadUnsetRecentActivityCountDefaults(t *testing.T) {
+	// A settings file without the field (an older version's file) loads as 0
+	// → the default, never an error.
+	writeSettings(t, `{"editor":"vim"}`)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := s.RecentActivityCountValue(); got != DefaultRecentActivityCount {
+		t.Errorf("RecentActivityCountValue = %d, want default %d", got, DefaultRecentActivityCount)
+	}
+}
+
 // writeSettings writes a tui-settings.json into the fake checkout.
 func writeSettings(t *testing.T, data string) {
 	t.Helper()

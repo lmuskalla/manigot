@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -15,19 +17,25 @@ import (
 // flag, in cycle order.
 var profileOptions = config.Profiles()
 
+// recentActivityCountMax is the upper end of the valid range for the
+// recent-activity count setting (the floor is 1). Values outside 1–100 are
+// rejected by the settings form.
+const recentActivityCountMax = 100
+
 // Number of focusable fields in the settings form: editor, base branch,
-// profile — in tab cycle order. Kept as a named constant so the tab/shift+tab
-// cycle and focus comparisons don't all hardcode a literal that has to be
-// kept in sync field by field.
-const stFieldCount = 3
+// recent activity count, profile — in tab cycle order. Kept as a named
+// constant so the tab/shift+tab cycle and focus comparisons don't all hardcode
+// a literal that has to be kept in sync field by field.
+const stFieldCount = 4
 
 // Focus indices for the settings form's fields, in tab cycle order: editor →
-// base branch → profile → editor. Used by update() and render() instead of
-// bare ints.
+// base branch → recent activity count → profile → editor. Used by update()
+// and render() instead of bare ints.
 const (
-	stFocusEditor = 0
-	stFocusBranch = 1
-	stFocusProfile = 2
+	stFocusEditor  = 0
+	stFocusBranch  = 1
+	stFocusCount   = 2
+	stFocusProfile = 3
 )
 
 // stAction is what update returns for the App to act on.
@@ -41,8 +49,8 @@ const (
 
 // settingsView is the "Settings" form. It edits three files at once:
 //
-//   - config/tui-settings.json — the editor preference (personal, gitignored,
-//     in the manigot checkout);
+//   - config/tui-settings.json — the editor preference and the recent-activity
+//     count (personal, gitignored, in the manigot checkout);
 //   - manigot/.env — the subscription profile, as MANIGOT_PROFILE: the one
 //     default shared between CLI and TUI (bare `mg` resolves to it, `mg
 //     profiles` writes it, and this form reads/writes the same key); and
@@ -53,13 +61,14 @@ const (
 // config.Save and project.Save on submit so this stays a pure input
 // component.
 type settingsView struct {
-	editor     textinput.Model
-	baseBranch textinput.Model
-	profile    int // index into profileOptions
-	focus      int // stFocusEditor / stFocusBranch / stFocusProfile
-	width      int
-	height     int
-	status     string // validation/save error message
+	editor       textinput.Model
+	baseBranch   textinput.Model
+	recentCount  textinput.Model
+	profile      int // index into profileOptions
+	focus        int // stFocusEditor / stFocusBranch / stFocusCount / stFocusProfile
+	width        int
+	height       int
+	status       string // validation/save error message
 }
 
 // newSettingsView builds the form seeded from the current global config and
@@ -81,24 +90,35 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 	baseBranch.SetValue(proj.BaseBranch)
 	baseBranch.Width = 60
 
+	recentCount := textinput.New()
+	recentCount.Placeholder = strconv.Itoa(config.DefaultRecentActivityCount)
+	recentCount.Prompt = "" // we render our own "Recent activity:" label
+	recentCount.CharLimit = 3
+	// Seed with the resolved number so the user sees the effective value;
+	// clearing it means "default" (see recentActivityCount).
+	recentCount.SetValue(strconv.Itoa(global.RecentActivityCountValue()))
+	recentCount.Width = 60
+
 	v := &settingsView{
-		editor:     editor,
-		baseBranch: baseBranch,
-		profile:    profileIndex(global.ProfileValue()),
-		focus:      stFocusEditor,
-		width:      width,
-		height:     height,
+		editor:      editor,
+		baseBranch:  baseBranch,
+		recentCount: recentCount,
+		profile:     profileIndex(global.ProfileValue()),
+		focus:       stFocusEditor,
+		width:       width,
+		height:      height,
 	}
 	if width > 0 {
 		w := stInputWidth(width)
 		v.editor.Width = w
 		v.baseBranch.Width = w
+		v.recentCount.Width = w
 	}
 	return v
 }
 
 // stInputWidth returns the usable width for a settings text input, given the
-// available form width. Both text inputs share the same width rule.
+// available form width. All text inputs share the same width rule.
 func stInputWidth(width int) int {
 	w := width - 12
 	if w < 20 {
@@ -128,6 +148,7 @@ func (v *settingsView) resize(width, height int) {
 		w := stInputWidth(width)
 		v.editor.Width = w
 		v.baseBranch.Width = w
+		v.recentCount.Width = w
 	}
 }
 
@@ -157,12 +178,16 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 		return stNone
 	}
 
-	// A text input is focused (editor or base branch): route the key to it.
+	// A text input is focused (editor, base branch or recent count): route
+	// the key to it.
 	var ti *textinput.Model
-	if v.focus == stFocusEditor {
+	switch v.focus {
+	case stFocusEditor:
 		ti = &v.editor
-	} else {
+	case stFocusBranch:
 		ti = &v.baseBranch
+	default: // stFocusCount
+		ti = &v.recentCount
 	}
 	m, _ := ti.Update(msg)
 	*ti = m
@@ -170,30 +195,60 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 }
 
 // setFocus moves focus to field i and keeps the text inputs' focus state in
-// sync: only the editor or base branch holds the text cursor; the profile
-// selector is keyboard-driven (←/→), not a text input.
+// sync: only the editor, base branch or recent count holds the text cursor;
+// the profile selector is keyboard-driven (←/→), not a text input.
 func (v *settingsView) setFocus(i int) {
 	v.focus = i
 	switch i {
 	case stFocusEditor:
 		v.editor.Focus()
 		v.baseBranch.Blur()
+		v.recentCount.Blur()
 	case stFocusBranch:
 		v.editor.Blur()
 		v.baseBranch.Focus()
+		v.recentCount.Blur()
+	case stFocusCount:
+		v.editor.Blur()
+		v.baseBranch.Blur()
+		v.recentCount.Focus()
 	default: // stFocusProfile
 		v.editor.Blur()
 		v.baseBranch.Blur()
+		v.recentCount.Blur()
 	}
 }
 
+// recentActivityCount parses and validates the form's recent-activity count
+// field. A trimmed empty input means "unset → default"
+// (config.DefaultRecentActivityCount). Anything that does not parse as an
+// integer in 1–recentActivityCountMax returns an error so the caller can
+// surface it and keep the form open without persisting anything.
+func (v *settingsView) recentActivityCount() (int, error) {
+	raw := strings.TrimSpace(v.recentCount.Value())
+	if raw == "" {
+		return config.DefaultRecentActivityCount, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 || n > recentActivityCountMax {
+		return 0, fmt.Errorf("recent activity count must be an integer between 1 and %d (blank = %d)", recentActivityCountMax, config.DefaultRecentActivityCount)
+	}
+	return n, nil
+}
+
 // settingsValue returns the form's current global values as config.Settings,
-// ready to be persisted with config.Save.
+// ready to be persisted with config.Save. The recent-activity count is
+// included only when valid — callers must run recentActivityCount() first (as
+// updateSettings does) so an invalid value never silently reaches disk as 0.
 func (v *settingsView) settingsValue() config.Settings {
-	return config.Settings{
+	s := config.Settings{
 		Editor:  strings.TrimSpace(v.editor.Value()),
 		Profile: profileOptions[v.profile].ID,
 	}
+	if n, err := v.recentActivityCount(); err == nil {
+		s.RecentActivityCount = n
+	}
+	return s
 }
 
 // projectValue returns the form's current project values as project.Settings,
@@ -232,6 +287,18 @@ func (v *settingsView) render() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("           blank = main · stored in docs/manigot.json, shared with your team"))
+	b.WriteString("\n\n")
+
+	// Recent activity count row (global): the maximum number of entries the
+	// dashboard's recent-activity strip may show.
+	countLabel := "  Recent activity: "
+	if v.focus == stFocusCount {
+		b.WriteString(countLabel + v.recentCount.View())
+	} else {
+		b.WriteString(dimStyle.Render(countLabel) + dimStyle.Render(v.recentCount.View()))
+	}
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("           blank = 5 · max entries shown in the dashboard's recent activity strip, stored in config/tui-settings.json"))
 	b.WriteString("\n\n")
 
 	// Profile row (global): one line per profile, the selected one highlighted.
@@ -281,6 +348,8 @@ func (v *settingsView) hint() string {
 	case stFocusEditor:
 		return "tab/shift+tab base branch · " + prefix
 	case stFocusBranch:
+		return "tab/shift+tab recent activity · " + prefix
+	case stFocusCount:
 		return "tab/shift+tab profile · " + prefix
 	default: // stFocusProfile
 		return "←/→ change profile · tab/shift+tab editor · " + prefix
