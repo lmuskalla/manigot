@@ -343,6 +343,7 @@ What differs per profile:
 | CLI in container | `claude` | `opencode` |
 | Auth | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs (Claude subscription) | `ZHIPU_API_KEY` / `OPENCODE_API_KEY` |
 | Onboarding | bypassed by writing `~/.claude.json` | nothing to bypass |
+| Permissions | auto-approved via `--dangerously-skip-permissions` | auto-approved via `--auto` |
 | Global agents | `~/.claude/agents/` | `~/.config/opencode/agents/` |
 | `docs/` mounted at | `/workspace/.claude` | `/workspace/.opencode` |
 | Project agents | `/workspace/.claude/agents/` | `/workspace/.opencode/agents/` |
@@ -355,6 +356,13 @@ Both tools get the same `agents/*.md` files baked in at build time. The
 OpenCode copies are generated from the same sources with the `name` and `tools`
 frontmatter keys removed, since OpenCode derives the agent name from the
 filename and uses a different schema for tool permissions.
+
+Both CLIs start with all permissions auto-approved — no per-tool confirmation
+prompts (e.g. "can I run this python script?") appear in either tool. The
+container is isolated and ephemeral, so this is safe: Claude Code runs with
+`--dangerously-skip-permissions`, OpenCode with `--auto` (which auto-approves
+anything not explicitly denied; the container's opencode config defines no
+denies).
 
 One caveat: because `tools:` is dropped, the read-only agents are **not**
 restricted under OpenCode — `@reviewer`, `@security`, `@analyst` and

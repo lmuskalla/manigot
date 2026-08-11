@@ -180,15 +180,19 @@ configured with `mg setup`.
   Branches on `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's
   onboarding wizard, pre-accept folder trust for `/workspace`, and start it in
   permission-bypass mode (full auto, no per-tool prompts) via
-  `--dangerously-skip-permissions`; or checks for a provider API key and execs
-  `opencode`. When `manigot_PRINT` is set, each branch execs its CLI's own
-  non-interactive/headless invocation instead of the interactive one: `claude
-  --print --output-format json` (a single JSON object with a `"result"`
-  field), or, for OpenCode, `opencode run <message> --agent <agent> --format
-  json` (translated from the interactive `--agent`/`--prompt` passthrough —
-  OpenCode's headless mode takes the prompt as a positional argument, not a
-  flag; its JSON output is a JSONL stream of typed events, the response text
-  living in `"text"`-typed events' `part.text`).
+  `--dangerously-skip-permissions`; or checks for a provider API key and starts
+  OpenCode in auto mode via `--auto` (full auto, no per-tool prompts — the
+  direct OpenCode analog of Claude's `--dangerously-skip-permissions`:
+  `--auto` auto-approves any permission that isn't explicitly denied, and the
+  container's opencode config contains no deny rules, so every session runs
+  fully automatic). When `manigot_PRINT` is set, each branch execs its CLI's
+  own non-interactive/headless invocation instead of the interactive one:
+  `claude --print --output-format json` (a single JSON object with a `"result"`
+  field), or, for OpenCode, `opencode run <message> --agent <agent> --auto
+  --format json` (translated from the interactive `--agent`/`--prompt`
+  passthrough — OpenCode's headless mode takes the prompt as a positional
+  argument, not a flag; its JSON output is a JSONL stream of typed events, the
+  response text living in `"text"`-typed events' `part.text`).
 - `scripts/run.sh`'s `--print` flag — non-interactive invocation (used by
   automated/unattended runs, e.g. `mg jdi`, not by a human's own `mg`/TUI
   session) that appends one extra sentence to the job prompt defining the

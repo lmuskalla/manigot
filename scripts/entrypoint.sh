@@ -149,10 +149,24 @@ if [[ "$TOOL" == "opencode" ]]; then
         OC_ARGS=(run)
         [[ -n "$OC_PROMPT" ]] && OC_ARGS+=("$OC_PROMPT")
         [[ -n "$OC_AGENT" ]] && OC_ARGS+=(--agent "$OC_AGENT")
-        OC_ARGS+=(--format json)
+        # --auto makes the headless run explicitly auto-approved: the archived
+        # foycfl job verified `opencode run` auto-executes bash/write tool
+        # calls even without it, but the flag makes the intent explicit and
+        # guards other tools (webfetch, task, lsp, mcp) against an unanswered
+        # "ask" prompt stalling an unattended non-TTY run — the headless
+        # counterpart of the interactive --auto above and of Claude's
+        # --dangerously-skip-permissions on its own --print branch.
+        OC_ARGS+=(--auto --format json)
         exec opencode "${OC_ARGS[@]}" "${OC_REST[@]+"${OC_REST[@]}"}"
     fi
-    exec opencode "$@"
+    # --auto starts every OpenCode session in full auto mode (no per-tool
+    # confirmation, e.g. "can I run this python script?"). Safe in this context
+    # because manigot launches an isolated, ephemeral container specifically for
+    # this purpose; the brief explicitly wants OpenCode to start in auto mode,
+    # mirroring the claude-code branch's --dangerously-skip-permissions below.
+    # Placed before "$@" so it composes with the passthrough (--agent <name>,
+    # --prompt <text> and/or the positional job prompt).
+    exec opencode --auto "$@"
 else
     # --dangerously-skip-permissions starts every Claude Code session in full
     # auto mode (no per-tool-call confirmation). Safe in this context because
