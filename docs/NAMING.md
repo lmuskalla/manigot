@@ -78,7 +78,7 @@ machine-readable fields:
   Docs    : (none — job workflow unavailable, running off the books)
   ```
 - `scripts/entrypoint.sh`, right before it execs the agent CLI, prints a
-  random line from `docs/quotes.json` — a flat, freely-editable list of
+  random line from `assets/quotes.json` — a flat, freely-editable list of
   Sopranos quotes and exclamations — in italics, followed by a blank line.
   `scripts/run.sh` picks the quote at random on the host (once per
   session) and hands it to the container via the `MANIGOT_QUOTE` env var;
@@ -87,7 +87,7 @@ machine-readable fields:
   stdout stream `mg jdi` and other non-interactive callers parse as JSON.
   Error and warning messages elsewhere in both scripts stay
   technical-only — they're for a human to act on, not to flavor. Edit
-  `docs/quotes.json` directly to add, remove, or prune entries — there's
+  `assets/quotes.json` directly to add, remove, or prune entries — there's
   no filtering logic, so anything left in the file is fair game to be
   printed.
 
@@ -130,7 +130,7 @@ Every Sopranos-flavored name currently in use, in one place:
   startup banner ("Entering safehouse (isolated session)...").
 - **off the books** — flavor wording in `run.sh`'s banner `Docs` field when
   no `docs/` was found (no project context, no job workflow).
-- **docs/quotes.json** — the flat, editable repository of Sopranos quotes
+- **assets/quotes.json** — the flat, editable repository of Sopranos quotes
   `entrypoint.sh` prints one random line from each session.
 - **This Thing of Ours** — this document's title.
 

@@ -488,11 +488,11 @@ if [[ ${#ENV_MOUNTS[@]} -eq 0 ]]; then
 fi
 
 # ── Flavor quote ──────────────────────────────────────────────────────────────
-# Picked once per session from docs/quotes.json (see docs/NAMING.md) and handed
+# Picked once per session from assets/quotes.json (see docs/NAMING.md) and handed
 # to entrypoint.sh via env var, which prints it alongside its welcome line.
 # Missing/empty file just means no quote this session — not an error.
 MANIGOT_QUOTE=""
-QUOTES_FILE="$MANIGOT_ROOT/docs/quotes.json"
+QUOTES_FILE="$MANIGOT_ROOT/assets/quotes.json"
 if [[ -f "$QUOTES_FILE" ]]; then
     mapfile -t QUOTES < <(grep -oE '"[^"]*"' "$QUOTES_FILE" | sed 's/^"\(.*\)"$/\1/')
     if [[ ${#QUOTES[@]} -gt 0 ]]; then
