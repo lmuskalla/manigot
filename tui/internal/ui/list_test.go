@@ -488,3 +488,63 @@ func TestRenderListStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
 		t.Errorf("needs-human badge unexpectedly shows the spinner frame %q:\n%s", activityFrame(3), row)
 	}
 }
+
+// TestListJAndKNoLongerMoveCursor is the b8kbwb regression test: after "j"
+// became the mg-jdi launch key and "k" was dropped, neither vim key may move
+// the list cursor anymore — navigation is purely ↑/↓ (plus home/end, g/G).
+// "j" is pressed with a working stub mg-jdi so the launch succeeds, proving
+// that even a successful launch doesn't move the cursor; "k" is unbound and
+// must leave the cursor where it is. ↑/↓ still move, as the contrast.
+func TestListJAndKNoLongerMoveCursor(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/aaaa04_a", "aaaa04_a", "# Brief: A\n\nstatus: open\nid: aaaa04\nbranch: feature/aaaa04_a\ndate: 2026-01-01\n")
+	addJobWorktree(t, dir, wts, "feature/aaaa05_a", "aaaa05_a", "# Brief: A\n\nstatus: open\nid: aaaa05\nbranch: feature/aaaa05_a\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 2 {
+		t.Fatalf("job.Discover: got %d jobs, want 2", len(jobs))
+	}
+
+	// Stub mg-jdi so the "j" press below is a real (successful) launch — the
+	// point is that it must still not move the cursor.
+	t.Setenv("MANIGOT_HOME", "")
+	stub := filepath.Join(t.TempDir(), "stub.sh")
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MANIGOT_JDI_BIN", stub)
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	if a.cursor != 0 {
+		t.Fatalf("setup: cursor = %d, want 0", a.cursor)
+	}
+
+	// "j" no longer moves down — it launches mg-jdi against the current job
+	// (status proves the launch path ran) and leaves the cursor alone.
+	a.updateList(keyMsg("j"))
+	if a.cursor != 0 {
+		t.Errorf("cursor = %d after pressing j, want 0 (j must not move the selection)", a.cursor)
+	}
+	if a.status == "" {
+		t.Errorf("status empty after pressing j, want the mg-jdi launch message (the launch path should have run)")
+	}
+
+	// "k" no longer moves up.
+	a.updateList(keyMsg("k"))
+	if a.cursor != 0 {
+		t.Errorf("cursor = %d after pressing k, want 0 (k must not move the selection)", a.cursor)
+	}
+
+	// Contrast: ↑/↓ still navigate.
+	a.updateList(keyMsg("down"))
+	if a.cursor != 1 {
+		t.Errorf("cursor = %d after pressing down, want 1 (down must still move the selection)", a.cursor)
+	}
+	a.updateList(keyMsg("up"))
+	if a.cursor != 0 {
+		t.Errorf("cursor = %d after pressing up, want 0 (up must still move the selection)", a.cursor)
+	}
+}

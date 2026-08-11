@@ -599,8 +599,9 @@ List view:
 
 | key | action |
 |---|---|
-| `↑`/`↓` or `k`/`j` | move selection |
+| `↑`/`↓` | move selection |
 | `enter` | open the job's detail view |
+| `j` | run `mg jdi` against the selected job, detached in the background — watch via the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
 | `o` | launch a quick manigot session (no agent, no job) |
 | `a` | pick any agent and launch it as a quick session (no job) |
 | `n` | create a new job (runs the host `mg job`) |
@@ -690,8 +691,9 @@ on a missing or unapproved verdict, so this is available from any stage too.
 
 ### mg jdi status & log
 
-Press `j` in the detail view to start [`mg jdi`](#autonomous-mode-mg-jdi)
-against that job. Unlike the agent-launch keys above, this opens **no
+Press `j` in the list (on the selected job) or in the detail view to start
+[`mg jdi`](#autonomous-mode-mg-jdi) against that job. Unlike the agent-launch
+keys above, this opens **no
 terminal window at all** — `mg jdi` has no interactive session for a human
 or a subprocess to attach to, so it runs fully detached in the background.
 Two places show you what it's doing instead, both polled the same

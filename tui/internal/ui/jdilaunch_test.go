@@ -310,3 +310,190 @@ func TestJdiKeyAllowsLaunchAfterInSessionDedupExpiresWithNoSidecar(t *testing.T)
 		t.Errorf("stub mg-jdi ran %d time(s), want exactly 1 (the expired jdiSeen entry should have allowed the launch)", got)
 	}
 }
+
+// --- dashboard list "j" flow (b8kbwb) --------------------------------------
+//
+// The tests below mirror the detail-view coverage above but drive updateList
+// instead of updateDetail: "j" in the list launches mg-jdi against the job
+// under the cursor, reports into the list footer (a.status), and shares the
+// same already-running guard (on-disk sidecar first, in-session jdiSeen
+// fallback while no sidecar exists yet).
+
+// TestJdiKeyFromListLaunchesDetachedAndSeedsDedup exercises the list-view "j"
+// flow end to end: the stub mg-jdi is started, the footer status points at
+// the list badge, jdiSeen is seeded immediately, and the activity-indicator
+// tick cmd is returned (the seeded jdiSeen=running entry is enough for
+// anyJDIRunning to want the spinner).
+func TestJdiKeyFromListLaunchesDetachedAndSeedsDedup(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur27_c", "cur27_c", "# Brief: Cur\n\nstatus: open\nid: cur27\nbranch: feature/cur27_c\ndate: 2026-01-01\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%+v", err, jobs)
+	}
+
+	t.Setenv("MANIGOT_HOME", "")
+	stub := filepath.Join(t.TempDir(), "stub.sh")
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MANIGOT_JDI_BIN", stub)
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	// state is stateList by default (NewApp) — no detail view is opened.
+
+	_, cmd := a.updateList(keyMsg("j"))
+	if cmd == nil {
+		t.Errorf("updateList(j) returned a nil cmd, want the activity-indicator tick (the launch seeds jdiSeen=running, so the spinner must start)")
+	}
+	if !strings.Contains(a.status, "mg jdi") {
+		t.Errorf("status = %q, want it to mention mg jdi starting", a.status)
+	}
+	if !strings.Contains(a.status, "list badge") {
+		t.Errorf("status = %q, want it to point at the list badge (no log tab is open from the list)", a.status)
+	}
+	if got := a.jdiSeen[jobs[0].Name]; got != job.JDIRunning {
+		t.Errorf("jdiSeen[%q] = %q, want %q (seeded immediately on launch)", jobs[0].Name, got, job.JDIRunning)
+	}
+	if a.state != stateList {
+		t.Errorf("state = %v, want stateList (launching jdi must not leave the list)", a.state)
+	}
+}
+
+// TestJdiKeyFromListReportsResolutionFailure verifies a failed resolution
+// (mg-jdi not installed) surfaces as a list footer status rather than
+// panicking or silently doing nothing, and that jdiSeen is not seeded.
+func TestJdiKeyFromListReportsResolutionFailure(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur28_c", "cur28_c", "# Brief: Cur\n\nstatus: open\nid: cur28\nbranch: feature/cur28_c\ndate: 2026-01-01\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%+v", err, jobs)
+	}
+
+	t.Setenv("MANIGOT_JDI_BIN", "")
+	t.Setenv("MANIGOT_HOME", "")
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	a.updateList(keyMsg("j"))
+	if !strings.Contains(a.status, "not found") {
+		t.Errorf("status = %q, want it to explain mg-jdi could not be resolved", a.status)
+	}
+	if _, ok := a.jdiSeen[jobs[0].Name]; ok {
+		t.Error("jdiSeen should not be seeded when the launch itself failed")
+	}
+}
+
+// TestJdiKeyFromListBlocksSecondLaunchWhenSidecarSaysRunning covers the
+// already-running block from the list: the on-disk sidecar already reporting
+// job.JDIRunning must block a second launch outright and explain why, naming
+// the running agent per the list badge's own wording.
+func TestJdiKeyFromListBlocksSecondLaunchWhenSidecarSaysRunning(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur29_c", "cur29_c", "# Brief: Cur\n\nstatus: open\nid: cur29\nbranch: feature/cur29_c\ndate: 2026-01-01\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%+v", err, jobs)
+	}
+
+	if err := job.WriteJDIStatus(dir, jobs[0].Name, job.JDIRunning, "developer"); err != nil {
+		t.Fatal(err)
+	}
+
+	marker := filepath.Join(t.TempDir(), "marker")
+	t.Setenv("MANIGOT_HOME", "")
+	t.Setenv("MANIGOT_JDI_BIN", markerStub(t, marker))
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	a.updateList(keyMsg("j"))
+
+	if !strings.Contains(a.status, "already running") {
+		t.Errorf("status = %q, want it to explain mg-jdi is already running", a.status)
+	}
+	if !strings.Contains(a.status, "@developer") {
+		t.Errorf("status = %q, want it to name the running agent (@developer)", a.status)
+	}
+	if got := countMarkerRuns(t, marker); got != 0 {
+		t.Errorf("stub mg-jdi ran %d time(s), want 0 (the second launch should have been blocked)", got)
+	}
+}
+
+// TestJdiKeyFromListBlocksSecondLaunchViaInSessionDedup covers the race from
+// the list: a press landing before mg-jdi has written its own first status
+// file (so the sidecar is still absent) must still be caught, via a.jdiSeen —
+// the same in-memory map the list "j" handler seeds on a successful launch.
+func TestJdiKeyFromListBlocksSecondLaunchViaInSessionDedup(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/cur30_c", "cur30_c", "# Brief: Cur\n\nstatus: open\nid: cur30\nbranch: feature/cur30_c\ndate: 2026-01-01\n")
+
+	jobs, err := job.Discover(dir)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("job.Discover: err=%v jobs=%+v", err, jobs)
+	}
+
+	marker := filepath.Join(t.TempDir(), "marker")
+	t.Setenv("MANIGOT_HOME", "")
+	t.Setenv("MANIGOT_JDI_BIN", markerStub(t, marker))
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	// First press: no sidecar exists yet (job.ReadJDIStatus's ok=false), so
+	// this launches and seeds jdiSeen.
+	a.updateList(keyMsg("j"))
+	if got := waitForMarkerRuns(t, marker, 1); got != 1 {
+		t.Fatalf("first press: stub mg-jdi ran %d time(s), want exactly 1", got)
+	}
+	if got := a.jdiSeen[jobs[0].Name]; got != job.JDIRunning {
+		t.Fatalf("jdiSeen not seeded after first press: got %q", got)
+	}
+
+	// Second press, immediately after: still no sidecar file (the stub never
+	// writes one), so only a.jdiSeen can catch this — and must.
+	a.updateList(keyMsg("j"))
+	if !strings.Contains(a.status, "already running") {
+		t.Errorf("status = %q, want it to explain mg-jdi is already running", a.status)
+	}
+	if got := countMarkerRuns(t, marker); got != 1 {
+		t.Errorf("stub mg-jdi ran %d time(s) after the second press, want still 1 (blocked)", got)
+	}
+}
+
+// TestJdiKeyFromListNoOpOnEmptyList verifies the list "j" handler is a no-op
+// when there is no job under the cursor: nothing is launched, no status is
+// set, and no cmd is returned.
+func TestJdiKeyFromListNoOpOnEmptyList(t *testing.T) {
+	dir := t.TempDir() // not a git repo, no jobs dir — an empty project
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 0 {
+		t.Fatalf("job.Discover on an empty project: got %d jobs, want 0", len(jobs))
+	}
+
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+
+	model, cmd := a.updateList(keyMsg("j"))
+	if cmd != nil {
+		t.Errorf("updateList(j) on an empty list returned a cmd, want nil (no-op)")
+	}
+	got := model.(*App)
+	if got.status != "" {
+		t.Errorf("status = %q on an empty list, want empty (no launch attempted)", got.status)
+	}
+	if len(got.jdiSeen) != 0 {
+		t.Errorf("jdiSeen = %+v on an empty list, want empty (nothing seeded)", got.jdiSeen)
+	}
+}

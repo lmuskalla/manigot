@@ -661,11 +661,11 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc":
 		return a, tea.Quit
-	case "up", "k":
+	case "up":
 		if a.cursor > 0 {
 			a.cursor--
 		}
-	case "down", "j":
+	case "down":
 		if a.cursor < len(a.jobs)-1 {
 			a.cursor++
 		}
@@ -689,6 +689,37 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.detail = newDetailView(j, a.width, a.height)
 			a.state = stateDetail
 		}
+	case "j":
+		// Run mg-jdi against the job under the cursor — the list-view
+		// counterpart of updateDetail's "j" case, sharing its already-running
+		// guard (on-disk sidecar + in-session jdiSeen fallback) and its
+		// detached-background launch (launch.Jdi opens no terminal at all).
+		// Status lands in the list footer, and the wording points at the list
+		// badge — the list has no log tab open to point at. No-op when the
+		// list is empty (nothing under the cursor).
+		j, ok := a.selectedJob()
+		if !ok {
+			return a, nil
+		}
+		if st, running := a.jdiAlreadyRunning(j); running {
+			label := "mg jdi is already running for this job"
+			if st.Agent != "" {
+				label += " @" + st.Agent
+			}
+			a.status = label
+			return a, nil
+		}
+		if err := launch.Jdi(j.ID, a.root, a.settings.ProfileValue()); err != nil {
+			a.status = cmdErrorText(err)
+			return a, nil
+		}
+		// Seed the stop-notification dedup as "running" right away (see
+		// updateDetail's "j" case for why), then start the activity-indicator
+		// tick chain if it isn't already going.
+		a.jdiSeen[j.Name] = job.JDIRunning
+		a.jdiSeenAt[j.Name] = jdiNow()
+		a.status = "→ mg jdi started in the background — see the list badge"
+		return a, a.startSpinnerIfRunning()
 	case "n":
 		// Create a new job via the host mg-job command.
 		a.newJob = newNewJobView(a.width, a.height)
@@ -1260,7 +1291,7 @@ func jdiStatusBadge(root string, j job.Job, spinnerStep int) string {
 // after "ctrl+r"), the status alongside it rather than replacing it — a
 // status message must never leave the user not knowing what keys exist.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · j mg-jdi · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
 	if a.status != "" {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
 	}
