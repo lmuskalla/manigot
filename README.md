@@ -552,6 +552,12 @@ below), picked in this order:
 3. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
    `konsole`, or `xterm`, whichever is found first on `PATH`
 
+Setting a **Terminal** in the settings screen (`s` from the job list)
+overrides that whole spawn order unconditionally — including the tmux
+split-pane behavior above, so a session opens in the chosen terminal even
+when the TUI itself is running inside tmux. Leave it blank to keep today's
+auto-detect behavior.
+
 The list view's `o` shortcut (see Keybindings) opens a bare `mg --profile
 <profile>` instead — same spawn paths, but with no agent and no job, for a quick ad-hoc
 session that isn't tied to a specific job's workflow. `a` is the middle
