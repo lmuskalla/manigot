@@ -61,9 +61,9 @@ one.
 
 ## Flavor text
 
-Four log lines carry Sopranos wording *alongside* (never replacing) their
-existing technical wording. These are cosmetic only — pure `echo` text,
-not aliases, not machine-readable fields:
+Three log lines carry Sopranos wording *alongside* (never replacing) their
+existing technical wording. These are cosmetic only — not aliases, not
+machine-readable fields:
 
 - `scripts/run.sh`'s boxed `[INFO]` banner, printed once per session,
   opens with:
@@ -77,24 +77,25 @@ not aliases, not machine-readable fields:
   ```
   Docs    : (none — job workflow unavailable, running off the books)
   ```
-- `scripts/entrypoint.sh`, right before it execs the agent CLI:
-  ```
-  Starting session — you're made, welcome to the crew.
-  ```
-  This line is skipped under `--print` (`MANIGOT_PRINT=true`) so it can
-  never leak into the clean stdout stream `mg jdi` and other non-interactive
-  callers parse as JSON. Error and warning messages elsewhere in both
-  scripts stay technical-only — they're for a human to act on, not to
-  flavor.
-- Right after that welcome line, `entrypoint.sh` also prints a random line
-  from `docs/quotes.json` — a flat, freely-editable list of Sopranos
-  quotes and exclamations. `scripts/run.sh` picks one at random on the
-  host (once per session) and hands it to the container via the
-  `MANIGOT_QUOTE` env var; a missing or empty file just means no quote
-  that session. Same `--print` skip as the welcome line applies. Edit
+- `scripts/entrypoint.sh`, right before it execs the agent CLI, prints a
+  random line from `docs/quotes.json` — a flat, freely-editable list of
+  Sopranos quotes and exclamations — in italics, followed by a blank line.
+  `scripts/run.sh` picks the quote at random on the host (once per
+  session) and hands it to the container via the `MANIGOT_QUOTE` env var;
+  a missing or empty file just means no quote that session. Skipped under
+  `--print` (`MANIGOT_PRINT=true`) so it can never leak into the clean
+  stdout stream `mg jdi` and other non-interactive callers parse as JSON.
+  Error and warning messages elsewhere in both scripts stay
+  technical-only — they're for a human to act on, not to flavor. Edit
   `docs/quotes.json` directly to add, remove, or prune entries — there's
   no filtering logic, so anything left in the file is fair game to be
   printed.
+
+There used to be a fourth: `entrypoint.sh` printing "Starting session —
+you're made, welcome to the crew." on every session start. Dropped — "made"
+only means something in the context of `made-man` (autonomous `mg jdi`
+runs), and this line printed on every ordinary interactive session
+regardless, which didn't track.
 
 ---
 
@@ -127,8 +128,6 @@ Every Sopranos-flavored name currently in use, in one place:
 - **made-man** (`mg made-man`) — thematic alias of `mg jdi`.
 - **safehouse** — flavor wording for an isolated session, in `run.sh`'s
   startup banner ("Entering safehouse (isolated session)...").
-- **"you're made, welcome to the crew"** — flavor line `entrypoint.sh`
-  prints right before handing off to the agent CLI.
 - **off the books** — flavor wording in `run.sh`'s banner `Docs` field when
   no `docs/` was found (no project context, no job workflow).
 - **docs/quotes.json** — the flat, editable repository of Sopranos quotes

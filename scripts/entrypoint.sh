@@ -108,12 +108,12 @@ git config --global user.email "$GIT_EMAIL"
 git config --global --add safe.directory /workspace
 
 # --print mode expects a clean stdout stream (see run.sh and the
-# --output-format json branch below) — this thematic line is purely
-# cosmetic, so it's skipped there rather than risking a caller mis-parsing
-# it as part of the agent's own output.
-if [[ "${MANIGOT_PRINT:-false}" != "true" ]]; then
-    echo "Starting session — you're made, welcome to the crew."
-    [[ -n "${MANIGOT_QUOTE:-}" ]] && echo "\"$MANIGOT_QUOTE\""
+# --output-format json branch below) — this quote is purely cosmetic, so
+# it's skipped there rather than risking a caller mis-parsing it as part
+# of the agent's own output. Printed in italics (raw ANSI, not tput/ncurses
+# — not guaranteed present in this slim image) with a trailing blank line.
+if [[ "${MANIGOT_PRINT:-false}" != "true" && -n "${MANIGOT_QUOTE:-}" ]]; then
+    printf '\033[3m"%s"\033[0m\n\n' "$MANIGOT_QUOTE"
 fi
 
 if [[ "$TOOL" == "opencode" ]]; then
