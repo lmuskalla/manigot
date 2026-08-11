@@ -385,10 +385,15 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 	// pane (TASK-3).
 	if os.Getenv("TMUX") != "" {
 		if _, err := exec.LookPath("tmux"); err == nil {
-			// -h splits side by side (vertical divider); -p 35 sizes the new
+			// -h splits side by side (vertical divider); -l 35% sizes the new
 			// pane to 35% of the window width so the TUI's own pane (run
 			// with no explicit -t, so this targets the TUI's own currently
 			// active pane) keeps the majority share — TASK-1 scope decision.
+			// -l (not the older -p) is required: tmux deprecated -p's
+			// percentage sizing in 3.1 in favor of -l with a "%" suffix, and
+			// tmux 3.4 rejects -p outright with "size missing" (surfaced to
+			// the user as the split-window client exiting 1) instead of
+			// splitting.
 			// -P -F '#{pane_id}' makes the split-window client print the new
 			// pane's id to its stdout so launchTmuxPane can tag it with
 			// tmuxPaneTag (via select-pane -T — split-window has no -T on any
@@ -408,7 +413,7 @@ func buildCmd(inner string) (*exec.Cmd, string, error) {
 			// uses (see shellArgs), just constructed inline since tmux's
 			// argv-vs-single-string parsing is what selects shell-vs-direct-exec
 			// here, unlike a plain exec.Command call.
-			return exec.Command("tmux", "split-window", "-h", "-p", "35",
+			return exec.Command("tmux", "split-window", "-h", "-l", "35%",
 				"-P", "-F", "#{pane_id}", "bash", "-lc", inner), "tmux pane", nil
 		}
 	}
