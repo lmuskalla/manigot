@@ -33,9 +33,9 @@ Only two commands got a thematic alias, because only two map cleanly,
 | `mg agents` | `mg crew` | Lists available agents, prompts for a pick, starts a session as that agent. |
 | `mg jdi` | `mg made-man` | Drives a job's `@analyst` → `@developer` → `@reviewer` sequence unattended. |
 
-Both aliases live in `scripts/mg.sh`'s dispatch `case` (`agents|crew`,
-`jdi|made-man`) and `exec` the exact same underlying script as their
-technical counterpart — no new script, no behavior difference. `mg -h`
+Both aliases live in `cmd/mg/main.go`'s dispatch `switch` (`agents|crew`,
+`jdi|made-man`) and run the exact same in-process command as their
+technical counterpart — no behavior difference. `mg -h`
 lists `agents`/`jdi` as the primary entries with the alias called out
 alongside, never in place of it.
 
@@ -43,7 +43,7 @@ No other command has a thematic alias. In particular:
 
 - **No `--safehouse`, `--crew`, `--operation`, or `--made-man` flags.**
   `mg` has no argparse-style flag layer to hang aliases off — it's a
-  single dispatcher that inspects `$1`.
+  single dispatcher that inspects its first argument.
 - **No isolation toggle to alias as `safehouse`.** Isolation is the whole
   point of running `mg` at all, not an option you can turn off, so there's
   nothing for a `--safehouse`/`--isolated` pair to switch between.
@@ -65,7 +65,7 @@ Three log lines carry Sopranos wording *alongside* (never replacing) their
 existing technical wording. These are cosmetic only — not aliases, not
 machine-readable fields:
 
-- `scripts/run.sh`'s boxed `[INFO]` banner, printed once per session,
+- the session launcher's boxed `[INFO]` banner, printed once per session,
   opens with:
   ```
   Entering safehouse (isolated session)...
@@ -80,12 +80,12 @@ machine-readable fields:
 - `scripts/entrypoint.sh`, right before it execs the agent CLI, prints a
   random line from `assets/quotes.json` — a flat, freely-editable list of
   Sopranos quotes and exclamations — in italics, followed by a blank line.
-  `scripts/run.sh` picks the quote at random on the host (once per
-  session) and hands it to the container via the `MANIGOT_QUOTE` env var;
-  a missing or empty file just means no quote that session. Skipped under
-  `--print` (`MANIGOT_PRINT=true`) so it can never leak into the clean
-  stdout stream `mg jdi` and other non-interactive callers parse as JSON.
-  Error and warning messages elsewhere in both scripts stay
+  the session launcher (internal/session) picks the quote at random on the
+  host (once per session) and hands it to the container via the
+  `MANIGOT_QUOTE` env var; a missing or empty file just means no quote that
+  session. Skipped under `--print` (`MANIGOT_PRINT=true`) so it can never
+  leak into the clean stdout stream `mg jdi` and other non-interactive
+  callers parse as JSON. Error and warning messages elsewhere stay
   technical-only — they're for a human to act on, not to flavor. Edit
   `assets/quotes.json` directly to add, remove, or prune entries — there's
   no filtering logic, so anything left in the file is fair game to be
@@ -111,8 +111,8 @@ regardless, which didn't track.
    depends on the thematic wording existing. If there's ever no appetite
    for it, dropping it costs nothing.
 4. **Flavor text stays out of machine-readable output.** Anything written
-   under `--print`/`--output-format json` (see `scripts/run.sh`) is
-   technical wording only.
+   under `--print`/`--output-format json` (see the session launcher's
+   `--print` path) is technical wording only.
 5. **New thematic surface needs its own brief.** This file documents what
    shipped in `tt45uz_naming-features`; it isn't a standing invitation to
    add more without scoping it against a real, existing 1:1 command first.
@@ -126,9 +126,10 @@ Every Sopranos-flavored name currently in use, in one place:
 - **manigot** — the project itself.
 - **crew** (`mg crew`) — thematic alias of `mg agents`.
 - **made-man** (`mg made-man`) — thematic alias of `mg jdi`.
-- **safehouse** — flavor wording for an isolated session, in `run.sh`'s
-  startup banner ("Entering safehouse (isolated session)...").
-- **off the books** — flavor wording in `run.sh`'s banner `Docs` field when
+- **safehouse** — flavor wording for an isolated session, in the session
+  launcher's startup banner ("Entering safehouse (isolated session)...").
+- **off the books** — flavor wording in the session launcher's banner
+  `Docs` field when
   no `docs/` was found (no project context, no job workflow).
 - **assets/quotes.json** — the flat, editable repository of Sopranos quotes
   `entrypoint.sh` prints one random line from each session.
@@ -158,10 +159,10 @@ If either gets picked up for real, it needs its own scoped brief like
 
 ## Where this is documented elsewhere
 
-- `scripts/mg.sh` — the `# ── Usage ──` header comment and `print_help()`'s
+- `cmd/mg/main.go` — the subcommand `switch` and `printHelp()`'s
   `Commands:` section list both aliases next to their technical names.
-- `docs/AGENTS.md` — the `Commands` list and the `scripts/agents.sh`/
-  `scripts/jdi.sh` Architecture bullets mention the aliases.
+- `docs/AGENTS.md` — the `Commands` list and the `mg agents`/`mg jdi`
+  Command bullets mention the aliases.
 - `README.md` — the commands table, the `## Agents` section, and the
   `### Autonomous mode (mg jdi)` intro mention the aliases; `## Job
   workflow` also carries a second, thematically-narrated walkthrough of the

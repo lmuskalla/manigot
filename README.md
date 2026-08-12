@@ -22,23 +22,20 @@ used by bare `mg` with `mg profiles`, and configure credentials with
 ```
 manigot/
   Dockerfile              ← build once, rebuild on Claude Code / OpenCode updates
-  Makefile                ← build / rebuild / install / make tui / make jdi
-  scripts/                ← launcher and utility scripts
-    mg.sh                 ← dispatcher              → 'mg' (the only symlink)
-    run.sh                ← container launcher      → 'mg' (no subcommand)
-    profiles.sh           ← profile list/setter     → 'mg profiles'
-    setup.sh              ← credential wizard       → 'mg setup'
-    agents.sh             ← agent picker            → 'mg agents'
-    new-job.sh            ← job generator           → 'mg job'
-    finish-job.sh         ← job archiver            → 'mg done'
-    delete-job.sh         ← job deleter             → 'mg delete'
-    tui.sh                ← TUI launcher            → 'mg tui'
-    jdi.sh                ← autonomous-mode launcher → 'mg jdi'
-    init.sh               ← project bootstrapper    → 'mg init'
+  Makefile                ← build / rebuild / install / help; `make mg` builds bin/mg
+  cmd/mg/                 ← the one host-side binary ('mg'); every command is a subcommand
+                            (session, profiles, setup, agents, job, done, delete, init, tui, jdi)
+  internal/               ← the host-side logic as Go packages
+    session/              ← docker launch construction (mounts, env, profiles)
+    job/                  ← job lifecycle: create / finish / delete
+    git/                  ← worktree/branch operations
+    ui/                   ← the Bubble Tea TUI (reached via `mg tui`)
+    orchestrate/          ← the `mg jdi` state machine
+    config/               ← profiles table, .env, settings
+    ...                   ← agentlist, cli, editor, home, launch, markdown, project
+  scripts/                ← one script only
     entrypoint.sh         ← runs inside the container before the agent CLI starts
-  tui/                    ← host-side TUI source (Go); `make tui` builds bin/manigot-tui
-                             tui/cmd/jdi/ is what 'mg jdi' runs, same module; `make jdi` builds bin/manigot-jdi
-  bin/                    ← built binaries (gitignored)
+  bin/                    ← built binaries (gitignored) — `make mg` produces bin/mg
   .env                    ← your credentials + default profile (gitignored, never committed)
   .gitignore
   README.md
@@ -51,12 +48,14 @@ manigot/
     designer.md
     quality.md
     prompter.md
-  project-template/       ← copy this into each new project to get started
+    mentor.md
+    architect.md
+    devops.md
+  project-template/       ← copy this into each new project to get started (via `mg init`)
     docs/
       AGENTS.md
-      templates/
-        processes/
-          6-char-random-id_title-of-job/  ← placeholder job showing all four files
+      CLAUDE.md
+      jobs/               ← empty; `mg job` fills it
 ```
 
 ### Each project
@@ -70,7 +69,7 @@ your-project/
                                   (CLAUDE.md still works as a fallback)
     agents/                     ← optional: override a global agent for this project only
       developer.md              ← same filename = this replaces the global one
-    processes/                ← one directory per job
+    jobs/                     ← one directory per job
         a3f9k2_add-gallery/
           brief.md
           tasks.md
@@ -125,7 +124,7 @@ mg profiles zai       # make bare `mg` use the zai profile
 
 `mg setup <name>` sets up a single profile; `mg setup --check` reports status
 non-interactively. Everything ends up in the same gitignored `manigot/.env`
-that `scripts/run.sh` sources. Manual instructions for each profile, if you'd
+that the session launcher reads. Manual instructions for each profile, if you'd
 rather fill `.env` by hand:
 
 ```bash
@@ -207,13 +206,13 @@ its first argument:
 | `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
 | `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg`, or pick it interactively on a TTY; the TUI's settings screen shares the same default |
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
-| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same script/behavior) |
+| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job: directory + branch, checked out in the job's own worktree (off `main`); needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
 | `mg delete` | permanently delete a job (worktree + branch, no merge); needs `docs/` |
-| `mg tui` | the terminal UI (needs `make tui` first); needs `docs/` |
-| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended (needs `make jdi` first); needs `docs/` (thematic alias: `mg made-man`, same script/behavior) |
+| `mg tui` | the terminal UI, running in-process; needs `docs/` |
+| `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
@@ -221,31 +220,18 @@ uninstall` removes it again.
 
 ### Installing without symlinks
 
-If you would rather not write to `/usr/local/bin`, define shell aliases instead:
+If you would rather not write to `/usr/local/bin`, define a shell alias
+instead:
 
 ```bash
 # ~/.zshrc or ~/.bashrc
-alias mg='~/code/manigot/scripts/mg.sh'
+alias mg='~/code/manigot/bin/mg'
 ```
 
-One catch: aliases only exist inside your interactive shell, so the TUI cannot
-see them — it has to find the real scripts itself. Point it at them with env
-vars, which override discovery completely:
-
-```bash
-export manigot_HOME="$HOME/code/manigot"   # covers all of the below at once
-export manigot_BIN=…                        # or one at a time: the launcher
-export manigot_JOB_BIN=…                    #   job creation
-export manigot_DONE_BIN=…                   #   job completion
-export manigot_DELETE_BIN=…                 #   job deletion
-export manigot_JDI_BIN=…                    #   autonomous mode
-```
-
-Each `*_BIN` takes either a path or a bare command name to look up on `PATH`. A
-value that cannot be resolved is reported as an error rather than silently
-ignored, so a typo is visible. `manigot_HOME` is set automatically when you
-start the TUI through `scripts/tui.sh`, so in that case there is
-nothing to configure.
+The binary locates its own checkout (for `manigot/.env`, `config/`, `agents/`,
+`assets/` and `project-template/`) from its own location, so an alias to
+`bin/mg` needs no environment variables at all. `$MANIGOT_HOME` is still
+honored as an explicit override if the binary is copied somewhere unusual.
 
 ---
 
@@ -326,11 +312,11 @@ Three ways to seed a session's initial prompt: `--job <id>` (the job's
 `brief.md`, for the job workflow), `--agent <name>` (starts the CLI directly
 in that agent, with no prompt text of its own), and `--prompt "…"` (a
 free-form initial prompt for an ad-hoc, non-job session — what `mg init` uses
-to hand off to `@prompter`). All three are tool-neutral: `run.sh` routes the
-prompt to the right place per tool (positional for Claude Code, `--prompt`
-for OpenCode) regardless of which of `--job`/`--prompt` you used to set it.
-`--job` and `--prompt` can't both be honored at once — if you pass both, the
-job prompt wins.
+to hand off to `@prompter`). All three are tool-neutral: the session launcher
+routes the prompt to the right place per tool (positional for Claude Code,
+`--prompt` for OpenCode) regardless of which of `--job`/`--prompt` you used to
+set it. `--job` and `--prompt` can't both be honored at once — if you pass
+both, the job prompt wins.
 
 ---
 
@@ -375,10 +361,10 @@ enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
 
 ## Agents
 
-Eight agents are available globally in every project. Call them with `@name` in
-your session, or run `mg agents` (or its thematic alias, `mg crew`) from the
-host to list them (with any `docs/agents/` overrides) and pick one to start
-straight into.
+Eleven agents are available globally in every project. Call them with `@name`
+in your session, or run `mg agents` (or its thematic alias, `mg crew`) from
+the host to list them (with any `docs/agents/` overrides) and pick one to
+start straight into.
 
 | Agent | Role | Tools (Claude Code) |
 |---|---|---|
@@ -390,6 +376,9 @@ straight into.
 | `@designer` | Reviews and directs UI/UX — typography, colour, layout | read + write |
 | `@quality` | Reviews code quality — readability, DRY, modularity | read + write |
 | `@prompter` | Crafts and refines prompts for LLMs and agents | read + write |
+| `@mentor` | Grounded tech mentor for skill growth and sustainable practice | read-only |
+| `@architect` | Plans how to best build a system — stack, components, deployment | read-only |
+| `@devops` | Expert for pipelines and getting things running — CI/CD, builds | read + write |
 
 The Tools column is enforced under Claude Code only — see the caveat under
 [Choosing a profile](#choosing-a-profile).
@@ -466,7 +455,6 @@ job workflow.
 Don't feel like babysitting the whole thing? Send `mg made-man --job <id>`
 instead — it runs the analyst, the developer, and the reviewer back to back,
 on its own, and still won't touch the merge button without you.
-
 ### Autonomous mode (`mg jdi`)
 
 Steps 4–8 above — `@analyst` → `@developer` → `@reviewer` — can run
@@ -527,11 +515,10 @@ log tab are how you watch it there instead.
 
 manigot ships an optional terminal UI for browsing jobs and launching agents
 without remembering command syntax. It is **host-side**: it runs on your
-machine, reads a project's `docs/jobs/`, and shells out to the `mg`,
-`mg job`, and `mg jdi` commands. It does **not** run in the container and
-needs no credentials itself. It finds those commands dynamically — see
-[Installing without symlinks](#installing-without-symlinks) if they are not on
-your `PATH`.
+machine as `mg tui` (in-process — no separate binary), reads a project's
+`docs/jobs/`, and launches sessions through the same in-process session
+launcher the CLI uses. It does **not** run in the container and needs no
+credentials itself.
 
 Every open job lives in its own **git worktree** (see
 [Job workflow](#job-workflow)) — one worktree per job branch, created by
@@ -576,19 +563,14 @@ Windows is not supported in this version.
 
 ```bash
 cd manigot/
-make tui        # builds bin/manigot-tui
-make jdi        # builds bin/manigot-jdi (needed for the TUI's "j" key and mg jdi itself)
-make install    # puts the single mg dispatcher (covering mg tui, mg jdi, ...) on your PATH
+make mg         # builds bin/mg — the one binary, covering mg tui, mg jdi, ...
+make install    # puts the single mg binary on your PATH
 ```
 
-`make tui`/`make jdi` each build a single static binary, `bin/manigot-tui`
-and `bin/manigot-jdi` (requires Go 1.23+ and network access the first time,
-to fetch the Charm modules — `mg jdi` itself doesn't use them, but shares the
-module and its cache with the TUI). `make install` symlinks the single `mg`
-dispatcher onto your `PATH`; `mg tui`/`mg jdi` shell out to
-`scripts/tui.sh`/`scripts/jdi.sh`, which tell the binaries where this
-checkout is, so they can find the scripts even when nothing else is
-installed.
+`make mg` builds the single static `bin/mg` binary (requires Go 1.23+ and
+network access the first time, to fetch the Charm modules). `make install`
+symlinks it onto your `PATH`; `mg tui` and `mg jdi` are subcommands of that
+same binary, so no other artifacts or wrapper scripts exist.
 
 ### Run
 
@@ -608,7 +590,7 @@ List view:
 | `j` | run `mg jdi` against the selected job, detached in the background — watch via the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
 | `o` | launch a quick manigot session (no agent, no job) |
 | `a` | pick any agent and launch it as a quick session (no job) |
-| `n` | create a new job (runs the host `mg job`) |
+| `n` | create a new job (runs the in-process job lifecycle) |
 | `s` | open settings (editor, subscription profile) |
 | `ctrl+r` | refresh — re-read job files from disk |
 | `q` | quit |
@@ -621,9 +603,9 @@ Detail view:
 | `pgup`/`pgdn`, `g`/`G` | scroll |
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log are agent- or mg jdi-written) |
-| `D` | mark the job done (runs the host `mg done`, in the foreground so its confirmation prompts work) |
+| `D` | mark the job done — shows an in-TUI confirmation, then runs the in-process finish lifecycle (squash-merge + archive) |
 | `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
-| `x` / `del` | permanently delete the job (runs the host `mg delete`, in the foreground so its confirmation prompt works). `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
+| `x` / `del` | permanently delete the job — shows an in-TUI confirmation (with a dirty-worktree warning when the job's worktree has uncommitted changes), then runs the in-process delete lifecycle. `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull` |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
@@ -685,13 +667,12 @@ verdict that's written but not approved (REJECTED, NEEDS WORK, or anything
 else) bounces the stage back to implement rather than resolving to review or
 finished — the job needs more work before it goes through review again.
 
-Press `D` from the detail view at any point to run the host `mg done`
-(`scripts/finish-job.sh`) and mark the job done — it squash-merges the job
-branch into the default branch, archives the job directory under
-`docs/jobs/archive/`, and sets `status: done`. This runs in the foreground
-(suspending the TUI, like `e`) because `mg done` asks for interactive
-confirmation along the way; per its own behavior, it warns rather than blocks
-on a missing or unapproved verdict, so this is available from any stage too.
+Press `D` from the detail view at any point to mark the job done: a
+confirmation screen (showing the job's verdict warning when a verdict is
+missing or not approved — the same warnings the CLI's `mg done` shows) leads
+to the in-process finish lifecycle, which squash-merges the job branch into
+the default branch, archives the job directory under `docs/jobs/archive/`,
+and sets `status: done`. This is available from any stage too.
 
 ### mg jdi status & log
 
@@ -738,12 +719,12 @@ make rebuild
 ```
 
 The image also ships `make` and the Go toolchain (Debian trixie's `golang-go`,
-currently Go 1.24) so the host-side TUI in `tui/` can be built and tested from
-inside a container. `GOTOOLCHAIN=local` is set, so if `tui/go.mod` ever requires
-a newer Go than the image has, the build fails loudly instead of silently
+currently Go 1.24) so the host-side tool in `cmd/` can be built and tested from
+inside a container. `GOTOOLCHAIN=local` is set, so if `go.mod` ever requires a
+newer Go than the image has, the build fails loudly instead of silently
 downloading one.
 
-The Go module cache is pre-warmed at build time from `tui/go.mod` and
-`tui/go.sum`, which means `make tui` and `go test ./...` work inside the
-container without network access — but also that **bumping a TUI dependency
-requires a `make rebuild`**, otherwise the new module is missing from the cache.
+The Go module cache is pre-warmed at build time from `go.mod` and `go.sum`,
+which means `make mg` and `go test ./...` work inside the container without
+network access — but also that **bumping a dependency requires a `make
+rebuild`**, otherwise the new module is missing from the cache.

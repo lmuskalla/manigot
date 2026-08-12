@@ -26,8 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Go toolchain + make — needed to build and test the host-side TUI (tui/) from
-# inside the container. Debian trixie ships Go 1.24, satisfying tui/go.mod (1.23).
+# Go toolchain + make — needed to build and test the host-side tool (cmd/) from
+# inside the container. Debian trixie ships Go 1.24, satisfying go.mod (1.23).
 # Kept as its own layer so the PHP/Python layer above stays cached.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Fail loudly if tui/go.mod ever needs a newer toolchain than the image has,
+# Fail loudly if go.mod ever needs a newer toolchain than the image has,
 # instead of silently downloading one at build time.
 ENV GOTOOLCHAIN=local
 
@@ -80,19 +80,21 @@ RUN chmod +x /home/claude/entrypoint.sh
 
 USER claude
 
-# TASK-0B — pre-warm the Go module cache so `make tui` and `go test ./...` work
-# inside the container without network access. Must run as `claude` so the cache
-# lands in /home/claude/go/pkg/mod with the right owner. Couples the image to
-# tui/go.sum: a dependency bump then needs a `make rebuild`. Delete these two
-# instructions if you'd rather rely on the container having network.
-COPY --chown=claude:claude tui/go.mod tui/go.sum /tmp/tui/
+# Pre-warm the Go module cache so `make build` and `go test ./...` work inside
+# the container without network access. Must run as `claude` so the cache
+# lands in /home/claude/go/pkg/mod with the right owner.
+# Couples the image to go.sum: a dependency bump then needs a `make rebuild`.
+# Delete these two instructions if you'd rather rely on the container having
+# network.
+COPY --chown=claude:claude go.mod go.sum /tmp/tui/
 RUN cd /tmp/tui && go mod download && rm -rf /tmp/tui
 
-# scripts/run.sh runs the container with --user "$(id -u):$(id -g)" (the
-# invoking host user) so the bind-mounted /workspace keeps host file
-# ownership and stays writable. That means this UID almost never matches the
-# baked-in claude (1000), so open up $HOME to any UID — nothing sensitive
-# lives here, just agent configs and the Go module cache.
+# The host-side session launcher (cmd/mg's session subcommand) runs the
+# container with --user "$(id -u):$(id -g)" (the invoking host user) so the
+# bind-mounted /workspace keeps host file ownership and stays writable. That
+# means this UID almost never matches the baked-in claude (1000), so open up
+# $HOME to any UID — nothing sensitive lives here, just agent configs and the
+# Go module cache.
 RUN chmod -R o+rwX /home/claude
 
 WORKDIR /workspace

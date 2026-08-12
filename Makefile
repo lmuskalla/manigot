@@ -1,7 +1,7 @@
-.PHONY: build rebuild run tui jdi install uninstall help
+.PHONY: build rebuild run mg tui jdi install uninstall check help
 
 IMAGE  := manigot
-SCRIPT := ./scripts/run.sh
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 # ── Build ───────────────────────────────────────────────────────────────────────
 
@@ -11,47 +11,36 @@ build: ## Build the manigot image (skip if already built)
 rebuild: ## Force rebuild with no cache (use after Claude Code updates)
 	docker build --no-cache --pull -t $(IMAGE) .
 
+# ── Host-side binary ────────────────────────────────────────────────────────────
+# The one `mg` binary is the entire host-side tool: session, profiles, setup,
+# agents, job, done, delete, init, tui and jdi are all subcommands of it. The
+# only bash left is scripts/entrypoint.sh, which runs inside the container
+# image. `make tui` / `make jdi` are aliases of `make mg` — the TUI and the
+# jdi loop run in-process as `mg tui` / `mg jdi`.
+
+MG_BIN := bin/mg
+
+mg: ## Build the host-side mg binary into bin/
+	@mkdir -p bin
+	CGO_ENABLED=0 go build -trimpath \
+		-ldflags "-X main.version=$(VERSION) -X main.tuiVersion=$(VERSION) -X main.jdiVersion=$(VERSION)" \
+		-o "$(CURDIR)/$(MG_BIN)" ./cmd/mg
+	@echo "Built $(MG_BIN) ($(VERSION))"
+	@echo "Install:  make install   (or: make install PREFIX=\$$HOME/.local)"
+
+tui: mg ## Alias — the TUI runs in-process as `mg tui`
+
+jdi: mg ## Alias — mg-jdi runs in-process as `mg jdi`
+
 # ── Run ─────────────────────────────────────────────────────────────────────────
 
-run: ## Start manigot in the current project (requires claude/ dir in project root)
-	$(SCRIPT)
-
-# ── TUI ─────────────────────────────────────────────────────────────────────────
-# The TUI is a host-side binary (not part of the container image). Build it with
-# `make tui`, then `make install` to put the launchers on your PATH — see README.
-
-TUI_BIN    := bin/manigot-tui
-TUI_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-
-tui: ## Build the host-side TUI binary into bin/
-	@mkdir -p bin
-	cd tui && CGO_ENABLED=0 go build -trimpath \
-		-ldflags "-X main.version=$(TUI_VERSION)" \
-		-o "$(CURDIR)/$(TUI_BIN)" .
-	@echo "Built $(TUI_BIN) ($(TUI_VERSION))"
-	@echo "Install:  make install   (or: make install PREFIX=\$$HOME/.local)"
-
-# ── mg-jdi ──────────────────────────────────────────────────────────────────────
-# mg-jdi ("just do it") drives a job's @analyst -> @developer -> @reviewer
-# sequence end to end — see docs/jobs/vu33rn_fully-autonomous-mode/. Same
-# host-side-binary shape as the TUI: `make jdi`, then `make install`.
-
-JDI_BIN := bin/manigot-jdi
-
-jdi: ## Build the host-side mg-jdi binary into bin/
-	@mkdir -p bin
-	cd tui && CGO_ENABLED=0 go build -trimpath \
-		-ldflags "-X main.version=$(TUI_VERSION)" \
-		-o "$(CURDIR)/$(JDI_BIN)" ./cmd/jdi
-	@echo "Built $(JDI_BIN) ($(TUI_VERSION))"
-	@echo "Install:  make install   (or: make install PREFIX=\$$HOME/.local)"
+run: mg ## Start manigot in the current project (requires docs/ in project root)
+	./$(MG_BIN)
 
 # ── Install ─────────────────────────────────────────────────────────────────────
-# Symlinks the single `mg` dispatcher into PREFIX/bin. `mg` itself execs the
-# matching sibling script (job/tui/jdi/done/delete, or run.sh by default) —
-# see scripts/mg.sh. Symlink (not a copy) so a `git pull` updates the
-# installed command too. Never a prerequisite of another target — this is
-# the only thing here that writes outside the repo.
+# Symlinks the single `mg` binary into PREFIX/bin. Symlink (not a copy) so a
+# `git pull` + rebuild updates the installed command too. Never a prerequisite
+# of another target — this is the only thing here that writes outside the repo.
 #
 #   make install                      → /usr/local/bin (may need sudo)
 #   make install PREFIX=$HOME/.local  → ~/.local/bin, no sudo needed
@@ -59,31 +48,34 @@ jdi: ## Build the host-side mg-jdi binary into bin/
 PREFIX  ?= /usr/local
 BINDIR  := $(PREFIX)/bin
 
-# <installed name>:<script>.
-LINKS := \
-	mg:mg.sh
-
-install: ## Symlink the manigot launchers into PREFIX/bin (default /usr/local)
+install: mg ## Symlink the mg binary into PREFIX/bin (default /usr/local)
 	@mkdir -p "$(BINDIR)"
-	@for pair in $(LINKS); do \
-		name="$${pair%%:*}"; script="$${pair#*:}"; \
-		ln -sf "$(CURDIR)/scripts/$$script" "$(BINDIR)/$$name" \
-			&& echo "  $(BINDIR)/$$name -> scripts/$$script"; \
-	done
+	@ln -sf "$(CURDIR)/$(MG_BIN)" "$(BINDIR)/mg" \
+		&& echo "  $(BINDIR)/mg -> $(MG_BIN)"
 	@echo "Installed into $(BINDIR)."
 	@case ":$$PATH:" in *":$(BINDIR):"*) ;; \
 		*) echo "Warning: $(BINDIR) is not on your PATH." ;; esac
-	@test -x "$(TUI_BIN)" || echo "Note: run 'make tui' to build the TUI binary 'mg tui' needs."
-	@test -x "$(JDI_BIN)" || echo "Note: run 'make jdi' to build the binary 'mg jdi' needs."
 
-uninstall: ## Remove the symlinks created by `make install`
-	@for pair in $(LINKS); do \
-		name="$${pair%%:*}"; \
-		if [ -L "$(BINDIR)/$$name" ]; then \
-			rm -f "$(BINDIR)/$$name" && echo "  removed $(BINDIR)/$$name"; \
-		fi; \
-	done
-	@echo "Removed manigot symlinks from $(BINDIR)."
+uninstall: ## Remove the symlink created by `make install`
+	@if [ -L "$(BINDIR)/mg" ]; then \
+		rm -f "$(BINDIR)/mg" && echo "  removed $(BINDIR)/mg"; \
+	fi
+	@echo "Removed manigot symlink from $(BINDIR)."
+
+# ── Check ───────────────────────────────────────────────────────────────────────
+# The verification target the brief calls for (note 13): the Go suite plus
+# shellcheck on the one remaining script. shellcheck runs only when installed;
+# the Go checks always run. CI wiring (a GitHub Actions workflow, if that's
+# the intended vehicle) is deliberately left out — the repo has no CI today.
+
+check: ## Run go vet + go test, and shellcheck on scripts/entrypoint.sh (when installed)
+	go vet ./...
+	go test ./...
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		shellcheck scripts/entrypoint.sh; \
+	else \
+		echo "shellcheck not installed — skipping scripts/entrypoint.sh check"; \
+	fi
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 

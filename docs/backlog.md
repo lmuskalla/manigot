@@ -58,8 +58,8 @@ shows whether the v1 bar is actually good enough in practice.
 
 Raised during scoping of `vu33rn_fully-autonomous-mode`. The idea of running
 `mg-jdi` unattended on a schedule rather than from an interactive session.
-The entire current architecture — `run.sh`'s `docker run -it`, terminal
-spawning in `launch.go`, the TUI polling loop — assumes an attended,
+The entire current architecture — the session launcher's `docker run -it`,
+terminal spawning in `launch.go`, the TUI polling loop — assumes an attended,
 visible terminal a human can look at and interact with. Cron execution has
 none of that: it needs detached logging, a way to surface "needs human
 input" without a person watching the TUI at that moment (the ping-sound
