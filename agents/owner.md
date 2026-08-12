@@ -1,5 +1,5 @@
 ---
-name: product-owner
+name: owner
 description: Reviews features and decisions from the product and user perspective. Use when planning new features, evaluating scope, or sanity-checking that what's being built actually serves the end user.
 tools: Read, Grep, Glob, Write, Edit
 ---

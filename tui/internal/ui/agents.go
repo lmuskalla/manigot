@@ -13,18 +13,18 @@ var agentMeta = map[string]struct {
 	key     string
 	display string
 }{
-	"analyst":       {key: "a", display: "Analyst"},
-	"product-owner": {key: "p", display: "Product Owner"},
-	"developer":     {key: "d", display: "Developer"},
-	"reviewer":      {key: "r", display: "Reviewer"},
-	"security":      {key: "s", display: "Security"},
+	"analyst":   {key: "a", display: "Analyst"},
+	"owner":     {key: "p", display: "Owner"},
+	"developer": {key: "d", display: "Developer"},
+	"reviewer":  {key: "r", display: "Reviewer"},
+	"security":  {key: "s", display: "Security"},
 }
 
 // agentOrder is the fixed display order for the action bar's five agent
 // buttons. All five are always shown, regardless of the job's current stage
 // (see app.go's agentForKey) — this list, not job.Stage().Agents(), is now
 // the single source of truth for the order they render in.
-var agentOrder = []string{"product-owner", "analyst", "developer", "reviewer", "security"}
+var agentOrder = []string{"owner", "analyst", "developer", "reviewer", "security"}
 
 // agentKeyFor reports the trigger key bound to an agent ("" if unknown).
 func agentKeyFor(agent string) string {

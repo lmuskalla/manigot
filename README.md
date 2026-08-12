@@ -47,7 +47,7 @@ manigot/
     developer.md
     reviewer.md
     security.md
-    product-owner.md
+    owner.md
     designer.md
     quality.md
     prompter.md
@@ -368,7 +368,7 @@ denies).
 
 One caveat: because `tools:` is dropped, the read-only agents are **not**
 restricted under OpenCode — `@reviewer`, `@security`, `@analyst` and
-`@product-owner` can write files there. Under Claude Code the restriction is
+`@owner` can write files there. Under Claude Code the restriction is
 enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
 
 ---
@@ -386,7 +386,7 @@ straight into.
 | `@developer` | Implements one task at a time | read + write |
 | `@reviewer` | Verifies implementation against tasks | read-only |
 | `@security` | Audits for vulnerabilities | read-only |
-| `@product-owner` | Evaluates features from the user's perspective | read-only |
+| `@owner` | Evaluates features from the user's perspective | read-only |
 | `@designer` | Reviews and directs UI/UX — typography, colour, layout | read + write |
 | `@quality` | Reviews code quality — readability, DRY, modularity | read + write |
 | `@prompter` | Crafts and refines prompts for LLMs and agents | read + write |
@@ -425,7 +425,7 @@ mg job "add image gallery block"
 ```
 1.  mg job "feature name"               → creates dir + branch
 2.  Fill in brief.md
-3.  @product-owner                      → SHIP / REVISIT / REJECT
+3.  @owner                              → SHIP / REVISIT / REJECT
 4.  @analyst                            → writes tasks.md
 5.  Review tasks.md yourself
 6.  @developer TASK-1                   → implements, commits [ID] TASK-1: ...
@@ -451,7 +451,7 @@ job workflow.
 1. **Open the case.** `mg job "job name"` cuts you a directory, a branch, and
    a worktree to keep the job in.
 2. **Write the brief.** Fill in `brief.md` — the job, and why it needs doing.
-3. **Run it past the boss.** `@product-owner` calls it: SHIP / REVISIT /
+3. **Run it past the boss.** `@owner` calls it: SHIP / REVISIT /
    REJECT.
 4. **Case the job.** `@analyst` breaks it into a task list.
 5. **Read the plan yourself** before anyone touches code.
@@ -497,7 +497,7 @@ worktree is resolved per invocation) — when:
 - the same agent makes no progress on two consecutive runs (a stall
   backstop, independent of the marker above).
 
-`@product-owner` and `@security` are not part of the sequence `mg jdi`
+`@owner` and `@security` are not part of the sequence `mg jdi`
 drives — both stay available as ordinary agents, unaffected.
 
 `mg jdi` runs under the `claude-pro` profile by default; pass `--profile
@@ -619,7 +619,7 @@ Detail view:
 |---|---|
 | `tab` / `1`-`5` | switch tab: brief · tasks · implementation · verdict · log |
 | `pgup`/`pgdn`, `g`/`G` | scroll |
-| `p` `a` `d` `r` `s` | run the agent shown in the action bar (Product Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
+| `p` `a` `d` `r` `s` | run the agent shown in the action bar (Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log are agent- or mg jdi-written) |
 | `D` | mark the job done (runs the host `mg done`, in the foreground so its confirmation prompts work) |
 | `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |

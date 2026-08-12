@@ -256,8 +256,8 @@ configured with `mg setup`.
   under every profile (`claude-pro`, `zai`, `opencode-go`) — only the legacy,
   profile-less `--tool opencode` path still rejects it.
 - `agents/` — the eleven global agents (`analyst`, `developer`, `reviewer`,
-  `security`, `product-owner`, `designer`, `quality`, `prompter`, `mentor`,
-  `systems-architect`, `devops-engineer`), available in every project via
+  `security`, `owner`, `designer`, `quality`, `prompter`, `mentor`,
+  `architect`, `devops`), available in every project via
   `@name`. Baked in twice: verbatim to `~/.claude/agents/`, and to
   `~/.config/opencode/agents/` with the `name`/`tools` frontmatter keys stripped
   (OpenCode takes the name from the filename and uses a different tools schema).
@@ -326,15 +326,15 @@ checked out in the job's own git worktree (207bfu_git-worktrees) — every job
 gets its own directory, so multiple jobs — interactive or autonomous — can
 run in parallel, and `PROJECT_ROOT` stays on the base branch in steady state.
 
-Typical feature flow: `mg job` → fill `brief.md` → `@product-owner` →
+Typical feature flow: `mg job` → fill `brief.md` → `@owner` →
 `@analyst` → review `tasks.md` → `@developer` per task → `@reviewer` →
 `@security` → fix and re-review → merge → mark `brief.md` status `done`.
-Bug fixes skip the `@product-owner`/`@analyst` steps and go straight to
+Bug fixes skip the `@owner`/`@analyst` steps and go straight to
 `@developer`.
 
 `mg jdi` automates the middle of that flow — `@analyst` → `@developer` →
 `@reviewer`, the same fixed sequence for every job `type` — without a human
-manually triggering each stage. `@product-owner` and `@security` are not
+manually triggering each stage. `@owner` and `@security` are not
 part of it; both remain ordinary manually-launched agents, unaffected. It
 stops (never auto-merging) when `verdict.md`'s `## Overall` says APPROVED, or
 hands control back to a human when: the one allowed bounce back to

@@ -10,7 +10,7 @@ import (
 // Stage is the workflow stage a job is in, per the ideal-workflow model:
 //
 //   - define:    brief.md is still the mg-job scaffold   → the user writes the brief
-//   - plan:      brief.md written, tasks.md not yet       → product-owner, analyst
+//   - plan:      brief.md written, tasks.md not yet       → owner, analyst
 //   - implement: tasks.md written, implementation.md not  → developer
 //   - review:    implementation.md written, verdict not   → reviewer, security
 //   - finished:  verdict.md written, and its "## Overall" verdict is APPROVED

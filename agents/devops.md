@@ -1,5 +1,5 @@
 ---
-name: devops-engineer
+name: devops
 description: Expert for pipelines and getting things running — CI/CD, builds, deployment, infrastructure, and getting services up locally or remotely. Use when setting up or debugging builds, deployments, containers, or any environment that won't just run.
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---

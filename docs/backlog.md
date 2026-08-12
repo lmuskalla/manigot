@@ -28,15 +28,15 @@ and this is a bigger architectural commitment (a wire format, a writer side
 in every agent invocation, a reader side in the TUI) that deserves its own
 design pass.
 
-## `@product-owner` / `@security` in the autonomous sequence
+## `@owner` / `@security` in the autonomous sequence
 
 Raised during scoping of `vu33rn_fully-autonomous-mode`. `mg-jdi` v1 drives
 a fixed `@analyst → @developer → @reviewer` sequence only, uniformly for
-every job type — deliberately starting simple. Folding `@product-owner` in
+every job type — deliberately starting simple. Folding `@owner` in
 (before `@analyst`, gating whether the sequence proceeds at all) and/or
 `@security` (alongside or after `@reviewer`, sharing `verdict.md`) is a
 natural extension once the core loop is proven, but each adds its own
-wrinkle worth scoping separately rather than guessing now — `@product-owner`
+wrinkle worth scoping separately rather than guessing now — `@owner`
 in particular never writes to disk today, so routing on its verdict needs a
 signal convention of its own (a "PO-VERDICT:"-style marker was drafted and
 then dropped when this was cut from v1 — worth revisiting if this is

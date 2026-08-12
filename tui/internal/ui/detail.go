@@ -499,7 +499,7 @@ type actionButton struct {
 //
 // Narrow-width handling: this is designed against an 80-column baseline, and
 // there isn't room there for five full "[key] Label" agent buttons —
-// "Product Owner" alone is 18 characters. Once the full-label agents line
+// "Developer" alone is 9 characters. Once the full-label agents line
 // would overflow d.width, every button's *label* — never its key, which must
 // always stay reachable/visible — is truncated to share whatever room
 // remains, using the same "…" convention truncate() (app.go) already applies

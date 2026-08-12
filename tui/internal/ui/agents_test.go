@@ -72,7 +72,7 @@ var allStages = []job.Stage{
 // agent is no longer gated by job.Stage().
 func TestAgentForKeyIgnoresStage(t *testing.T) {
 	wantByKey := map[string]string{
-		"p": "product-owner",
+		"p": "owner",
 		"a": "analyst",
 		"d": "developer",
 		"r": "reviewer",
@@ -139,7 +139,7 @@ func TestRenderActionBarAlwaysShowsAllAgents(t *testing.T) {
 				t.Errorf("stage=%s: action bar missing timeline entry %q:\n%s", stage, s, bar)
 			}
 		}
-		for _, want := range []string{"Product Owner", "Analyst", "Developer", "Reviewer", "Security", "Done"} {
+		for _, want := range []string{"Owner", "Analyst", "Developer", "Reviewer", "Security", "Done"} {
 			if !strings.Contains(bar, want) {
 				t.Errorf("stage=%s: action bar missing %q:\n%s", stage, want, bar)
 			}
@@ -158,7 +158,7 @@ func TestRenderActionBarUnifiedFormat(t *testing.T) {
 	if strings.Contains(bar, "│") {
 		t.Errorf("action bar should no longer use a separator between the agent buttons and Done:\n%s", bar)
 	}
-	for _, want := range []string{"[p] Product Owner", "[a] Analyst", "[d] Developer", "[r] Reviewer", "[s] Security", "[D] Done"} {
+	for _, want := range []string{"[p] Owner", "[a] Analyst", "[d] Developer", "[r] Reviewer", "[s] Security", "[D] Done"} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("action bar missing button in the unified format %q:\n%s", want, bar)
 		}
@@ -186,7 +186,7 @@ func TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact(t *testing.T) {
 			t.Errorf("agents line at 80 cols is missing key %q — keys must never be truncated:\n%s", key, agentsLine)
 		}
 	}
-	if strings.Contains(agentsLine, "Product Owner") {
+	if strings.Contains(agentsLine, "Developer") {
 		t.Errorf("agents line at 80 cols should have truncated the longest label, not shown it in full:\n%s", agentsLine)
 	}
 	if !strings.Contains(stageLine, "[D]") {
