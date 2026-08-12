@@ -245,6 +245,39 @@ func TestRenderListRecentActivityEmptyOnFreshRepo(t *testing.T) {
 	}
 }
 
+// TestRenderListZeroHeightNoCommitsDoesNotPanic is the yz0vfz regression
+// test: the exact crash combination from the brief — a fresh repo with no
+// commits yet (an unborn HEAD, exactly the state right after mg init on a
+// brand-new project) and an App that never received a tea.WindowSizeMsg
+// (a.height left at its zero value). Before the fix,
+// recentActivityShown's a.height == 0 path returned the floor (1) without
+// clamping to len(a.recentCommits), and renderRecentActivity sliced
+// a.recentCommits[:1] against the empty cache — "slice bounds out of range
+// [:1] with capacity 0". The two existing neighbors each cover one half of
+// the combination: TestRenderListZeroHeightDoesNotPanic uses a repo *with*
+// an init commit, and TestRenderListRecentActivityEmptyOnFreshRepo uses
+// height 24; this test pins the intersection.
+func TestRenderListZeroHeightNoCommitsDoesNotPanic(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	// a.width, a.height left at zero.
+
+	if len(a.recentCommits) != 0 {
+		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.recentCommits)
+	}
+
+	got := a.renderList()
+	if got == "" {
+		t.Fatal("renderList returned nothing for a zero-height App on a commit-less repo")
+	}
+	if !strings.Contains(got, "manigot") {
+		t.Errorf("renderList output missing expected header text:\n%s", got)
+	}
+}
+
 // --- status/hint coexistence (TASK-5) ---------------------------------------
 
 // TestListFooterKeepsHintAlongsideStatus is a regression test for TASK-4: the

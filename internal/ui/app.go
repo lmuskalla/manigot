@@ -465,16 +465,26 @@ func (a *App) refreshRecentCommits() {
 // a.height == 0 (an App that has never received a tea.WindowSizeMsg, e.g.
 // some existing tests) falls back to the floor, the same kind of guard
 // renderList already applies to a.width == 0.
+//
+// Whichever path computes the count, the result is clamped to
+// len(a.recentCommits): a repo with no commits yet (an unborn HEAD — exactly
+// the state right after mg init on a brand-new project) degrades to 0, so
+// renderRecentActivity renders no strip at all instead of slicing past an
+// empty cache.
 func (a *App) recentActivityShown() int {
+	var n int
 	if a.height == 0 {
-		return recentActivityFloor
+		n = recentActivityFloor
+	} else {
+		spare := a.height - dashboardFixedChrome - len(a.jobs)
+		n = clamp(spare, recentActivityFloor, a.settings.RecentActivityCountValue())
 	}
-	spare := a.height - dashboardFixedChrome - len(a.jobs)
-	n := clamp(spare, recentActivityFloor, a.settings.RecentActivityCountValue())
 	if n > len(a.recentCommits) {
 		// Fewer real commits than the computed count — render whatever's
-		// available, same graceful-degrade rule renderRecentActivity already
-		// applied before this task.
+		// available. Same graceful-degrade rule on every path, including the
+		// a.height == 0 fallback, which would otherwise return the floor of 1
+		// against an empty cache and panic at the slice in
+		// renderRecentActivity.
 		n = len(a.recentCommits)
 	}
 	return n
@@ -1232,6 +1242,11 @@ func (a *App) renderRecentActivity(w int) string {
 	n := a.recentActivityShown()
 	if n == 0 {
 		return ""
+	}
+	// Defense in depth: never slice past the commit cache, even if a future
+	// caller computes an oversized count.
+	if n > len(a.recentCommits) {
+		n = len(a.recentCommits)
 	}
 	commits := a.recentCommits[:n]
 
