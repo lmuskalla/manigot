@@ -6,6 +6,8 @@
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
+> Learning Go? There is a [full Go tutorial based on this codebase](docs/tutorial/README.md).
+
 Runs a session under one of three **subscription profiles** — `claude-pro`
 (Claude Code, billed to your Claude Pro/Max subscription), `zai` (OpenCode,
 billed to your Z.AI Coding Plan), and `opencode-go` (OpenCode, billed to the
