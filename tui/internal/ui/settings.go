@@ -22,24 +22,26 @@ var profileOptions = config.Profiles()
 // rejected by the settings form.
 const recentActivityCountMax = 100
 
-// Number of focusable fields in the settings form: editor, base branch,
-// recent activity count, profile, terminal — in tab cycle order. Kept as a
-// named constant so the tab/shift+tab cycle and focus comparisons don't all
-// hardcode a literal that has to be kept in sync field by field.
-const stFieldCount = 5
+// Number of focusable fields in the settings form: editor, base branch, job
+// branch prefix, recent activity count, profile, terminal — in tab cycle
+// order. Kept as a named constant so the tab/shift+tab cycle and focus
+// comparisons don't all hardcode a literal that has to be kept in sync field
+// by field.
+const stFieldCount = 6
 
 // Focus indices for the settings form's fields, in tab cycle order: editor →
-// base branch → recent activity count → profile → terminal → editor. Used by
-// update() and render() instead of bare ints. Terminal was appended after
-// Profile (TASK-1 point 4 of docs/jobs/r5x2a7_add-new-global-setting/tasks.md)
-// rather than inserted next to Editor, so the existing constants keep their
-// values unchanged.
+// base branch → job branch prefix → recent activity count → profile →
+// terminal → editor. Used by update() and render() instead of bare ints.
+// Terminal was appended after Profile (TASK-1 point 4 of
+// docs/jobs/r5x2a7_add-new-global-setting/tasks.md) rather than inserted
+// next to Editor, so the existing constants keep their values unchanged.
 const (
-	stFocusEditor   = 0
-	stFocusBranch   = 1
-	stFocusCount    = 2
-	stFocusProfile  = 3
-	stFocusTerminal = 4
+	stFocusEditor    = 0
+	stFocusBranch    = 1
+	stFocusJobPrefix = 2
+	stFocusCount     = 3
+	stFocusProfile   = 4
+	stFocusTerminal  = 5
 )
 
 // stAction is what update returns for the App to act on.
@@ -58,22 +60,23 @@ const (
 //   - manigot/.env — the subscription profile, as MANIGOT_PROFILE: the one
 //     default shared between CLI and TUI (bare `mg` resolves to it, `mg
 //     profiles` writes it, and this form reads/writes the same key); and
-//   - the project.Settings (base branch) — shared project convention,
-//     committable, in the target project's .manigot/manigot.json.
+//   - the project.Settings (base branch, job branch prefix) — shared project
+//     conventions, committable, in the target project's .manigot/manigot.json.
 //
 // Like newJobView, it does not persist anything itself — the App calls
 // config.Save and project.Save on submit so this stays a pure input
 // component.
 type settingsView struct {
-	editor      textinput.Model
-	baseBranch  textinput.Model
-	recentCount textinput.Model
-	terminal    textinput.Model
-	profile     int // index into profileOptions
-	focus       int // stFocusEditor / stFocusBranch / stFocusCount / stFocusProfile / stFocusTerminal
-	width       int
-	height      int
-	status      string // validation/save error message
+	editor         textinput.Model
+	baseBranch     textinput.Model
+	jobBranchPrefix textinput.Model
+	recentCount    textinput.Model
+	terminal       textinput.Model
+	profile        int // index into profileOptions
+	focus          int // stFocusEditor / stFocusBranch / stFocusJobPrefix / stFocusCount / stFocusProfile / stFocusTerminal
+	width          int
+	height         int
+	status         string // validation/save error message
 }
 
 // newSettingsView builds the form seeded from the current global config and
@@ -95,6 +98,13 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 	baseBranch.SetValue(proj.BaseBranch)
 	baseBranch.Width = 60
 
+	jobBranchPrefix := textinput.New()
+	jobBranchPrefix.Placeholder = "jobs"
+	jobBranchPrefix.Prompt = "" // we render our own "Job branch prefix:" label
+	jobBranchPrefix.CharLimit = 120
+	jobBranchPrefix.SetValue(proj.JobBranchPrefix)
+	jobBranchPrefix.Width = 60
+
 	recentCount := textinput.New()
 	recentCount.Placeholder = strconv.Itoa(config.DefaultRecentActivityCount)
 	recentCount.Prompt = "" // we render our own "Recent activity:" label
@@ -112,19 +122,21 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 	terminal.Width = 60
 
 	v := &settingsView{
-		editor:      editor,
-		baseBranch:  baseBranch,
-		recentCount: recentCount,
-		terminal:    terminal,
-		profile:     profileIndex(global.ProfileValue()),
-		focus:       stFocusEditor,
-		width:       width,
-		height:      height,
+		editor:          editor,
+		baseBranch:      baseBranch,
+		jobBranchPrefix: jobBranchPrefix,
+		recentCount:     recentCount,
+		terminal:        terminal,
+		profile:         profileIndex(global.ProfileValue()),
+		focus:           stFocusEditor,
+		width:           width,
+		height:          height,
 	}
 	if width > 0 {
 		w := stInputWidth(width)
 		v.editor.Width = w
 		v.baseBranch.Width = w
+		v.jobBranchPrefix.Width = w
 		v.recentCount.Width = w
 		v.terminal.Width = w
 	}
@@ -162,6 +174,7 @@ func (v *settingsView) resize(width, height int) {
 		w := stInputWidth(width)
 		v.editor.Width = w
 		v.baseBranch.Width = w
+		v.jobBranchPrefix.Width = w
 		v.recentCount.Width = w
 		v.terminal.Width = w
 	}
@@ -193,14 +206,16 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 		return stNone
 	}
 
-	// A text input is focused (editor, base branch, recent count or
-	// terminal): route the key to it.
+	// A text input is focused (editor, base branch, job branch prefix, recent
+	// count or terminal): route the key to it.
 	var ti *textinput.Model
 	switch v.focus {
 	case stFocusEditor:
 		ti = &v.editor
 	case stFocusBranch:
 		ti = &v.baseBranch
+	case stFocusJobPrefix:
+		ti = &v.jobBranchPrefix
 	case stFocusCount:
 		ti = &v.recentCount
 	default: // stFocusTerminal
@@ -212,12 +227,14 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 }
 
 // setFocus moves focus to field i and keeps the text inputs' focus state in
-// sync: only the editor, base branch, recent count or terminal holds the text
-// cursor; the profile selector is keyboard-driven (←/→), not a text input.
+// sync: only the editor, base branch, job branch prefix, recent count or
+// terminal holds the text cursor; the profile selector is keyboard-driven
+// (←/→), not a text input.
 func (v *settingsView) setFocus(i int) {
 	v.focus = i
 	v.editor.Blur()
 	v.baseBranch.Blur()
+	v.jobBranchPrefix.Blur()
 	v.recentCount.Blur()
 	v.terminal.Blur()
 	switch i {
@@ -225,6 +242,8 @@ func (v *settingsView) setFocus(i int) {
 		v.editor.Focus()
 	case stFocusBranch:
 		v.baseBranch.Focus()
+	case stFocusJobPrefix:
+		v.jobBranchPrefix.Focus()
 	case stFocusCount:
 		v.recentCount.Focus()
 	case stFocusTerminal:
@@ -271,7 +290,8 @@ func (v *settingsView) settingsValue() config.Settings {
 // ready to be persisted with project.Save.
 func (v *settingsView) projectValue() project.Settings {
 	return project.Settings{
-		BaseBranch: strings.TrimSpace(v.baseBranch.Value()),
+		BaseBranch:      strings.TrimSpace(v.baseBranch.Value()),
+		JobBranchPrefix: strings.TrimSpace(v.jobBranchPrefix.Value()),
 	}
 }
 
@@ -303,6 +323,19 @@ func (v *settingsView) render() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("           blank = main · stored in .manigot/manigot.json, shared with your team"))
+	b.WriteString("\n\n")
+
+	// Job branch prefix row (project): the namespace job branches live under,
+	// e.g. "jobs" makes a feature job's branch "jobs/feature/<id>_<slug>".
+	// Project-scoped like base branch, so the same project-file note applies.
+	prefixLabel := "  Job branch prefix (project): "
+	if v.focus == stFocusJobPrefix {
+		b.WriteString(prefixLabel + v.jobBranchPrefix.View())
+	} else {
+		b.WriteString(dimStyle.Render(prefixLabel) + dimStyle.Render(v.jobBranchPrefix.View()))
+	}
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("           blank = feature/… · stored in .manigot/manigot.json, shared with your team"))
 	b.WriteString("\n\n")
 
 	// Recent activity count row (global): the maximum number of entries the
@@ -376,6 +409,8 @@ func (v *settingsView) hint() string {
 	case stFocusEditor:
 		return "tab/shift+tab base branch · " + prefix
 	case stFocusBranch:
+		return "tab/shift+tab job branch prefix · " + prefix
+	case stFocusJobPrefix:
 		return "tab/shift+tab recent activity · " + prefix
 	case stFocusCount:
 		return "tab/shift+tab profile · " + prefix
