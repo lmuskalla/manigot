@@ -9,6 +9,8 @@ set -euo pipefail
 #
 # The base branch new jobs are cut from is read from .manigot/manigot.json
 # (defaulting to "main"); --base-branch overrides it for one invocation.
+# The job branch prefix (the namespace job branches live under, default empty
+# = "feature/…") is read from the same file's jobBranchPrefix key.
 #
 # Every job gets its own git worktree (207bfu_git-worktrees, Decision 1/3):
 # created alongside the branch at
@@ -81,9 +83,10 @@ fi
 # the file for a single invocation (an ad-hoc one-off, e.g. spiking a branch
 # off a release tag while the project default stays on main).
 #
-# The JSON extraction is a guarded sed regex against the single known key —
+# The JSON extraction is a guarded sed regex against the two known keys —
 # revisit (add jq) only if more project keys appear.
 BASE_BRANCH="$DEFAULT_BASE_BRANCH"
+JOB_BRANCH_PREFIX=""
 SETTINGS_FILE="$PROJECT_ROOT/.manigot/manigot.json"
 if [[ -f "$SETTINGS_FILE" ]]; then
     # Match "baseBranch": "value" anywhere on a line, so both the
@@ -92,6 +95,13 @@ if [[ -f "$SETTINGS_FILE" ]]; then
     # leading .* is safe here.
     VALUE=$(sed -n 's/^.*"baseBranch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$SETTINGS_FILE" | head -n1)
     [[ -n "$VALUE" ]] && BASE_BRANCH="$VALUE"
+    # jobBranchPrefix: the namespace job branches live under (e.g. "jobs"
+    # makes a feature job's branch "jobs/feature/<id>_<slug>"). Empty means
+    # no prefix. A project that already has a plain branch named exactly
+    # "feature", "fix" or "chore" must set this — git refuses to create
+    # "feature/<anything>" when "feature" already exists as a branch.
+    VALUE=$(sed -n 's/^.*"jobBranchPrefix"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$SETTINGS_FILE" | head -n1)
+    [[ -n "$VALUE" ]] && JOB_BRANCH_PREFIX="$VALUE"
 fi
 [[ -n "$BASE_BRANCH_OVERRIDE" ]] && BASE_BRANCH="$BASE_BRANCH_OVERRIDE"
 
@@ -108,7 +118,14 @@ AUTHOR=$(git config user.name 2>/dev/null || echo "unknown")
 # 1/3) rather than being checked out in PROJECT_ROOT: PROJECT_ROOT itself is
 # never switched, so it stays free for other jobs' worktrees to branch from
 # and multiple jobs can be worked on in parallel.
-BRANCH="${JOB_TYPE}/${ID}_${SLUG}"
+#
+# The branch is [<prefix>/]<type>/<id>_<slug>: JOB_BRANCH_PREFIX (from
+# .manigot/manigot.json, default empty) prepended to the type segment. Every
+# resolver (run.sh, finish-job.sh, delete-job.sh, the TUI) matches jobs by the
+# <id>_<slug> tail segment, so the prefix is pure naming — it just keeps job
+# branches out of a namespace a project already uses (e.g. a pre-existing
+# plain branch named exactly "feature" blocks "feature/..." in git).
+BRANCH="${JOB_BRANCH_PREFIX:+${JOB_BRANCH_PREFIX}/}${JOB_TYPE}/${ID}_${SLUG}"
 CURRENT_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
 if [[ -n "$CURRENT_BRANCH" ]]; then
