@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
@@ -227,5 +228,86 @@ func TestClaudeAccountFromJSONIncomplete(t *testing.T) {
 		if _, _, _, ok := claudeAccountFromJSON(); ok {
 			t.Errorf("config %s should report not-ok", cfg)
 		}
+	}
+}
+
+func TestSetupNtfyWritesEnv(t *testing.T) {
+	dir := profileCheckout(t, "")
+	var out strings.Builder
+	// Type all three values: URL, topic, token. One shared bufio.Reader, per
+	// the wizard's own contract (a fresh wrap per prompt would lose whatever
+	// the previous one buffered past its newline).
+	in := bufio.NewReader(strings.NewReader("https://ntfy.example.com\nmy-secret-topic\ns3cret\n"))
+	setupNtfy(in, &out)
+
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(env)
+	if !strings.Contains(got, "NTFY_URL=https://ntfy.example.com") {
+		t.Errorf(".env missing typed NTFY_URL:\n%s", got)
+	}
+	if !strings.Contains(got, "NTFY_TOPIC=my-secret-topic") {
+		t.Errorf(".env missing typed NTFY_TOPIC:\n%s", got)
+	}
+	if !strings.Contains(got, "NTFY_TOKEN=s3cret") {
+		t.Errorf(".env missing typed NTFY_TOKEN:\n%s", got)
+	}
+}
+
+func TestSetupNtfySkipsWhenTopicEmpty(t *testing.T) {
+	dir := profileCheckout(t, "")
+	var out strings.Builder
+	// Accept the default URL, leave topic and token empty (bare prompts).
+	setupNtfy(bufio.NewReader(strings.NewReader("\n\n\n")), &out)
+
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(env)
+	if !strings.Contains(got, "NTFY_URL=https://ntfy.sh") {
+		t.Errorf(".env missing the default NTFY_URL:\n%s", got)
+	}
+	if strings.Contains(got, "NTFY_TOPIC=") {
+		t.Errorf(".env should not contain an empty NTFY_TOPIC (opt-in, off by default):\n%s", got)
+	}
+	if strings.Contains(got, "NTFY_TOKEN=") {
+		t.Errorf(".env should not contain an empty NTFY_TOKEN:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "(skipped — NTFY_TOKEN not set)") {
+		t.Errorf("missing skipped note:\n%s", out.String())
+	}
+}
+
+func TestSetupNtfyAlreadyConfigured(t *testing.T) {
+	dir := profileCheckout(t, "NTFY_TOPIC=existing-topic\n")
+	var out strings.Builder
+	setupNtfy(bufio.NewReader(strings.NewReader("")), &out)
+	if !strings.Contains(out.String(), "✓ Already configured (NTFY_TOPIC exis…opic).") {
+		t.Errorf("missing already-configured line:\n%s", out.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "NTFY_TOPIC=existing-topic") {
+		t.Errorf(".env was modified:\n%s", env)
+	}
+}
+
+func TestSetupWizardShowsNtfyBlock(t *testing.T) {
+	// Pre-configure every profile key so the wizard early-returns for the
+	// profiles (model prompts excepted) and only the ntfy block needs input.
+	profileCheckout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_ACCOUNT_UUID=u\nCLAUDE_EMAIL=e\nCLAUDE_ORG_UUID=o\nZHIPU_API_KEY=k\nOPENCODE_API_KEY=k\n")
+	var out strings.Builder
+	// zai model, opencode-go model, then ntfy URL/topic/token — five prompts.
+	code := runSetup([]string{}, strings.NewReader("\n\n\n\n\n"), &out, &strings.Builder{}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, output:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "ntfy — push notifications for mg jdi (optional)") {
+		t.Errorf("full wizard missing the ntfy block:\n%s", out.String())
 	}
 }

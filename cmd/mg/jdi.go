@@ -29,10 +29,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/lmuskalla/manigot/internal/notify"
 	"github.com/lmuskalla/manigot/internal/orchestrate"
 	"github.com/lmuskalla/manigot/internal/session"
 )
@@ -98,6 +100,15 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// Crash notification (opt-in — see internal/notify): the previous run for
+	// this job may have been killed without ever reporting a stop; detect it
+	// here at the next run's start and push an attention notification. A
+	// process that was SIGKILLed/OOM-killed cannot notify from inside itself,
+	// so this stale-sidecar check on next start is the self-contained
+	// approximation — an external watchdog is out of scope. Best-effort and
+	// only when NTFY_TOPIC is set (unconfigured behavior unchanged).
+	notifyCrashedRun(stderr, root, j)
+
 	// Best-effort: see ensureSidecarIgnored's own doc for why a failure here
 	// does not abort the run.
 	if err := ensureSidecarIgnored(root); err != nil {
@@ -158,10 +169,89 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 	// stopped state.
 	fmt.Fprint(stdout, "\a")
 
+	// Stop notification, ntfy path (opt-in — see internal/notify): both the
+	// CLI path and a TUI-launched run go through this same runJDI stop path,
+	// so notifying here covers both. Best-effort like the sidecar/run-log
+	// warnings above — a send failure warns on stderr and never aborts the
+	// exit path.
+	notifyStop(stderr, j.Name, result)
+
 	if result.Kind == orchestrate.StopNeedsHuman {
 		return 1
 	}
 	return 0
+}
+
+// notifyStop sends the opt-in ntfy stop notification for a finished mg-jdi
+// run: a default-priority success message (tag white_check_mark) when the
+// run finished (result.Kind == StopFinished), and a high-priority attention
+// message (tag warning, priority 4) when it stopped needing a human. Both
+// messages carry the job name and the stop reason. It is a strict no-op when
+// NTFY_TOPIC is unset (nothing is sent, no error), and a send failure only
+// warns on stderr — never aborting the caller.
+func notifyStop(stderr io.Writer, jobName string, result LoopResult) {
+	c := notify.FromConfig()
+	if !c.Enabled() {
+		return
+	}
+
+	msg := notify.Message{Message: result.Reason}
+	switch result.Kind {
+	case orchestrate.StopFinished:
+		msg.Title = "mg jdi: " + jobName + " finished"
+		msg.Tags = []string{"white_check_mark"}
+	default: // orchestrate.StopNeedsHuman
+		msg.Title = "mg jdi: " + jobName + " needs attention"
+		msg.Tags = []string{"warning"}
+		msg.Priority = 4
+	}
+	if err := c.Publish(msg); err != nil {
+		fmt.Fprintf(stderr, "mg jdi: warning: could not send ntfy notification: %v\n", err)
+	}
+}
+
+// notifyCrashedRun checks, at a new `mg jdi` run's start, whether the
+// previous run for job j died without ever reporting a stop — a JDIRunning
+// status in the sidecar stale past job's jdiRunningStaleAfter (see
+// job.StaleRunningJDI) — and pushes a high-priority attention notification
+// (tag warning, priority 4) about it. Once the crash has been notified, the
+// stale sidecar is overwritten with JDIStoppedNeedsHuman so a later start
+// does not re-notify about the same already-known crash; a failed send does
+// not mark it, so the notification is retried on the next start instead.
+//
+// It is a strict no-op when ntfy is unconfigured (no NTFY_TOPIC): nothing is
+// read-modify-written, keeping unconfigured behavior byte-for-byte identical
+// (the TUI still degrades the stale sidecar away on its own). Failures warn
+// on stderr and never abort the run.
+func notifyCrashedRun(stderr io.Writer, root string, j job.Job) {
+	c := notify.FromConfig()
+	if !c.Enabled() {
+		return
+	}
+
+	st, crashed := job.StaleRunningJDI(root, j.Name)
+	if !crashed {
+		return
+	}
+
+	msg := notify.Message{
+		Title:    "mg jdi: " + j.Name + " crashed",
+		Message:  fmt.Sprintf("The previous mg jdi run appears to have crashed or been killed (status stale since %s).", st.Updated.Format(time.RFC3339)),
+		Tags:     []string{"warning"},
+		Priority: 4,
+	}
+	if st.Agent != "" {
+		msg.Message += fmt.Sprintf(" Last agent: %s.", st.Agent)
+	}
+	if err := c.Publish(msg); err != nil {
+		fmt.Fprintf(stderr, "mg jdi: warning: could not send ntfy notification: %v\n", err)
+		return
+	}
+
+	// Mark the crash as known so the next start doesn't re-notify about it.
+	if err := job.WriteJDIStatus(root, j.Name, job.JDIStoppedNeedsHuman, st.Agent); err != nil {
+		fmt.Fprintf(stderr, "mg jdi: warning: could not mark the crashed run as known: %v\n", err)
+	}
 }
 
 // resolveJob finds the job named or ID-prefixed by arg among every job

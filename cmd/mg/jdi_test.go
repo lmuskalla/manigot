@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
@@ -604,5 +608,249 @@ func TestCommandAgentRunnerUsesGivenProfile(t *testing.T) {
 	}
 	if opts.Agent != "developer" || opts.Job != j.Name || !opts.Print {
 		t.Errorf("invocation = %+v", opts)
+	}
+}
+
+// notifyRequest is one HTTP request the fake ntfy server captured.
+type notifyRequest struct {
+	method  string
+	path    string
+	body    string
+	headers http.Header
+}
+
+// newNotifyCapture starts an httptest server recording every request it
+// receives (method, path, headers, body) and replying with status, so tests
+// can assert on exactly what notifyStop/notifyCrashedRun sent.
+func newNotifyCapture(t *testing.T, status int) (*httptest.Server, *[]notifyRequest) {
+	t.Helper()
+	var got []notifyRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = append(got, notifyRequest{method: r.Method, path: r.URL.Path, body: string(body), headers: r.Header.Clone()})
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &got
+}
+
+// configureNtfy points the ntfy config (internal/notify's FromConfig, which
+// reads config.EnvValue) at the test server by setting the process env the
+// .env-less fake checkout falls back to.
+func configureNtfy(t *testing.T, srvURL, topic, token string) {
+	t.Helper()
+	t.Setenv("NTFY_URL", srvURL)
+	t.Setenv("NTFY_TOPIC", topic)
+	t.Setenv("NTFY_TOKEN", token)
+}
+
+func TestNotifyStopFinished(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "my-topic", "")
+
+	var stderr bytes.Buffer
+	notifyStop(&stderr, "aaaa01_test-job", LoopResult{Kind: orchestrate.StopFinished, Reason: "verdict.md's Overall verdict is APPROVED"})
+
+	if len(*got) != 1 {
+		t.Fatalf("received %d requests, want 1", len(*got))
+	}
+	req := (*got)[0]
+	if req.headers.Get("Tags") != "white_check_mark" {
+		t.Errorf("Tags header = %q, want white_check_mark", req.headers.Get("Tags"))
+	}
+	if req.headers.Get("Priority") != "" {
+		t.Errorf("Priority header = %q, want unset (default priority) for a success", req.headers.Get("Priority"))
+	}
+	if !strings.Contains(req.headers.Get("Title"), "aaaa01_test-job") {
+		t.Errorf("Title header = %q, want it to contain the job name", req.headers.Get("Title"))
+	}
+	if !strings.Contains(req.body, "APPROVED") {
+		t.Errorf("body = %q, want it to contain the stop reason", req.body)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestNotifyStopNeedsHuman(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "my-topic", "tok")
+
+	var stderr bytes.Buffer
+	notifyStop(&stderr, "aaaa01_test-job", LoopResult{Kind: orchestrate.StopNeedsHuman, Reason: "analyst made no progress on two consecutive runs"})
+
+	if len(*got) != 1 {
+		t.Fatalf("received %d requests, want 1", len(*got))
+	}
+	req := (*got)[0]
+	if req.headers.Get("Tags") != "warning" {
+		t.Errorf("Tags header = %q, want warning", req.headers.Get("Tags"))
+	}
+	if req.headers.Get("Priority") != "4" {
+		t.Errorf("Priority header = %q, want 4 (high priority) for needs-human", req.headers.Get("Priority"))
+	}
+	if req.headers.Get("Authorization") != "Bearer tok" {
+		t.Errorf("Authorization header = %q, want %q", req.headers.Get("Authorization"), "Bearer tok")
+	}
+	if !strings.Contains(req.headers.Get("Title"), "needs attention") {
+		t.Errorf("Title header = %q, want it to say needs attention", req.headers.Get("Title"))
+	}
+	if !strings.Contains(req.body, "no progress") {
+		t.Errorf("body = %q, want it to contain the stop reason", req.body)
+	}
+}
+
+func TestNotifyStopUnconfiguredSendsNothing(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "", "") // no NTFY_TOPIC → feature off
+
+	var stderr bytes.Buffer
+	notifyStop(&stderr, "aaaa01_test-job", LoopResult{Kind: orchestrate.StopNeedsHuman, Reason: "stalled"})
+
+	if len(*got) != 0 {
+		t.Errorf("received %d requests, want 0 (unconfigured must be a strict no-op)", len(*got))
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestNotifyStopSendFailureWarnsButDoesNotAbort(t *testing.T) {
+	profileCheckout(t, "")
+	srv, _ := newNotifyCapture(t, http.StatusInternalServerError)
+	configureNtfy(t, srv.URL, "my-topic", "")
+
+	var stderr bytes.Buffer
+	notifyStop(&stderr, "aaaa01_test-job", LoopResult{Kind: orchestrate.StopFinished, Reason: "done"})
+
+	out := stderr.String()
+	if !strings.Contains(out, "mg jdi: warning: could not send ntfy notification") {
+		t.Errorf("stderr = %q, want a 'could not send ntfy notification' warning", out)
+	}
+}
+
+// writeStaleRunningSidecar plants an old JDIRunning sidecar — the on-disk
+// signature of an mg-jdi run that was killed without ever reporting a stop
+// (job.jdiRunningStaleAfter is 30 minutes, so 2 hours is safely stale).
+func writeStaleRunningSidecar(t *testing.T, root, jobName string) {
+	t.Helper()
+	if err := os.MkdirAll(job.JDIStatusDir(root, jobName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	body := `{"state":"running","agent":"developer","updated":"` + stale + `"}`
+	if err := os.WriteFile(job.JDIStatusPath(root, jobName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNotifyCrashedRunNotifiesAndDedups(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "my-topic", "")
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+	writeStaleRunningSidecar(t, root, jobName)
+	j := job.Job{Name: jobName, Root: root}
+
+	var stderr bytes.Buffer
+	notifyCrashedRun(&stderr, root, j)
+
+	if len(*got) != 1 {
+		t.Fatalf("received %d requests, want 1 (the crash notification)", len(*got))
+	}
+	req := (*got)[0]
+	if req.headers.Get("Tags") != "warning" {
+		t.Errorf("Tags header = %q, want warning", req.headers.Get("Tags"))
+	}
+	if req.headers.Get("Priority") != "4" {
+		t.Errorf("Priority header = %q, want 4 (high priority) for a crash", req.headers.Get("Priority"))
+	}
+	if !strings.Contains(req.headers.Get("Title"), jobName) {
+		t.Errorf("Title header = %q, want it to contain the job name", req.headers.Get("Title"))
+	}
+	if !strings.Contains(req.body, "crashed or been killed") {
+		t.Errorf("body = %q, want it to describe the crash", req.body)
+	}
+	if !strings.Contains(req.body, "Last agent: developer") {
+		t.Errorf("body = %q, want it to name the last agent", req.body)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+
+	// The stale sidecar is overwritten with a stopped state, so a second
+	// start must not re-notify about the same already-known crash.
+	notifyCrashedRun(&stderr, root, j)
+	if len(*got) != 1 {
+		t.Errorf("received %d requests after dedup, want still 1", len(*got))
+	}
+	if st, ok := job.ReadJDIStatus(root, jobName); !ok || st.State != job.JDIStoppedNeedsHuman {
+		t.Errorf("sidecar after dedup = %+v (ok=%v), want stopped:needs-human", st, ok)
+	}
+}
+
+func TestNotifyCrashedRunFreshRunningDoesNotNotify(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "my-topic", "")
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+	// A fresh running status means a live mg-jdi run — must not be reported
+	// as a crash.
+	if err := job.WriteJDIStatus(root, jobName, job.JDIRunning, "analyst"); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	notifyCrashedRun(&stderr, root, job.Job{Name: jobName, Root: root})
+
+	if len(*got) != 0 {
+		t.Errorf("received %d requests, want 0 (a live run is not a crash)", len(*got))
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestNotifyCrashedRunStoppedStatusDoesNotNotify(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "my-topic", "")
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+	if err := job.WriteJDIStatus(root, jobName, job.JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	notifyCrashedRun(&stderr, root, job.Job{Name: jobName, Root: root})
+
+	if len(*got) != 0 {
+		t.Errorf("received %d requests, want 0 (a stopped run is not a crash)", len(*got))
+	}
+}
+
+func TestNotifyCrashedRunUnconfiguredLeavesSidecarUntouched(t *testing.T) {
+	profileCheckout(t, "")
+	srv, got := newNotifyCapture(t, http.StatusOK)
+	configureNtfy(t, srv.URL, "", "") // no NTFY_TOPIC → feature off
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+	writeStaleRunningSidecar(t, root, jobName)
+
+	var stderr bytes.Buffer
+	notifyCrashedRun(&stderr, root, job.Job{Name: jobName, Root: root})
+
+	if len(*got) != 0 {
+		t.Errorf("received %d requests, want 0 (unconfigured must be a strict no-op)", len(*got))
+	}
+	// Unconfigured behavior must be byte-for-byte identical: the stale sidecar
+	// is left exactly as it was (ReadJDIStatus still degrades it away).
+	if _, ok := job.StaleRunningJDI(root, jobName); !ok {
+		t.Error("sidecar was modified despite ntfy being unconfigured — unconfigured behavior must be unchanged")
 	}
 }

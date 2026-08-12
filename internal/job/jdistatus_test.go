@@ -87,6 +87,61 @@ func TestReadJDIStatusStaleRunningDegradesToNoRun(t *testing.T) {
 	}
 }
 
+func TestStaleRunningJDIReportsStaleRunning(t *testing.T) {
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+	if err := os.MkdirAll(JDIStatusDir(root, jobName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := time.Now().Add(-2 * jdiRunningStaleAfter).UTC().Format(time.RFC3339)
+	body := `{"state":"running","agent":"developer","updated":"` + stale + `"}`
+	if err := os.WriteFile(JDIStatusPath(root, jobName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st, ok := StaleRunningJDI(root, jobName)
+	if !ok {
+		t.Fatal("StaleRunningJDI with a stale 'running' status: expected ok=true (the run died without reporting a stop)")
+	}
+	if st.State != JDIRunning || st.Agent != "developer" {
+		t.Errorf("got %+v, want State=%q Agent=%q", st, JDIRunning, "developer")
+	}
+}
+
+func TestStaleRunningJDINotStale(t *testing.T) {
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+	if err := WriteJDIStatus(root, jobName, JDIRunning, "analyst"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := StaleRunningJDI(root, jobName); ok {
+		t.Error("StaleRunningJDI with a fresh 'running' status: expected ok=false (a live run must not look crashed)")
+	}
+}
+
+func TestStaleRunningJDIStoppedOrMissingIsNotCrash(t *testing.T) {
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+
+	// An old stopped:* status is a terminal state, not a crash.
+	if err := os.MkdirAll(JDIStatusDir(root, jobName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-100 * jdiRunningStaleAfter).UTC().Format(time.RFC3339)
+	body := `{"state":"stopped:finished","agent":"reviewer","updated":"` + old + `"}`
+	if err := os.WriteFile(JDIStatusPath(root, jobName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := StaleRunningJDI(root, jobName); ok {
+		t.Error("StaleRunningJDI with an old stopped:finished status: expected ok=false")
+	}
+
+	// No sidecar at all: nothing crashed.
+	if _, ok := StaleRunningJDI(root, "no-such-job"); ok {
+		t.Error("StaleRunningJDI with no sidecar file: expected ok=false")
+	}
+}
+
 // A stopped:* status is a terminal state and must never be treated as
 // stale, no matter how old it is — the job simply finished a while ago.
 func TestReadJDIStatusOldStoppedStatusStillReported(t *testing.T) {

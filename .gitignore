@@ -3,6 +3,10 @@
 # Built TUI binary (produced by `make tui`).
 /bin/
 
+# Accidentally-committed root-level build artifact (a stray `go build` without
+# `-o bin/mg`). Builds go to bin/; the root copy is never referenced.
+/mg
+
 # Local TUI preferences (editor, subscription profile), written by the TUI's
 # settings screen (tui/internal/config). Machine-specific, not shared.
 /config/

@@ -24,9 +24,10 @@ Configures credentials for manigot's subscription profiles into manigot/.env:
   zai           OpenCode, billed to your Z.AI Coding Plan
   opencode-go   OpenCode, billed to the OpenCode Go subscription
 
-With no profile, the wizard walks through all three. --check reports which
-profiles are ready without prompting. Values are written to the same .env
-scripts/run.sh sources; nothing is sent anywhere.
+With no profile, the wizard walks through all three, plus the optional ntfy
+push-notification settings (NTFY_URL/NTFY_TOPIC/NTFY_TOKEN) for mg jdi.
+--check reports which profiles are ready without prompting. Values are
+written to the same .env scripts/run.sh sources; nothing is sent anywhere.
 `
 
 // runSetup implements `mg setup` — the port of scripts/setup.sh with identical
@@ -89,6 +90,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 		setupClaudePro(br, stdout)
 		setupZAI(br, stdout)
 		setupOpenCodeGo(br, stdout)
+		setupNtfy(br, stdout)
 	}
 
 	fmt.Fprintln(stdout, "")
@@ -256,6 +258,28 @@ func setupOpenCodeGo(r io.Reader, w io.Writer) {
 	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
 	fmt.Fprintln(w, "  Go model ids use the opencode-go/ prefix (e.g. opencode-go/deepseek-v4-flash).")
 	promptValue("  OPENCODE_GO_MODEL", "OPENCODE_GO_MODEL", "opencode-go/glm-5.2", r, w)
+}
+
+// setupNtfy is the optional ntfy block of the mg setup wizard: it prompts
+// the three NTFY_* keys into manigot/.env so push notifications for mg jdi
+// are discoverable without hand-editing the file. Unlike the profile blocks
+// it is not a subscription profile, so --check does not cover it (its check
+// shape is profile-shaped). Opt-in: leaving NTFY_TOPIC empty keeps
+// notifications off, which is the default.
+func setupNtfy(r io.Reader, w io.Writer) {
+	fmt.Fprintln(w, sepLine)
+	fmt.Fprintln(w, "  ntfy — push notifications for mg jdi (optional)")
+	fmt.Fprintln(w, sepLine)
+	if have("NTFY_TOPIC") {
+		fmt.Fprintf(w, "  ✓ Already configured (NTFY_TOPIC %s).\n", cli.Mask(config.EnvValue("NTFY_TOPIC")))
+		return
+	}
+	fmt.Fprintln(w, "  mg jdi can push a notification to your phone when a run stops")
+	fmt.Fprintln(w, "  or when it finds a previous run crashed. Leave NTFY_TOPIC empty")
+	fmt.Fprintln(w, "  to keep notifications off.")
+	promptValue("  NTFY_URL", "NTFY_URL", "https://ntfy.sh", r, w)
+	promptValue("  NTFY_TOPIC", "NTFY_TOPIC", "", r, w)
+	promptSecret("  NTFY_TOKEN", "NTFY_TOKEN", r, w)
 }
 
 // have reports whether the effective value of key (process env + .env) is

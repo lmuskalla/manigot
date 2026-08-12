@@ -509,6 +509,16 @@ in," not a live diff of its work. A TUI-launched run (see below) has no
 terminal of its own at all — the list's status badge and the detail view's
 log tab are how you watch it there instead.
 
+**Getting notified.** When `mg jdi` runs unattended on a VPS, you don't want
+to watch the terminal for it to stop. Set `NTFY_TOPIC` in `manigot/.env`
+(`mg setup` walks you through the three keys) and it pushes an ntfy
+notification to your phone whenever a run stops: a success notification when
+it finishes, a high-priority attention one when it stops needing a human —
+and, at the next run's start, if it finds the previous run crashed or
+killed. `NTFY_URL` defaults to `https://ntfy.sh`; `NTFY_TOKEN` is optional
+(sent as a `Bearer` auth header). Notifications are opt-in: without
+`NTFY_TOPIC`, nothing is sent and behavior is unchanged.
+
 ---
 
 ## TUI

@@ -181,13 +181,30 @@ log tab poll. A direct CLI run streams to its own terminal and rings the
 terminal bell on stop; a TUI-launched run is fully detached, and the TUI
 rings the bell itself on its next poll.
 
+Both stop paths also push an opt-in ntfy notification when `NTFY_TOPIC` is
+set in manigot's `.env` (a strict no-op when unset — unconfigured behavior
+is byte-for-byte unchanged): a success notification (tag `white_check_mark`)
+when the run finishes, and a high-priority attention notification (tag
+`warning`, priority 4) when it stops needing a human. The next run's start
+also pushes an attention notification when it finds the previous run
+crashed or killed — the on-disk signature is a `running` status sidecar
+stale past `jdiRunningStaleAfter` (a SIGKILLed/OOM-killed process cannot
+notify from inside itself, so this next-start check is the self-contained
+approximation; an external watchdog is out of scope). `NTFY_URL` defaults to
+`https://ntfy.sh` and `NTFY_TOKEN` is optional (sent as a `Bearer` header).
+A send failure is a stderr warning, never an abort — `mg jdi` continues
+either way.
+
 ### Config files
 
 - `manigot/.env` (gitignored) — credentials and defaults for the profiles
   (`CLAUDE_CODE_OAUTH_TOKEN`/`CLAUDE_ACCOUNT_UUID`/`CLAUDE_EMAIL`/
   `CLAUDE_ORG_UUID` for claude-pro, `ZHIPU_API_KEY` + `OPENCODE_ZAI_MODEL`
   for zai, `OPENCODE_API_KEY` + `OPENCODE_GO_MODEL` for opencode-go, and
-  `MANIGOT_PROFILE` — the default profile shared between CLI and TUI).
+  `MANIGOT_PROFILE` — the default profile shared between CLI and TUI), plus
+  the optional ntfy push-notification keys `NTFY_URL`/`NTFY_TOPIC`/
+  `NTFY_TOKEN` for `mg jdi` (see the `mg jdi` section — `NTFY_TOPIC` unset
+  means no notifications at all).
   Written by `mg setup`/`mg profiles`/the TUI settings screen; read via
   `config.GetEnv`/`EnvValue`. Never committed.
 - `config/tui-settings.json` (gitignored) — the TUI's personal preferences:

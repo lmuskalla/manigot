@@ -91,9 +91,25 @@ func JDIRunLogPath(root, jobName string) string {
 // can't be parsed, its state isn't one of the three known values, or it
 // claims JDIRunning but hasn't been updated in over jdiRunningStaleAfter
 // (mg-jdi was almost certainly killed mid-run). Per Decision 4a, a stale or
-// unreadable file must never be shown as if it were live — this is the only
-// path through which callers should read it.
+// unreadable file must never be shown as if it were live — this is the
+// normal path through which callers should read it, the one exception being
+// StaleRunningJDI's raw read for mg-jdi's own next-start crash check.
 func ReadJDIStatus(root, jobName string) (JDIStatus, bool) {
+	st, ok := readJDIStatusRaw(root, jobName)
+	if !ok {
+		return JDIStatus{}, false
+	}
+	if st.State == JDIRunning && time.Since(st.Updated) > jdiRunningStaleAfter {
+		return JDIStatus{}, false
+	}
+	return st, true
+}
+
+// readJDIStatusRaw is the shared parse of the status sidecar: it returns the
+// parsed status with ok=false when the file is missing, unparseable, or
+// holds an unknown state value. Unlike ReadJDIStatus it does NOT degrade a
+// stale JDIRunning entry away — staleness is the caller's business.
+func readJDIStatusRaw(root, jobName string) (JDIStatus, bool) {
 	data, err := os.ReadFile(JDIStatusPath(root, jobName))
 	if err != nil {
 		return JDIStatus{}, false
@@ -115,11 +131,28 @@ func ReadJDIStatus(root, jobName string) (JDIStatus, bool) {
 		return JDIStatus{}, false
 	}
 
-	if raw.State == JDIRunning && time.Since(updated) > jdiRunningStaleAfter {
+	return JDIStatus{State: raw.State, Agent: raw.Agent, Updated: updated}, true
+}
+
+// StaleRunningJDI reports whether job jobName's mg-jdi sidecar claims a run
+// is in progress (JDIRunning) but has not been updated in over
+// jdiRunningStaleAfter — the on-disk signature of an mg-jdi process that was
+// killed (SIGKILL, OOM, host reboot) without ever reporting a stop. ok is
+// true only for that stale-running case: a stopped:* state, a fresh running
+// state, or a missing/unparseable sidecar all report ok=false. It is the raw
+// counterpart to ReadJDIStatus's degradation (same staleness constant, same
+// parse) and exists so mg-jdi's next-start crash check (see
+// cmd/mg/jdi.go's notifyCrashedRun) can distinguish "no run in progress"
+// from "a run died mid-flight".
+func StaleRunningJDI(root, jobName string) (JDIStatus, bool) {
+	st, ok := readJDIStatusRaw(root, jobName)
+	if !ok || st.State != JDIRunning {
 		return JDIStatus{}, false
 	}
-
-	return JDIStatus{State: raw.State, Agent: raw.Agent, Updated: updated}, true
+	if time.Since(st.Updated) <= jdiRunningStaleAfter {
+		return JDIStatus{}, false
+	}
+	return st, true
 }
 
 // WriteJDIStatus writes/overwrites job jobName's status sidecar under root.
