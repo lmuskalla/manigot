@@ -19,7 +19,7 @@ func TestLoadMissingFileReturnsZeroValue(t *testing.T) {
 
 func TestSaveThenLoadRoundTrips(t *testing.T) {
 	root := t.TempDir()
-	want := Settings{BaseBranch: "develop"}
+	want := Settings{BaseBranch: "develop", JobBranchPrefix: "jobs"}
 	if err := Save(root, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}

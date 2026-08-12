@@ -4,10 +4,11 @@
 // the personal/global config package (editor, subscription profile), which
 // stays gitignored and per-user.
 //
-// The first such project convention is the base branch: the ref new job
-// branches are cut from and the TUI's "b" quick-checkout lands on. It lives
-// here rather than in config because base branch is a shared project
-// convention, not a personal preference.
+// The project conventions are the base branch (the ref new job branches are
+// cut from and the TUI's "b" quick-checkout lands on) and the job branch
+// prefix (the namespace job branches live under). They live here rather than
+// in config because both are shared project conventions, not personal
+// preferences.
 package project
 
 import (
@@ -26,6 +27,16 @@ type Settings struct {
 	// list-view "b" quick-checkout lands on. Empty is treated as "main" —
 	// see BaseBranchValue.
 	BaseBranch string `json:"baseBranch,omitempty"`
+
+	// JobBranchPrefix is the namespace job branches live under, prepended to
+	// the type segment: with prefix "jobs" a feature job's branch is
+	// "jobs/feature/<id>_<slug>" instead of "feature/<id>_<slug>". Empty
+	// means no prefix (today's naming). A project that already has a plain
+	// branch named exactly "feature", "fix" or "chore" cannot create
+	// branches under that name in git ("cannot lock ref: 'refs/heads/feature'
+	// exists"), so the prefix lets it move job branches into a free
+	// namespace without renaming anything.
+	JobBranchPrefix string `json:"jobBranchPrefix,omitempty"`
 }
 
 // BaseBranchValue returns s.BaseBranch, defaulting to "main" when unset so
