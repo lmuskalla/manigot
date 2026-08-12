@@ -14,7 +14,11 @@ You receive the job ID and the path to the job directory. From there you read ev
 2. Verify you are on that branch: `git branch --show-current` — the mounted workspace is the job's own worktree, always on the job branch, so no `git checkout` is needed. The diff in step 5 is only meaningful on the job's branch. If the branch differs, stop and report back.
 3. Read `tasks.md` — understand what was planned
 4. Read `implementation.md` — understand what the developer says they did
-5. Run `git diff main...HEAD` to see every actual change made on this branch
+5. Determine the base branch the job was cut from — read `baseBranch` from `.manigot/manigot.json` (falling back to `main` when the key is absent), then run `git diff <base>...HEAD` to see every actual change made on this branch:
+```
+BASE=$(sed -n 's/^.*"baseBranch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' .manigot/manigot.json | head -n1)
+git diff "${BASE:-main}...HEAD"
+```
 6. Cross-reference the diff against the task list
 
 The git diff is your primary review surface — not just the files the developer mentioned. If something changed that isn't in `implementation.md`, that's a finding.
