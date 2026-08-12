@@ -611,7 +611,10 @@ Detail view:
 | `esc` | back to list |
 
 The **log** tab shows `mg jdi`'s `run.log` for this job — one section per
-agent invocation, with a timestamp/agent/attempt header. It reads
+agent invocation, with a timestamp/agent/attempt header; the attempt number
+counts that agent's invocations within the run (per agent, not per run), so
+a bounce back to the developer shows that developer's second call as attempt
+2. It reads
 "_no mg jdi run has happened for this job yet_" until the first `mg jdi` run
 against it; large files are tailed, not loaded in full. Never editable.
 

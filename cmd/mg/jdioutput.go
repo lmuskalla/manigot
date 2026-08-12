@@ -175,7 +175,10 @@ func logStarted(w io.Writer, jobName, profile string) {
 // Run launches an agent (TASK-2) — distinct from logInvocation's own
 // post-run header below, so a human watching run.log sees an invoked
 // header right away rather than waiting for the (possibly long-running)
-// invocation to finish before anything at all appears for it.
+// invocation to finish before anything at all appears for it. attempt is
+// that agent's invocation count within the run — per agent, not per run —
+// so the first call of every agent is attempt 1, and a bounced-back
+// agent's second call is attempt 2.
 func logAgentInvoked(w io.Writer, agent string, attempt int) {
 	fmt.Fprintf(w, "=== %s %s invoked (attempt %d) ===\n", time.Now().Format(time.RFC3339), agent, attempt)
 }
@@ -240,8 +243,10 @@ func normalizeWhitespace(s string) string {
 // the exact same section: a "=== <timestamp> <agent> finished (attempt N)
 // ===" header — paired with logAgentInvoked's own header just before this
 // invocation started (TASK-2/TASK-3) so a reader sees an invoked/finished
-// pair per agent call rather than one ambiguous header — then the agent's
-// extracted final-response text
+// pair per agent call rather than one ambiguous header. N is that agent's
+// invocation count within the run — per agent, not per run — so the first
+// call of every agent is attempt 1, and a bounced-back agent's second call
+// is attempt 2. Then the agent's extracted final-response text
 // (orchestrate.ResultText) — not the raw --output-format json blob, so a
 // human reading either destination sees prose, not JSON.
 //

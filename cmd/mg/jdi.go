@@ -314,6 +314,13 @@ func jdiTerminalState(k orchestrate.Kind) job.JDIState {
 // (Decision 4/4a/TASK-8; may be nil), until orchestrate.Next reports
 // StopFinished or StopNeedsHuman.
 //
+// The attempt number in each invocation's log header (logAgentInvoked /
+// logInvocation) counts that agent's own invocations within this run — per
+// agent, not a run-wide counter — so a bounce back to the developer logs
+// that developer's second call as attempt 2, not attempt 4. The counter is
+// seeded at 0 before the loop and reset at the start of every run, matching
+// the loop index's old behavior.
+//
 // Each iteration re-derives its decision from job.Stage() and git — the
 // job.Job struct's identity fields (Dir/Root/Branch/ID/Name) never change
 // across iterations, but Stage() and the git.CountVerdictCommits/
@@ -341,6 +348,12 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		return LoopResult{Kind: kind, Reason: reason}
 	}
 
+	// attempts counts each agent's invocations within this run, keyed by
+	// agent name — per agent, not run-wide — and feeds the "attempt N" in
+	// both logAgentInvoked's and logInvocation's headers below. Seeded at 0
+	// before the loop, so the first call of every agent is attempt 1.
+	attempts := make(map[string]int)
+
 	for i := 0; i < maxIterations; i++ {
 		stageBefore := j.Stage()
 		rounds, _ := git.CountVerdictCommits(root, j.Branch, j.ID)
@@ -362,7 +375,8 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		}
 
 		report(job.JDIRunning, decision.Agent)
-		logAgentInvoked(log, decision.Agent, i+1)
+		attempts[decision.Agent]++
+		logAgentInvoked(log, decision.Agent, attempts[decision.Agent])
 		headBefore, _ := git.HeadCommit(root, j.Branch)
 
 		out, runErr := runner.Run(decision.Agent, j)
@@ -389,7 +403,7 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		// output.go's logInvocation. DetectSignal below scans the raw bytes
 		// directly (it does its own JSON extraction), independent of what
 		// logInvocation writes for a human to read.
-		logInvocation(log, decision.Agent, i+1, out, targetFile, targetContent)
+		logInvocation(log, decision.Agent, attempts[decision.Agent], out, targetFile, targetContent)
 
 		if sig, ok := orchestrate.DetectSignal(out); ok {
 			lastAgent = decision.Agent

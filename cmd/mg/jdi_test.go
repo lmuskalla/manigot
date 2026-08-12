@@ -130,7 +130,9 @@ func TestRunHappyPath(t *testing.T) {
 
 // TestRunLogsAgentInvoked confirms Run writes an "invoked" event to the log
 // immediately before each agent invocation (TASK-2), reusing the same
-// attempt number logInvocation's own post-run header uses.
+// attempt number logInvocation's own post-run header uses. The attempt is
+// per agent: every agent's first call is attempt 1, so the happy path reads
+// analyst 1 -> developer 1 -> reviewer 1, not a run-wide 1/2/3.
 func TestRunLogsAgentInvoked(t *testing.T) {
 	root, j := initTestRepo(t)
 	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
@@ -156,8 +158,8 @@ func TestRunLogsAgentInvoked(t *testing.T) {
 	out := log.String()
 	for _, want := range []string{
 		"analyst invoked (attempt 1)",
-		"developer invoked (attempt 2)",
-		"reviewer invoked (attempt 3)",
+		"developer invoked (attempt 1)",
+		"reviewer invoked (attempt 1)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("log missing %q, got:\n%s", want, out)
@@ -216,6 +218,13 @@ func TestRunReportsStatus(t *testing.T) {
 	}
 }
 
+// TestRunOneBounceThenApproved covers the bounce path: a rejected review
+// sends control back to the developer once, and a second approved review
+// ends the run. The log headers assert the per-agent attempt semantics that
+// motivated the brief — the developer's second call is that developer's
+// attempt 2, NOT attempt 4 as a run-wide counter would produce, and the
+// reviewer's first call is attempt 1 — with each invocation's invoked and
+// finished headers sharing the same number.
 func TestRunOneBounceThenApproved(t *testing.T) {
 	root, j := initTestRepo(t)
 	writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
@@ -240,7 +249,8 @@ func TestRunOneBounceThenApproved(t *testing.T) {
 		return []byte("ok")
 	}}
 
-	got := Run(root, j, r, &bytes.Buffer{}, nil)
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
 	if got.Kind != orchestrate.StopFinished {
 		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
 	}
@@ -248,6 +258,21 @@ func TestRunOneBounceThenApproved(t *testing.T) {
 	if strings.Join(r.calls, ",") != strings.Join(wantCalls, ",") {
 		t.Errorf("calls = %v, want %v", r.calls, wantCalls)
 	}
+
+	// Per-agent attempts on the bounce path: each agent's first call is
+	// attempt 1 and the bounced-back developer's second call is attempt 2 —
+	// not attempt 4 as the old run-wide i+1 counter produced. The invoked and
+	// finished headers of one invocation share the same number.
+	assertLogOrder(t, log.String(), []string{
+		"developer invoked (attempt 1)",
+		"developer finished (attempt 1)",
+		"reviewer invoked (attempt 1)",
+		"reviewer finished (attempt 1)",
+		"developer invoked (attempt 2)",
+		"developer finished (attempt 2)",
+		"reviewer invoked (attempt 2)",
+		"reviewer finished (attempt 2)",
+	})
 }
 
 func TestRunStopsAfterOneBounceExhausted(t *testing.T) {
@@ -495,11 +520,11 @@ func TestRunFullLogSequenceHappyPath(t *testing.T) {
 		"analyst invoked (attempt 1)",
 		"analyst finished (attempt 1)",
 		"Wrote tasks.md with one task.",
-		"developer invoked (attempt 2)",
-		"developer finished (attempt 2)",
+		"developer invoked (attempt 1)",
+		"developer finished (attempt 1)",
 		"Implemented TASK-1, all tests pass.",
-		"reviewer invoked (attempt 3)",
-		"reviewer finished (attempt 3)",
+		"reviewer invoked (attempt 1)",
+		"reviewer finished (attempt 1)",
 		"Reviewed and approved.",
 		"mg jdi finished: stop-finished",
 	})
@@ -544,10 +569,10 @@ func TestRunFullLogSequenceDedupsMatchingOutput(t *testing.T) {
 		"analyst invoked (attempt 1)",
 		"analyst finished (attempt 1)",
 		"(output matches tasks.md, omitted)",
-		"developer invoked (attempt 2)",
-		"developer finished (attempt 2)",
-		"reviewer invoked (attempt 3)",
-		"reviewer finished (attempt 3)",
+		"developer invoked (attempt 1)",
+		"developer finished (attempt 1)",
+		"reviewer invoked (attempt 1)",
+		"reviewer finished (attempt 1)",
 		"mg jdi finished: stop-finished",
 	})
 	if strings.Contains(out, "TASK-1: do the thing") {
