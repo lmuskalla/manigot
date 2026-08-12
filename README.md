@@ -440,7 +440,11 @@ mg job "add image gallery block"
 **For a bug fix, skip steps 3–4 and go straight to the developer.**
 
 Job types: `feature` (default), `fix`, `chore`.
-Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug`.
+Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug` — or
+`<prefix>/<type>/<id>_<slug>` when the project sets `jobBranchPrefix` in
+`.manigot/manigot.json` (e.g. `jobs/feature/ab12cd_x`), which lets projects
+with a pre-existing plain branch named `feature`/`fix`/`chore` keep using the
+job workflow.
 
 ### How to get a job done
 
