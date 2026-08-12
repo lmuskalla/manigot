@@ -133,6 +133,25 @@ if [[ -n "$CURRENT_BRANCH" ]]; then
         echo "Error: base branch '${BASE_BRANCH}' does not exist; cannot create job branch from it." >&2
         exit 1
     fi
+    # ── Pre-flight namespace-collision check ──────────────────────────────────
+    # git stores refs as filesystem paths, so a plain branch "feature"
+    # (refs/heads/feature as a file) blocks the whole "feature/..." namespace
+    # (refs/heads/feature/... needs "feature" to be a directory). A project
+    # with a pre-existing branch named exactly "feature", "fix", "chore" — or
+    # matching the configured jobBranchPrefix — would fail here with git's
+    # cryptic "cannot lock ref ... exists". Detect it first and explain the
+    # fix instead of letting git fail. Check every ancestor path segment of
+    # the branch name except the leaf <id>_<slug> itself.
+    PATH_SEGMENT="${BRANCH%/*}"
+    while [[ -n "$PATH_SEGMENT" ]]; do
+        if git -C "$PROJECT_ROOT" rev-parse --verify --quiet "refs/heads/${PATH_SEGMENT}" >/dev/null; then
+            echo "Error: cannot create job branch '${BRANCH}': a branch named '${PATH_SEGMENT}' already exists, which blocks the '${PATH_SEGMENT}/...' namespace." >&2
+            echo "  Set jobBranchPrefix in .manigot/manigot.json (or rename the conflicting branch) and retry." >&2
+            exit 1
+        fi
+        [[ "$PATH_SEGMENT" != */* ]] && break  # a bare segment (e.g. "jobs") is the last ancestor
+        PATH_SEGMENT="${PATH_SEGMENT%/*}"
+    done
     # Sibling to PROJECT_ROOT by default, not nested inside it — see
     # scripts/lib/worktree.sh's doc and 207bfu_git-worktrees Decision 1 for
     # why. This naming convention is only ever computed here, at creation
