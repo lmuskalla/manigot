@@ -255,8 +255,9 @@ configured with `mg setup`.
   answer a question in conversation instead of the session halting. Supported
   under every profile (`claude-pro`, `zai`, `opencode-go`) — only the legacy,
   profile-less `--tool opencode` path still rejects it.
-- `agents/` — the eight global agents (`analyst`, `developer`, `reviewer`,
-  `security`, `product-owner`, `designer`, `quality`, `prompter`), available in every project via
+- `agents/` — the eleven global agents (`analyst`, `developer`, `reviewer`,
+  `security`, `product-owner`, `designer`, `quality`, `prompter`, `mentor`,
+  `systems-architect`, `devops-engineer`), available in every project via
   `@name`. Baked in twice: verbatim to `~/.claude/agents/`, and to
   `~/.config/opencode/agents/` with the `name`/`tools` frontmatter keys stripped
   (OpenCode takes the name from the filename and uses a different tools schema).
