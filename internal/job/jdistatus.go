@@ -16,9 +16,8 @@ import (
 // holds mg-jdi's ephemeral run state (gitignored, see .gitignore).
 const ManigotRelDir = ".manigot"
 
-// JDISidecarDirName is the sidecar directory (Decision 4 in the "fully
-// autonomous mode" brief) mg-jdi writes its per-job status and run log
-// into, under ManigotRelDir — deliberately outside any job's own directory
+// JDISidecarDirName is the sidecar directory mg-jdi writes its per-job
+// status and run log into, under ManigotRelDir — deliberately outside any job's own directory
 // (docs/jobs/<name>/) so it can never be swept into an agent's own
 // `git add -A`, and gitignored entirely (see .gitignore).
 const JDISidecarDirName = "jdi-status"
@@ -43,13 +42,13 @@ const (
 	JDIStoppedFinished JDIState = "stopped:finished"
 	// JDIStoppedNeedsHuman means mg-jdi's last run ended because it needed
 	// a human (retry budget exhausted, a NEEDS-HUMAN-INPUT marker, or the
-	// stall backstop — see tui/cmd/jdi).
+	// stall backstop — see mg-jdi).
 	JDIStoppedNeedsHuman JDIState = "stopped:needs-human"
 )
 
 // jdiRunningStaleAfter bounds how long a JDIRunning status is trusted
 // without an update before ReadJDIStatus degrades it to "no run in
-// progress" (Decision 4a). mg-jdi only updates the status file at
+// progress". mg-jdi only updates the status file at
 // agent-invocation boundaries, not continuously while one is in flight, so
 // this must be generous enough that a single long-running agent call isn't
 // mistaken for a killed mg-jdi process.
@@ -80,8 +79,7 @@ func JDIStatusPath(root, jobName string) string {
 }
 
 // JDIRunLogPath returns the run.log path within JDIStatusDir — the
-// append-only transcript tui/cmd/jdi writes (Decision 7) and the TUI's log
-// tab (TASK-9) reads.
+// append-only transcript mg-jdi writes, and the TUI's log tab reads.
 func JDIRunLogPath(root, jobName string) string {
 	return filepath.Join(JDIStatusDir(root, jobName), jdiRunLogFileName)
 }
@@ -90,7 +88,7 @@ func JDIRunLogPath(root, jobName string) string {
 // false when there is nothing live to report: no sidecar file exists, it
 // can't be parsed, its state isn't one of the three known values, or it
 // claims JDIRunning but hasn't been updated in over jdiRunningStaleAfter
-// (mg-jdi was almost certainly killed mid-run). Per Decision 4a, a stale or
+// (mg-jdi was almost certainly killed mid-run). A stale or
 // unreadable file must never be shown as if it were live — this is the only
 // path through which callers should read it.
 func ReadJDIStatus(root, jobName string) (JDIStatus, bool) {
@@ -123,10 +121,10 @@ func ReadJDIStatus(root, jobName string) (JDIStatus, bool) {
 }
 
 // WriteJDIStatus writes/overwrites job jobName's status sidecar under root.
-// Called by tui/cmd/jdi at each state transition (Decision 4a): once before
+// Called by mg-jdi at each state transition: once before
 // invoking an agent (JDIRunning, that agent's name) and once more at loop
 // exit (JDIStoppedFinished or JDIStoppedNeedsHuman, the last agent that
-// ran). Lives here (not in tui/cmd/jdi) so the write and read sides share
+// ran). Lives here so the write and read sides share
 // one on-disk format definition rather than risking drift between two
 // independent copies.
 func WriteJDIStatus(root, jobName string, state JDIState, agent string) error {
@@ -147,16 +145,16 @@ func WriteJDIStatus(root, jobName string, state JDIState, agent string) error {
 }
 
 // jdiRunLogTailBytes bounds how much of a job's run.log ReadJDIRunLogTail
-// loads into memory — a tail, not "load everything" (TASK-9's own
-// requirement for a large/growing file), the same kind of bounded-viewport
+// loads into memory — a tail, not "load everything" (a large/growing
+// file), the same kind of bounded-viewport
 // approach the markdown viewer already uses for job files. Generous enough
 // to comfortably hold many invocations' worth of text while staying a small,
 // fixed cost regardless of how long a job's full history grows.
 const jdiRunLogTailBytes = 256 * 1024 // 256 KiB
 
 // ReadJDIRunLogTail reads up to the last jdiRunLogTailBytes of job jobName's
-// run.log sidecar (JDIRunLogPath) — the TUI's log tab (TASK-9), the primary
-// way to see what mg-jdi is doing from inside the TUI (Decision 7/7a).
+// run.log sidecar (JDIRunLogPath) — the TUI's log tab, the primary way to
+// see what mg-jdi is doing from inside the TUI.
 //
 // ok is false only when there is no run.log at all yet — the common case of
 // a job mg-jdi has never driven — so callers can show a distinct "no run

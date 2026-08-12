@@ -55,30 +55,26 @@ func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishR
 	if berr != nil {
 		return FinishResult{}, berr
 	}
-	branch := exactBranchMatch(branches, jobArg)
+	branch := git.ExactBranchMatch(branches, jobArg)
 	if branch == "" {
-		prefixMatches := prefixBranchMatches(branches, jobArg)
+		prefixMatches := git.PrefixBranchMatches(branches, jobArg)
 		switch len(prefixMatches) {
 		case 0:
-			msg := fmt.Sprintf("Error: job '%s' not found among local branches.\nActive job branches:", jobArg)
-			for _, b := range branches {
-				msg += "\n  " + b
-			}
-			return FinishResult{}, fmt.Errorf("%s", msg)
+			return FinishResult{}, jobNotFoundError(jobArg, branches)
 		case 1:
 			branch = prefixMatches[0]
 		default:
-			return FinishResult{}, fmt.Errorf("Error: job '%s' is ambiguous — matches branches: %s", jobArg, strings.Join(prefixMatches, " "))
+			return FinishResult{}, fmt.Errorf("job '%s' is ambiguous — matches branches: %s", jobArg, strings.Join(prefixMatches, " "))
 		}
 	}
-	jobName := branchTail(branch)
+	jobName := git.BranchTail(branch)
 
 	wtPath, ok, werr := git.WorktreeForBranch(root, branch)
 	if werr != nil {
 		return FinishResult{}, werr
 	}
 	if !ok {
-		return FinishResult{}, fmt.Errorf("Error: branch '%s' has no git worktree — cannot finish job '%s'.\nA job's worktree is created by 'mg job' and should always exist for an open job; this is an inconsistent state.", branch, jobName)
+		return FinishResult{}, fmt.Errorf("branch '%s' has no git worktree — cannot finish job '%s'.\nA job's worktree is created by 'mg job' and should always exist for an open job; this is an inconsistent state.", branch, jobName)
 	}
 
 	jobDir := filepath.Join(wtPath, JobsRelDir, jobName)
@@ -86,7 +82,7 @@ func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishR
 	verdict := filepath.Join(jobDir, "verdict.md")
 
 	if _, err := os.Stat(brief); err != nil {
-		return FinishResult{}, fmt.Errorf("Error: brief.md not found in %s", jobDir)
+		return FinishResult{}, fmt.Errorf("brief.md not found in %s", jobDir)
 	}
 
 	// ── Verdict checks (same warnings + confirmations as the script) ──────
@@ -131,13 +127,13 @@ func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishR
 		return FinishResult{}, err
 	}
 	if worktreeBranch != branch {
-		return FinishResult{}, fmt.Errorf("Error: worktree at %s is on '%s', expected '%s'.\nSomeone may have checked out a different branch inside this job's worktree by hand — fix that before finishing.", wtPath, worktreeBranch, branch)
+		return FinishResult{}, fmt.Errorf("worktree at %s is on '%s', expected '%s'.\nSomeone may have checked out a different branch inside this job's worktree by hand — fix that before finishing.", wtPath, worktreeBranch, branch)
 	}
 
 	if dirty, err := git.WorkingTreeDirty(wtPath); err != nil {
 		return FinishResult{}, err
 	} else if dirty {
-		return FinishResult{}, fmt.Errorf("Error: uncommitted changes in the worktree for branch '%s'. Commit or stash before finishing.", branch)
+		return FinishResult{}, fmt.Errorf("uncommitted changes in the worktree for branch '%s'. Commit or stash before finishing.", branch)
 	}
 
 	// ── Info + confirmation ────────────────────────────────────────────────
@@ -239,62 +235,15 @@ func askConfirm(confirm ConfirmFunc, out io.Writer, prompt string) error {
 	return nil
 }
 
-// exactBranchMatch returns the branch whose tail segment (after the last "/")
-// equals name, or "" when none does — the scripts' "exact match on the id_slug
-// segment first" resolution.
-func exactBranchMatch(branches []string, name string) string {
+// jobNotFoundError builds the "job not found among local branches" error with
+// the active-branch listing — the wording finish-job.sh and delete-job.sh
+// shared (pinned by tests). Shared by FinishJob and DeleteJob.
+func jobNotFoundError(jobArg string, branches []string) error {
+	msg := fmt.Sprintf("job '%s' not found among local branches.\nActive job branches:", jobArg)
 	for _, b := range branches {
-		if branchTail(b) == name {
-			return b
-		}
+		msg += "\n  " + b
 	}
-	return ""
-}
-
-// prefixBranchMatches returns the branches whose tail segment starts with name
-// — the scripts' prefix-match fallback and ambiguity error.
-func prefixBranchMatches(branches []string, name string) []string {
-	var matches []string
-	for _, b := range branches {
-		if strings.HasPrefix(branchTail(b), name) {
-			matches = append(matches, b)
-		}
-	}
-	return matches
-}
-
-// branchTail returns the id_slug tail segment of a branch name (everything
-// after the last "/", or the whole name when there is none).
-func branchTail(branch string) string {
-	if i := strings.LastIndex(branch, "/"); i >= 0 {
-		return branch[i+1:]
-	}
-	return branch
-}
-
-// verdictOverallMatch mirrors finish-job.sh's
-// `grep -i '^## Overall' -A5 "$VERDICT" | grep -iE 'APPROVED|REJECTED|NEEDS
-// WORK' | head -1`: the first verdict-status line within grep's -A5 window
-// (the matched heading line plus the five following lines). Returns "" when
-// there is no "## Overall" heading or no status word in the window.
-func verdictOverallMatch(data []byte) string {
-	loc := verdictOverallRe.FindStringIndex(string(data))
-	if loc == nil {
-		return ""
-	}
-	// Rebuild the heading line plus the next five lines (grep -A5 includes
-	// the matched line itself).
-	rest := string(data)[loc[0]:]
-	lines := strings.Split(rest, "\n")
-	if len(lines) > 6 {
-		lines = lines[:6]
-	}
-	for _, line := range lines {
-		if verdictNotApprovedRe.MatchString(line) || verdictApprovedRe.MatchString(line) {
-			return strings.TrimSpace(line)
-		}
-	}
-	return ""
+	return errors.New(msg)
 }
 
 // briefTitle extracts the job title the way finish-job.sh did:

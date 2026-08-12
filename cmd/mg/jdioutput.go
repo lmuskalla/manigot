@@ -25,7 +25,7 @@ var sidecarExcludePattern = filepath.ToSlash(filepath.Join(job.ManigotRelDir, jo
 // ensureSidecarIgnored appends sidecarExcludePattern to root's
 // .git/info/exclude if not already present.
 //
-// This matters because the status/run.log sidecar (Decision 4) lives inside
+// This matters because the status/run.log sidecar lives inside
 // the *target project's* .manigot/ — not manigot's own checkout — and the
 // whole point of keeping it outside every job's own directory is so it can
 // never be swept into an agent's own `git add -A`. That only actually holds
@@ -86,7 +86,7 @@ func containsLine(body, pattern string) bool {
 }
 
 // openRunLog ensures the sidecar directory (job.JDIStatusDir — shared with
-// the status file WriteJDIStatus writes, Decision 4) exists and opens
+// the status file WriteJDIStatus writes) exists and opens
 // (creating if necessary) run.log for appending — a fresh mg-jdi run
 // continues the same job's transcript rather than truncating it, so a human
 // can see the full history of every run against this job, not just the most
@@ -161,10 +161,10 @@ func (s *sectionWriter) Write(p []byte) (int, error) {
 }
 
 // logStarted writes a "mg jdi started" event to w, once, at the very top of
-// a run (TASK-1) — main()'s first write to logDest, before Run is even
+// a run — main()'s first write to logDest, before Run is even
 // invoked, so a human watching run.log sees confirmation the run began
 // immediately, rather than the log staying empty until the first agent
-// invocation finishes (the brief's own complaint). Mirrors
+// invocation finishes. Mirrors
 // logImmediateStop's "=== ... ===" header shape so every event in the log
 // looks consistent.
 func logStarted(w io.Writer, jobName, profile string) {
@@ -172,7 +172,7 @@ func logStarted(w io.Writer, jobName, profile string) {
 }
 
 // logAgentInvoked writes an "agent invoked" event to w immediately before
-// Run launches an agent (TASK-2) — distinct from logInvocation's own
+// Run launches an agent — distinct from logInvocation's own
 // post-run header below, so a human watching run.log sees an invoked
 // header right away rather than waiting for the (possibly long-running)
 // invocation to finish before anything at all appears for it.
@@ -181,7 +181,7 @@ func logAgentInvoked(w io.Writer, agent string, attempt int) {
 }
 
 // logJobFinished writes a "job finished" event to w at Run's loop exit
-// (TASK-4) — both terminal outcomes, StopFinished and StopNeedsHuman.
+// — both terminal outcomes, StopFinished and StopNeedsHuman.
 //
 // includeReason is false only for the stop-before-any-agent-ran case: that
 // path has already printed reason via logImmediateStop immediately above,
@@ -195,23 +195,11 @@ func logJobFinished(w io.Writer, kind orchestrate.Kind, reason string, includeRe
 	}
 }
 
-// agentTargetFile maps each driven agent (orchestrate.Sequence) to the job
-// file it's expected to have written by the time its invocation returns —
-// TASK-5's dedup check reads this file fresh off disk via j.Dir, safe to read
-// unconditionally because every job lives in its own worktree
-// (207bfu_git-worktrees) that is the live, correct place to read it from —
-// to compare against the agent's own response text.
-var agentTargetFile = map[string]string{
-	"analyst":   "tasks.md",
-	"developer": "implementation.md",
-	"reviewer":  "verdict.md",
-}
-
 // isDuplicateOutput reports whether fileContent — the just-run agent's
 // target file, read fresh after this invocation — appears, once both sides
 // are trimmed and internal whitespace is collapsed, as a substring of text —
-// the agent's own response (TASK-5's "already the same ... skip it" rule
-// from the brief). Substring rather than exact equality, since a real
+// the agent's own response (the "already the same ... skip it" rule).
+// Substring rather than exact equality, since a real
 // response typically echoes the file's content plus its own surrounding
 // commentary (a leading summary, a trailing "done!", etc.).
 //
@@ -235,11 +223,11 @@ func normalizeWhitespace(s string) string {
 }
 
 // logInvocation writes one agent invocation's captured output to w — Run's
-// fan-out target (Decision 7), which main() builds as an io.MultiWriter of
+// fan-out target, which main() builds as an io.MultiWriter of
 // mg-jdi's own stdout and the sidecar's run.log, so both destinations get
 // the exact same section: a "=== <timestamp> <agent> finished (attempt N)
 // ===" header — paired with logAgentInvoked's own header just before this
-// invocation started (TASK-2/TASK-3) so a reader sees an invoked/finished
+// invocation started so a reader sees an invoked/finished
 // pair per agent call rather than one ambiguous header — then the agent's
 // extracted final-response text
 // (orchestrate.ResultText) — not the raw --output-format json blob, so a
@@ -253,16 +241,17 @@ func normalizeWhitespace(s string) string {
 // follows (real text, "(no output)", or the dedup "(output matches ...,
 // omitted)" note below), so the separation is the same in every case.
 //
-// Honesty note (Decision 7's caveat, carried into scripts/entrypoint.sh's
-// own comment): this is exactly the agent's *final response text* per
+// Honesty note (carried into scripts/entrypoint.sh's own comment): this is
+// exactly the agent's *final response text* per
 // invocation, not a blow-by-blow of every tool call/file edit — that's all
 // `claude --print` (json or plain-text form) actually returns. "See what
 // happens" means "see each agent's final answer as it's produced," not a
 // live diff of its work.
 //
-// targetFile/targetContent (TASK-5) are the just-run agent's expected job
+// targetFile/targetContent are the just-run agent's expected job
 // file and its content read fresh after the invocation (see
-// agentTargetFile) — the caller's responsibility, since it already has j.Dir
+// orchestrate.AgentTargetFile) — the caller's responsibility, since it
+// already has j.Dir
 // on hand. When the response text turns out to be a duplicate of that file
 // (isDuplicateOutput), the body is replaced with a short note instead of the
 // full (possibly large) text — the header is unaffected, so a reader still
@@ -290,7 +279,7 @@ func logInvocation(w io.Writer, agent string, attempt int, raw []byte, targetFil
 // returning a Stop* decision before any agent has ever been invoked (e.g.
 // job.StageDefine with an unwritten brief.md), the one case logInvocation
 // never runs for. Without this, run.log would be left at 0 bytes for that
-// stop, itself confusing (see the "jdi does not work" job's own complaint)
+// stop, itself confusing
 // independent of whether the stop was the correct call. Mirrors
 // logInvocation's "=== ... ===" header shape so both look consistent in the
 // same log, but names the stop instead of an agent/attempt.

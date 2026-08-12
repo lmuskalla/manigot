@@ -1,7 +1,6 @@
 // Package job reads manigot job data from the filesystem.
 //
-// An open job lives inside its own git worktree (created by
-// scripts/new-job.sh — see 207bfu_git-worktrees), at
+// An open job lives inside its own git worktree (created by mg job), at
 // <worktree>/docs/jobs/<id>_<slug>/; a closed/archived job lives at
 // <project-root>/docs/jobs/archive/<id>_<slug>/, since the project root (the
 // main worktree) stays on the base branch in steady state. Either way a
@@ -56,8 +55,8 @@ type Job struct {
 	// Type is the job type: feature (default), fix, or chore.
 	Type string
 
-	// Status is open (default) or done. done is set by finish-job.sh when a
-	// job is archived.
+	// Status is open (default) or done. done is set by mg done when a job is
+	// archived.
 	Status string
 
 	// Branch is the git branch the job's worktree is checked out to (empty
@@ -74,8 +73,7 @@ type Job struct {
 
 // frontmatterKeys are the recognised bare "key: value" keys at the top of
 // brief.md. Loose parsing: these exact keys are matched line-anchored anywhere
-// in the file, matching how scripts/finish-job.sh reads them with
-// `grep '^branch:'`. Body text never legitimately starts with these keys.
+// in the file, matching how mg done reads them with a line-anchored grep. Body text never legitimately starts with these keys.
 var frontmatterKeys = map[string]bool{
 	"status": true,
 	"type":   true,
@@ -89,9 +87,8 @@ var frontmatterKeys = map[string]bool{
 //
 // It never returns an error for a missing or malformed brief.md: the job is
 // returned with sensible defaults (type=feature, status=open, title=Name) so
-// the UI can still list a half-formed job. The bash scripts make the same
-// assumption — new-job.sh always writes a brief.md, so an absent one is a
-// best-effort case.
+// the UI can still list a half-formed job. mg job always writes a brief.md,
+// so an absent one is a best-effort case.
 func ReadJob(dir string) (Job, error) {
 	name := filepath.Base(dir)
 	j := Job{

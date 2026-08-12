@@ -40,7 +40,7 @@ type fileTab struct {
 	content  string // raw markdown (or the placeholder) as last read from disk
 	viewer   *markdown.Viewer
 
-	// isLog marks the fifth "log" tab (TASK-9): unlike the four job files,
+	// isLog marks the fifth "log" tab: unlike the four job files,
 	// its content comes from mg-jdi's sidecar run.log
 	// (job.ReadJDIRunLogTail(d.job.Root, d.job.Name)) rather than d.path —
 	// the sidecar lives outside any job's worktree (tied only to the job
@@ -49,7 +49,7 @@ type fileTab struct {
 
 	// stale marks a viewer that is out of date with content and/or the
 	// current body size, because the tab wasn't active when that changed —
-	// either a resize (syncViewerSize, TASK-3) or a (re)load (loadTab, see
+	// either a resize (syncViewerSize) or a (re)load (loadTab, see
 	// the "selecting/leaving a job is laggy" fix below). It is cleared the
 	// next time the tab becomes active and is caught up in render() via
 	// ensureCurrentSized.
@@ -65,7 +65,7 @@ type detailView struct {
 	height int
 
 	// status, when non-empty, replaces the footer's key hint — used to confirm
-	// an agent launch (set by TASK-8) or report a launch error.
+	// an agent launch or report a launch error.
 	status string
 
 	// spinnerStep is the current activity-indicator frame index (see
@@ -76,7 +76,7 @@ type detailView struct {
 	spinnerStep int
 }
 
-// newDetailView loads all four job files, plus TASK-9's fifth "log" tab, for
+// newDetailView loads all four job files, plus the fifth "log" tab, for
 // job j at the given viewport size.
 func newDetailView(j job.Job, width, height int) *detailView {
 	d := &detailView{job: j, width: width, height: height}
@@ -109,7 +109,7 @@ func filePlaceholder(filename string) string {
 }
 
 // loadTabs (re)reads every tab's file from disk. Called on construction and
-// on refresh (TASK-10): agents edit files outside the TUI, so the detail view
+// on refresh: agents edit files outside the TUI, so the detail view
 // must re-read to pick up their changes.
 //
 // Only the active tab's viewer is actually re-rendered here; the other three
@@ -118,7 +118,7 @@ func filePlaceholder(filename string) string {
 // all four tabs' markdown — non-trivial cost (glamour.Render is not free) —
 // on every job open and every return to the list, which is what made
 // selecting a job and pressing esc/backspace to leave one feel laggy even
-// after TASK-3 fixed the same problem for resize-triggered re-renders.
+// after the same problem was fixed for resize-triggered re-renders.
 func (d *detailView) loadTabs() {
 	for i := range d.tabs {
 		d.loadTab(i)
@@ -180,8 +180,7 @@ func (d *detailView) loadTab(i int) {
 // stripLeadingFrontmatter removes the leading H1 + "key: value" frontmatter
 // block every job file's new-job.sh scaffold begins with, so glamour doesn't
 // render a second title/metadata block duplicating what the detail view's
-// own chrome (title+meta line) already shows (TASK-6 de-dup; app chrome was
-// picked to own identity — see the brief).
+// own chrome (title+meta line) already shows — app chrome owns identity.
 //
 // Only the leading, contiguous run bounded by the first blank line is ever
 // touched: the first line if it's an H1 ("# "), an optional single blank
@@ -288,11 +287,11 @@ func (d *detailView) setStatus(s string) {
 // eagerly re-rendering them too.
 //
 // Re-rendering all four tabs' markdown here was a major source of the
-// reported input lag (TASK-1): this is called from setStatus, which itself
-// fires on nearly every keypress in the detail view (including every agent
-// launch attempt), so every keypress was paying for three re-renders that
-// weren't even visible. Deferred tabs catch up lazily in render() the next
-// time they actually become the active one (TASK-3).
+// reported input lag: this is called from setStatus, which itself fires on
+// nearly every keypress in the detail view (including every agent launch
+// attempt), so every keypress was paying for three re-renders that weren't
+// even visible. Deferred tabs catch up lazily in render() the next time
+// they actually become the active one.
 func (d *detailView) syncViewerSize() {
 	w, h := d.bodyWidth(), d.bodyHeight()
 	for i := range d.tabs {
@@ -447,9 +446,8 @@ func (d *detailView) render() string {
 	meta := fmt.Sprintf("  %s · %s · %s · %s", d.job.ID, d.job.Status, d.job.Type, d.job.Date)
 	b.WriteString(dimStyle.Render(meta))
 	// Branch: show which branch the job's own worktree is checked out to.
-	// Purely informational — every job has its own worktree
-	// (207bfu_git-worktrees), so there is no "wrong branch checked out"
-	// state to warn about anymore.
+	// Purely informational — every job has its own worktree, so there is no
+	// "wrong branch checked out" state to warn about anymore.
 	if d.job.Branch != "" {
 		b.WriteString(dimStyle.Render(" · branch: " + d.job.Branch))
 	}
@@ -486,7 +484,7 @@ type actionButton struct {
 // consistent "[key] Label" format; then, on its own line beneath, a "stage:"
 // label (mirroring "docs:" and "agents:") followed by the stage timeline
 // (see renderStageTimeline) alongside the "[D] Done" mark-done button and
-// "[j] mg-jdi" (TASK-12) — a bigger, composite action like Done, not a
+// "[j] mg-jdi" — a bigger, composite action like Done, not a
 // single-agent launch, hence its own key rather than living in agentOrder.
 //
 // The stage timeline stays purely informational: an at-a-glance sense of
@@ -569,11 +567,11 @@ func (d *detailView) renderActionBar() string {
 	stageLine.WriteString(" ")
 	stageLine.WriteString(accentStyle.Render("just do it"))
 	// A live running/stopped indicator right next to the button that starts
-	// it (TASK-2 of the "multiple jdi instances" job): reuses the same
-	// job.ReadJDIStatus-backed jdiStatusBadge formatting the job-list row
-	// already renders, so a user sitting in the detail view — exactly where
-	// "j" is pressed, and where TASK-1's block message appears — can see at
-	// a glance whether mg-jdi is still going, not only from the list. The
+	// it: reuses the same job.ReadJDIStatus-backed jdiStatusBadge formatting
+	// the job-list row already renders, so a user sitting in the detail view
+	// — exactly where "j" is pressed, and where the already-running block
+	// message appears — can see at a glance whether mg-jdi is still going,
+	// not only from the list. The
 	// running variant's animated frame comes from d.spinnerStep, threaded in
 	// by the App's spinnerTickMsg handler, so it animates in sync with the
 	// list row while a run is active. Like the list badge, the underlying

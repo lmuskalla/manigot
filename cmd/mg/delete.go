@@ -20,7 +20,7 @@ func runDelete(args []string, r io.Reader, stdout, stderr io.Writer) int {
 
 	root, err := job.FindProjectRoot()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		cliError(stderr, err)
 		return 1
 	}
 	if root == "" {
@@ -38,7 +38,7 @@ func runDelete(args []string, r io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		cliError(stderr, err)
 		return 1
 	}
 	return 0

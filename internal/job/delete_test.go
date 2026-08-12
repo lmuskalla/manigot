@@ -155,7 +155,7 @@ func TestDeleteJobNonGitNotFound(t *testing.T) {
 	}
 	var out bytes.Buffer
 	_, err := DeleteJob(root, "zzzz99", yesConfirm, &out)
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'zzzz99' not found under docs/jobs/") {
+	if err == nil || !strings.Contains(err.Error(), "job 'zzzz99' not found under docs/jobs/") {
 		t.Errorf("not-found error = %v", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestDeleteJobNotFound(t *testing.T) {
 	root := createCheckout(t, t.TempDir())
 	var out bytes.Buffer
 	_, err := DeleteJob(root, "zzzz99", yesConfirm, &out)
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'zzzz99' not found among local branches.") {
+	if err == nil || !strings.Contains(err.Error(), "job 'zzzz99' not found among local branches.") {
 		t.Errorf("not-found error = %v", err)
 	}
 }

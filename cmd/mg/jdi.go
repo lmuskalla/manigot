@@ -1,8 +1,7 @@
 // mg jdi ("just do it") drives a job's fixed agent sequence —
 // @analyst → @developer → @reviewer — end to end without a human manually
-// triggering each stage, per the "fully autonomous mode" brief
-// (docs/jobs/vu33rn_fully-autonomous-mode/). It is the fold of the former
-// cmd/jdi main into the single mg binary (runJDI).
+// triggering each stage. It is the fold of the former cmd/jdi main into
+// the single mg binary (runJDI).
 //
 // It resolves the job by ID or directory name, then repeatedly asks
 // internal/orchestrate what to do next given the job's current
@@ -13,8 +12,7 @@
 // NEEDS-HUMAN-INPUT marker, or the same agent made no progress twice in a
 // row).
 //
-// It does not auto-merge the finished branch — see the brief's completion
-// criteria.
+// It does not auto-merge the finished branch.
 //
 // Run from anywhere inside a project that has a docs/ directory:
 //
@@ -23,12 +21,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/git"
@@ -110,7 +110,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Fan-out (Decision 7/7a/TASK-7): every invocation's formatted output
+	// Fan-out: every invocation's formatted output
 	// (see jdioutput.go's logInvocation) goes to both mg-jdi's own stdout —
 	// which has an audience only for a direct CLI run; a TUI-launched run is
 	// detached with no terminal attached to this leg at all — and the
@@ -133,7 +133,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 	// to a fresh log excepted, which is what wroteSection captures.
 	logDest = &sectionWriter{w: logDest, wroteSection: wroteSection}
 
-	// Status sidecar (Decision 4/4a/TASK-8): best-effort — a write failure
+	// Status sidecar: best-effort — a write failure
 	// (e.g. a read-only filesystem) must not abort the loop itself, only
 	// mean the TUI's list-row badge and stop-notification dedup won't see it.
 	// mg-jdi's own stdout/run.log remain authoritative for a human watching
@@ -148,7 +148,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 	result := Run(root, j, runner, logDest, statusFn)
 	fmt.Fprintf(stdout, "\nmg jdi: %s — %s\n", result.Kind, result.Reason)
 
-	// Stop notification, CLI path (Decision 5/7a): ring the terminal bell
+	// Stop notification, CLI path: ring the terminal bell
 	// at both loop-exit points (finished, needs human) — this process is
 	// attached to the human's own terminal for a direct `mg jdi` run, which
 	// is the only case this leg has an audience for. A TUI-launched run has
@@ -165,20 +165,27 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 }
 
 // resolveJob finds the job named or ID-prefixed by arg among every job
-// job.Discover can see (cross-branch — see tui/internal/job), mirroring
-// scripts/run.sh's own --job resolution: an exact job-directory-name match
-// first, then an exact ID match, then a directory-name prefix match (the
-// same fallback scripts/run.sh's `find ... -name "${JOB}*"` uses).
+// job.Discover can see (cross-branch — see internal/job), mirroring the
+// session launcher's own --job resolution: an exact job-directory-name match
+// first, then an exact ID match, then a directory-name prefix match.
 func resolveJob(root, arg string) (job.Job, error) {
 	jobs, err := job.Discover(root)
 	if err != nil {
 		return job.Job{}, fmt.Errorf("could not list jobs: %w", err)
 	}
 
-	for _, j := range jobs {
-		if j.Name == arg {
-			return j, nil
-		}
+	// A job's Name is its id_slug — the same concept as a branch tail — so
+	// the exact-name and name-prefix matching below reuses the branch-matching
+	// primitives in internal/git rather than re-implementing them.
+	byName := make(map[string]job.Job, len(jobs))
+	names := make([]string, len(jobs))
+	for i, j := range jobs {
+		byName[j.Name] = j
+		names[i] = j.Name
+	}
+
+	if name := git.ExactBranchMatch(names, arg); name != "" {
+		return byName[name], nil
 	}
 	for _, j := range jobs {
 		if j.ID == arg {
@@ -186,26 +193,20 @@ func resolveJob(root, arg string) (job.Job, error) {
 		}
 	}
 
-	var prefixMatches []job.Job
-	for _, j := range jobs {
-		if strings.HasPrefix(j.Name, arg) {
-			prefixMatches = append(prefixMatches, j)
-		}
-	}
-	switch len(prefixMatches) {
+	switch matches := git.PrefixBranchMatches(names, arg); len(matches) {
 	case 0:
 		return job.Job{}, fmt.Errorf("job %q not found under docs/jobs/", arg)
 	case 1:
-		return prefixMatches[0], nil
+		return byName[matches[0]], nil
 	default:
-		return job.Job{}, fmt.Errorf("job %q is ambiguous — matches %d jobs", arg, len(prefixMatches))
+		return job.Job{}, fmt.Errorf("job %q is ambiguous — matches %d jobs", arg, len(matches))
 	}
 }
 
 // AgentRunner runs one non-interactive agent invocation for job j and
 // returns its captured output (the session launcher's --print path — a
 // `claude --output-format json` payload when available, otherwise plain
-// text; see tui/internal/orchestrate.DetectSignal, which handles both).
+// text; see internal/orchestrate.DetectSignal, which handles both).
 //
 // Implemented by commandAgentRunner for real invocations; the tests use a
 // fake instead of spawning real containers.
@@ -290,7 +291,20 @@ type LoopResult struct {
 // trusting Next's own termination alone.
 const maxIterations = 20
 
-// StatusFunc is called by Run at each state transition (Decision 4a): once
+// jdiProbeTimeout bounds each loop iteration's git probes (HeadCommit,
+// CountVerdictCommits, LatestCommitIsVerdict): local, fast reads, so 10s is
+// generous — the point is that a hung git stalls one probe rather than the
+// whole run. The probe errors are already read with `_` (the loop tolerates a
+// failed probe as "no information"), so a timeout degrades exactly like any
+// other probe failure and surfaces in the stop reason only if it's the last
+// thing that happened before a stop.
+//
+// A var rather than a const so tests can lower it: the stall-backstop test
+// needs a runner whose Run call outlives the probe timeout, which would be
+// a 10s test at the production value.
+var jdiProbeTimeout = 10 * time.Second
+
+// StatusFunc is called by Run at each state transition: once
 // before invoking an agent (job.JDIRunning, that agent's name) and once
 // more at loop exit (the terminal state, and the last agent that ran, or ""
 // if none ever did — e.g. a job stuck at StageDefine). May be nil, in which
@@ -309,10 +323,9 @@ func jdiTerminalState(k orchestrate.Kind) job.JDIState {
 }
 
 // Run drives job j through the agent sequence via runner, writing each
-// invocation's formatted output to log (Decision 7/TASK-7 — see
-// output.go's logInvocation) and reporting state transitions to status
-// (Decision 4/4a/TASK-8; may be nil), until orchestrate.Next reports
-// StopFinished or StopNeedsHuman.
+// invocation's formatted output to log (see jdioutput.go's logInvocation) and
+// reporting state transitions to status (may be nil), until
+// orchestrate.Next reports StopFinished or StopNeedsHuman.
 //
 // Each iteration re-derives its decision from job.Stage() and git — the
 // job.Job struct's identity fields (Dir/Root/Branch/ID/Name) never change
@@ -330,8 +343,8 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 			status(state, agent)
 		}
 	}
-	// finish reports the terminal status, logs the "job finished" event
-	// (TASK-4), and builds the LoopResult every exit point returns.
+	// finish reports the terminal status, logs the "job finished" event,
+	// and builds the LoopResult every exit point returns.
 	// includeReason is normally true; it's false only for the
 	// stop-before-any-agent-ran case below, whose reason was already printed
 	// by logImmediateStop a line above — see logJobFinished's own doc.
@@ -342,12 +355,24 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 	}
 
 	for i := 0; i < maxIterations; i++ {
+		// One bounded context for this iteration's pre-agent git probes
+		// (see jdiProbeTimeout): a hung git must stall one probe, not the
+		// whole run. Each context is cancelled at its point of use — never
+		// deferred, which would accumulate up to maxIterations timers until
+		// Run returns. The post-agent stall probe gets its own fresh context
+		// below: runner.Run is a minutes-long docker/LLM invocation, so a
+		// context created here would be long expired by the time that probe
+		// runs and would read "" for HEAD, silently defeating the stall
+		// backstop.
+		probeCtx, cancelProbes := context.WithTimeout(context.Background(), jdiProbeTimeout)
+
 		stageBefore := j.Stage()
-		rounds, _ := git.CountVerdictCommits(root, j.Branch, j.ID)
-		tipIsVerdict, _ := git.LatestCommitIsVerdict(root, j.Branch, j.ID)
+		rounds, _ := git.CountVerdictCommitsWithContext(probeCtx, root, j.Branch, j.ID)
+		tipIsVerdict, _ := git.LatestCommitIsVerdictWithContext(probeCtx, root, j.Branch, j.ID)
 		decision := orchestrate.Next(stageBefore, rounds, tipIsVerdict)
 
 		if decision.Kind != orchestrate.RunAgent {
+			cancelProbes()
 			includeReason := true
 			if !agentEverRan {
 				// No agent has run yet this whole loop (typically the very
@@ -363,30 +388,31 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 
 		report(job.JDIRunning, decision.Agent)
 		logAgentInvoked(log, decision.Agent, i+1)
-		headBefore, _ := git.HeadCommit(root, j.Branch)
+		headBefore, _ := git.HeadCommitWithContext(probeCtx, root, j.Branch)
+		cancelProbes() // pre-agent probes done; the agent invocation below can take minutes
 
 		out, runErr := runner.Run(decision.Agent, j)
 		agentEverRan = true
 
-		// TASK-5: read the just-run agent's expected target file fresh off
+		// Read the just-run agent's expected target file fresh off
 		// disk, so logInvocation can skip re-printing output that's already
 		// the same as what got written to the job's own markdown file. Safe
-		// to read directly from j.Dir — see agentTargetFile's own doc. A
-		// missing/unreadable file (targetContent left "") just means
+		// to read directly from j.Dir — see orchestrate.AgentTargetFile's own
+		// doc. A missing/unreadable file (targetContent left "") just means
 		// logInvocation's dedup check never matches, which is the same as
 		// not having this feature at all for that call.
 		var targetContent string
-		targetFile := agentTargetFile[decision.Agent]
+		targetFile := orchestrate.AgentTargetFile[decision.Agent]
 		if targetFile != "" {
 			if data, rerr := os.ReadFile(filepath.Join(j.Dir, targetFile)); rerr == nil {
 				targetContent = string(data)
 			}
 		}
 
-		// Fan-out (Decision 7/TASK-7): log gets the same formatted section
+		// Fan-out: log gets the same formatted section
 		// regardless of whether it's os.Stdout, the sidecar run.log, or (in
 		// tests) an in-memory buffer — see main()'s io.MultiWriter and
-		// output.go's logInvocation. DetectSignal below scans the raw bytes
+		// jdioutput.go's logInvocation. DetectSignal below scans the raw bytes
 		// directly (it does its own JSON extraction), independent of what
 		// logInvocation writes for a human to read.
 		logInvocation(log, decision.Agent, i+1, out, targetFile, targetContent)
@@ -400,7 +426,7 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 			return finish(orchestrate.StopNeedsHuman, fmt.Sprintf("%s invocation failed: %v", decision.Agent, runErr), true)
 		}
 
-		// Stall backstop (Decision 1a): the same agent invoked twice in a
+		// Stall backstop: the same agent invoked twice in a
 		// row, each time persisting nothing at all (neither Stage() nor the
 		// branch HEAD moved across that invocation), stops on the second
 		// such occurrence — a single no-op invocation is tolerated (it may
@@ -408,7 +434,14 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		// genuinely stuck, regardless of whether the NEEDS-HUMAN-INPUT
 		// marker was present.
 		stageAfter := j.Stage()
-		headAfter, _ := git.HeadCommit(root, j.Branch)
+		// Fresh context for the post-agent probe: the pre-agent probeCtx
+		// above was cancelled before runner.Run and would in any case be
+		// long expired after a minutes-long invocation — reusing it would
+		// make this probe fail instantly and read "", which noChange would
+		// take as a HEAD change and the stall backstop would never fire.
+		probeAfterCtx, cancelProbeAfter := context.WithTimeout(context.Background(), jdiProbeTimeout)
+		headAfter, _ := git.HeadCommitWithContext(probeAfterCtx, root, j.Branch)
+		cancelProbeAfter()
 		noChange := stageAfter == stageBefore && headAfter == headBefore
 
 		if noChange && lastNoChange && decision.Agent == lastAgent {

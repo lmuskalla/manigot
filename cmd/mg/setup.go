@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -26,35 +28,55 @@ Configures credentials for manigot's subscription profiles into manigot/.env:
 
 With no profile, the wizard walks through all three. --check reports which
 profiles are ready without prompting. Values are written to the same .env
-scripts/run.sh sources; nothing is sent anywhere.
+bare mg reads; nothing is sent anywhere.
 `
 
 // runSetup implements `mg setup` — the port of scripts/setup.sh with identical
 // output wording. r is the interactive input (used only when tty).
 func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int {
-	check := false
+	// --check is a real flag; a profile name (or "help") is a positional.
+	// The flags are extracted first (splitFlags) because the tests pin
+	// "zai --check" — the profile before the flag — which Go's flag package
+	// would otherwise stop at.
+	flagArgs, rest := splitFlags(args, nil, map[string]bool{"--check": true, "-h": true, "--help": true})
+
+	fs := flag.NewFlagSet("mg setup", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() { fmt.Fprint(stdout, setupHelp) }
+	check := fs.Bool("check", false, "")
+	if err := fs.Parse(flagArgs); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0 // usage already printed to stdout
+		}
+		// An unknown flag (e.g. "--bogus"): the script's loop reported it the
+		// same way as any other unknown argument.
+		fmt.Fprintln(stderr, flagParseError(err))
+		fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go] [--check]")
+		return 1
+	}
+
+	// The positionals: profile names, or the bare-word "help" alias for -h.
 	target := ""
-	for _, arg := range args {
-		switch {
-		case arg == "--check":
-			check = true
-		case arg == "-h" || arg == "--help" || arg == "help":
-			fmt.Fprint(stdout, setupHelp)
-			return 0
-		case arg == config.ProfileClaudePro || arg == config.ProfileZAI || arg == config.ProfileOpenCodeGo:
+	profileArgs := rest
+	if len(profileArgs) == 1 && profileArgs[0] == "help" {
+		fmt.Fprint(stdout, setupHelp)
+		return 0
+	}
+	for _, arg := range profileArgs {
+		if arg == config.ProfileClaudePro || arg == config.ProfileZAI || arg == config.ProfileOpenCodeGo {
 			if target != "" {
 				fmt.Fprintln(stderr, "Error: give a single profile, not several.")
 				return 1
 			}
 			target = arg
-		default:
+		} else {
 			fmt.Fprintf(stderr, "Error: unknown argument '%s'.\n", arg)
 			fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go] [--check]")
 			return 1
 		}
 	}
 
-	if check {
+	if *check {
 		if target != "" {
 			checkProfile(target, stdout)
 		} else {

@@ -96,7 +96,7 @@ func TestResolveJobRequiresInitializedProject(t *testing.T) {
 	dir := projectCheckout(t, t.TempDir(), false)
 	t.Chdir(dir)
 	_, err := ResolveRoot(Options{Job: "abc123_x"})
-	if err == nil || !strings.Contains(err.Error(), "Error: --job requires an initialized project (no docs/ found).") {
+	if err == nil || !strings.Contains(err.Error(), "--job requires an initialized project (no docs/ found).") {
 		t.Errorf("uninitialized --job error = %v", err)
 	}
 }
@@ -127,7 +127,7 @@ func TestResolveJobFlatScanNotFound(t *testing.T) {
 	}
 	t.Chdir(dir)
 	_, err := ResolveRoot(Options{Job: "nope"})
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'nope' not found under docs/jobs/") {
+	if err == nil || !strings.Contains(err.Error(), "job 'nope' not found under docs/jobs/") {
 		t.Errorf("flat-scan not-found error = %v", err)
 	}
 }
@@ -208,7 +208,7 @@ func TestResolveJobAmbiguous(t *testing.T) {
 	gitCmd(t, root, "checkout", "-q", "main")
 	t.Chdir(root)
 	_, err := ResolveRoot(Options{Job: "abc123"})
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'abc123' is ambiguous — matches branches:") {
+	if err == nil || !strings.Contains(err.Error(), "job 'abc123' is ambiguous — matches branches:") {
 		t.Errorf("ambiguity error = %v", err)
 	}
 }
@@ -217,7 +217,7 @@ func TestResolveJobBranchNotFound(t *testing.T) {
 	root := projectCheckout(t, t.TempDir(), true)
 	t.Chdir(root)
 	_, err := ResolveRoot(Options{Job: "zzz999_nope"})
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'zzz999_nope' not found among local branches.") {
+	if err == nil || !strings.Contains(err.Error(), "job 'zzz999_nope' not found among local branches.") {
 		t.Errorf("branch-not-found error = %v", err)
 	}
 }
@@ -233,7 +233,7 @@ func TestResolveJobBranchWithoutWorktreeHardError(t *testing.T) {
 		t.Fatal("branch-without-worktree must be a hard error")
 	}
 	for _, want := range []string{
-		"Error: branch 'feature/" + jobName + "' has no git worktree.",
+		"branch 'feature/" + jobName + "' has no git worktree.",
 		"Refusing to fall back to mounting " + filepath.Clean(root) + " instead: that would show the wrong job's content.",
 	} {
 		if !strings.Contains(err.Error(), want) {

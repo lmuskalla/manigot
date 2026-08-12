@@ -15,6 +15,7 @@ package git
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -43,11 +44,31 @@ var ErrNotARepo = errors.New("not a git repository (or git not installed)")
 // run executes `git -C root <args>` and returns raw stdout, raw stderr, and the
 // exec error (nil on success). Callers interpret the result: the package-level
 // helpers below normalize the not-a-repo / missing-path cases.
+//
+// run carries no context and thus no timeout — the interactive session and the
+// user-driven mg done/mg delete paths wait on git as long as git needs. The
+// non-interactive callers (the TUI's background push/commit cmds, mg-jdi's
+// per-iteration probes) use the WithContext variants below instead, which
+// bound the call via runCtx.
 func run(root string, args ...string) ([]byte, string, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	return runCtx(context.Background(), root, args...)
+}
+
+// runCtx is run's context-aware counterpart: `git -C root <args>` with ctx
+// applied to the child process (exec.CommandContext), so a caller can bound a
+// git call with a timeout. When the context fires, CommandContext kills the
+// child but its exec error is a bare "signal: killed" — this returns the
+// context's own error (context.DeadlineExceeded / context.Canceled) instead,
+// so callers can errors.Is against it, and the timeout surfaces as an
+// ordinary wrapped error (via wrapErr) — never a panic.
+func runCtx(ctx context.Context, root string, args ...string) ([]byte, string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if err != nil && ctx.Err() != nil {
+		return out, stderr.String(), ctx.Err()
+	}
 	return out, stderr.String(), err
 }
 
@@ -56,11 +77,20 @@ func run(root string, args ...string) ([]byte, string, error) {
 // separate from run (rather than adding a variadic env parameter there) so
 // every existing call site — none of which need custom env — is untouched.
 func runEnv(root string, extraEnv []string, args ...string) ([]byte, string, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	return runEnvCtx(context.Background(), root, extraEnv, args...)
+}
+
+// runEnvCtx is runEnv's context-aware counterpart, mirroring runCtx's
+// timeout semantics (the context's own error is returned when it fires).
+func runEnvCtx(ctx context.Context, root string, extraEnv []string, args ...string) ([]byte, string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
 	cmd.Env = append(os.Environ(), extraEnv...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if err != nil && ctx.Err() != nil {
+		return out, stderr.String(), ctx.Err()
+	}
 	return out, stderr.String(), err
 }
 
@@ -228,7 +258,7 @@ func RecentCommits(root string, n int) ([]Commit, error) {
 // changes that would be overwritten) returns the wrapped error including git's
 // stderr so the caller can surface the reason in the status line.
 //
-// Currently unused: the worktree model (207bfu_git-worktrees) removed its only
+// Currently unused: the worktree model removed its only
 // two callers (the TUI's "switch to this job's branch" action and mg-jdi's
 // ensureOnBranch), since a job's own worktree is always already on the job
 // branch. Kept deliberately (with its tests) in case a branch-switch action is
@@ -256,13 +286,20 @@ func Checkout(root, branch string) error {
 // error to the user for simply opening and closing the editor. Any other
 // commit failure returns the wrapped error including git's stderr.
 func CommitFile(root, path, message string) error {
-	if _, stderr, err := run(root, "add", "--", path); err != nil {
+	return CommitFileWithContext(context.Background(), root, path, message)
+}
+
+// CommitFileWithContext is CommitFile with a caller-supplied context (see
+// runCtx): used by the TUI's background auto-commit of brief.md after an
+// edit, so a stalled git can't hang the app's command channel.
+func CommitFileWithContext(ctx context.Context, root, path, message string) error {
+	if _, stderr, err := runCtx(ctx, root, "add", "--", path); err != nil {
 		if notARepo(stderr, err) {
 			return ErrNotARepo
 		}
 		return wrapErr("git add "+path, err, stderr)
 	}
-	out, stderr, err := run(root, "commit", "-m", message, "--", path)
+	out, stderr, err := runCtx(ctx, root, "commit", "-m", message, "--", path)
 	if err != nil {
 		if notARepo(stderr, err) {
 			return ErrNotARepo
@@ -286,8 +323,8 @@ func verdictCommitPattern(jobID string) *regexp.Regexp {
 
 // CountVerdictCommits returns how many commits reachable from branch (short
 // name from LocalBranches) have a subject matching verdictCommitPattern for
-// jobID. Used by tui/internal/orchestrate (see the "fully autonomous mode"
-// brief, Decision 2) to track the one-bounce retry budget: 0 or 1 such
+// jobID. Used by internal/orchestrate to track the one-bounce retry
+// budget: 0 or 1 such
 // commits means a REJECTED/NEEDS WORK verdict may still bounce back to
 // @developer once; 2 or more means that budget is exhausted.
 //
@@ -300,7 +337,14 @@ func verdictCommitPattern(jobID string) *regexp.Regexp {
 // that doesn't exist yet simply has no verdict commits from the caller's
 // perspective. A non-repo / missing git binary returns (0, ErrNotARepo).
 func CountVerdictCommits(root, branch, jobID string) (int, error) {
-	out, stderr, err := run(root, "log", branch, "--format=%s")
+	return CountVerdictCommitsWithContext(context.Background(), root, branch, jobID)
+}
+
+// CountVerdictCommitsWithContext is CountVerdictCommits with a caller-supplied
+// context (see runCtx): used by mg-jdi's per-iteration probe, which must not
+// stall the whole run on a hung git.
+func CountVerdictCommitsWithContext(ctx context.Context, root, branch, jobID string) (int, error) {
+	out, stderr, err := runCtx(ctx, root, "log", branch, "--format=%s")
 	if err != nil {
 		if notARepo(stderr, err) {
 			return 0, ErrNotARepo
@@ -326,14 +370,20 @@ func CountVerdictCommits(root, branch, jobID string) (int, error) {
 // content changes again — it does not distinguish "@reviewer just rejected,
 // @developer hasn't responded yet" (the verdict commit is still the tip) from
 // "@developer has already committed a fix since that verdict" (something
-// newer sits on top of it). tui/internal/orchestrate uses this alongside
+// newer sits on top of it). internal/orchestrate uses this alongside
 // CountVerdictCommits to tell the two apart without any new state file.
 //
 // A branch with no commits at all, or a branch/jobID that doesn't exist,
 // returns (false, nil) — mirrors CountVerdictCommits' "nothing here" degrade.
 // A non-repo / missing git binary returns (false, ErrNotARepo).
 func LatestCommitIsVerdict(root, branch, jobID string) (bool, error) {
-	out, stderr, err := run(root, "log", "-1", branch, "--format=%s")
+	return LatestCommitIsVerdictWithContext(context.Background(), root, branch, jobID)
+}
+
+// LatestCommitIsVerdictWithContext is LatestCommitIsVerdict with a
+// caller-supplied context (see runCtx): used by mg-jdi's per-iteration probe.
+func LatestCommitIsVerdictWithContext(ctx context.Context, root, branch, jobID string) (bool, error) {
+	out, stderr, err := runCtx(ctx, root, "log", "-1", branch, "--format=%s")
 	if err != nil {
 		if notARepo(stderr, err) {
 			return false, ErrNotARepo
@@ -352,8 +402,8 @@ func LatestCommitIsVerdict(root, branch, jobID string) (bool, error) {
 // HeadCommit returns the full commit hash branch (short name from
 // LocalBranches) currently points at, via `git rev-parse <branch>`.
 //
-// Used by mg-jdi's stall backstop (Decision 1a in the "fully autonomous
-// mode" brief's tasks.md): if the same agent is invoked twice in a row for
+// Used by mg-jdi's stall backstop: if the same agent is invoked twice in a
+// row for
 // the same job with neither job.Stage() nor the branch HEAD having moved,
 // the previous invocation made no persisted progress at all, so mg-jdi stops
 // rather than looping indefinitely.
@@ -362,7 +412,13 @@ func LatestCommitIsVerdict(root, branch, jobID string) (bool, error) {
 // returns ("", nil) — mirrors the package's other "nothing here" degrades. A
 // non-repo / missing git binary returns ("", ErrNotARepo).
 func HeadCommit(root, branch string) (string, error) {
-	out, stderr, err := run(root, "rev-parse", branch)
+	return HeadCommitWithContext(context.Background(), root, branch)
+}
+
+// HeadCommitWithContext is HeadCommit with a caller-supplied context (see
+// runCtx): used by mg-jdi's per-iteration stall-probe.
+func HeadCommitWithContext(ctx context.Context, root, branch string) (string, error) {
+	out, stderr, err := runCtx(ctx, root, "rev-parse", branch)
 	if err != nil {
 		if notARepo(stderr, err) {
 			return "", ErrNotARepo
@@ -374,13 +430,12 @@ func HeadCommit(root, branch string) (string, error) {
 
 // WorktreeForBranch returns the absolute path of the worktree currently
 // checked out to branch (short name from LocalBranches) in the repository at
-// root, via `git worktree list --porcelain` — the Go-side equivalent of
-// scripts/lib/worktree.sh's worktree_path_for_branch
-// (207bfu_git-worktrees, Decision 2). ok is false when no worktree has that
+// root, via `git worktree list --porcelain` — the Go-side equivalent of the
+// old worktree.sh helper. ok is false when no worktree has that
 // branch checked out (including a bare or detached-HEAD entry, which has no
 // "branch" line at all) — not itself an error, since "this branch has no
-// worktree yet" is a normal, expected answer (e.g. a branch
-// scripts/new-job.sh hasn't been used to create one for). A non-repo /
+// worktree yet" is a normal, expected answer (e.g. a branch mg job hasn't
+// been used to create one for). A non-repo /
 // missing git binary returns ("", false, ErrNotARepo).
 //
 // Matched against the full ref (refs/heads/<branch>), not a bare-name
@@ -433,7 +488,14 @@ func WorktreeForBranch(root, branch string) (path string, ok bool, err error) {
 // to render into — that failure mode instead surfaces as a wrapped error,
 // same as a missing origin remote or a rejected push.
 func Push(root, branch string) error {
-	_, stderr, err := runEnv(root, []string{"GIT_TERMINAL_PROMPT=0"}, "push", "-u", "origin", branch)
+	return PushWithContext(context.Background(), root, branch)
+}
+
+// PushWithContext is Push with a caller-supplied context (see runCtx): used
+// by the TUI's background push cmd, which must not hang the app's command
+// channel on a stalled network forever.
+func PushWithContext(ctx context.Context, root, branch string) error {
+	_, stderr, err := runEnvCtx(ctx, root, []string{"GIT_TERMINAL_PROMPT=0"}, "push", "-u", "origin", branch)
 	if err != nil {
 		if notARepo(stderr, err) {
 			return ErrNotARepo

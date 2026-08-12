@@ -37,6 +37,11 @@ func TestBuildPlainClaudeSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
+	// The real session flow runs CheckAuth before building the argv — the
+	// credential -e flags come from the resulting KeyEnv.
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
 	r, err := ResolveRoot(Options{})
 	if err != nil {
 		t.Fatalf("ResolveRoot: %v", err)
@@ -142,6 +147,16 @@ func TestBuildOpenCodeProfile(t *testing.T) {
 		"-v", filepath.Join(root, "docs")+":/workspace/.opencode:z",
 		"-v", filepath.Join(root, "docs", "AGENTS.md")+":/workspace/AGENTS.md:ro",
 	)
+	// The CLAUDE_* subscription keys belong to claude-pro only — an opencode
+	// profile's argv must not carry them (previously passed with empty
+	// values, noise in docker inspect). The value token is a standalone argv
+	// element, so search the newline-joined vector for the token itself.
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if strings.Contains(joined, k+"=") {
+			t.Errorf("zai docker argv forwards %s, want only the profile's own keys:\n%s", k, joined)
+		}
+	}
 }
 
 func TestBuildJobWorktreeGitCommonDirMount(t *testing.T) {

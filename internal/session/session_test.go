@@ -68,7 +68,7 @@ func TestResolveProfileExplicitWins(t *testing.T) {
 func TestResolveProfileInvalidExplicit(t *testing.T) {
 	checkout(t, "")
 	_, err := ResolveProfile(Options{Profile: "bogus"})
-	if err == nil || !strings.Contains(err.Error(), "Error: --profile must be one of: claude-pro|zai|opencode-go (got 'bogus').") {
+	if err == nil || !strings.Contains(err.Error(), "--profile must be one of: claude-pro|zai|opencode-go (got 'bogus').") {
 		t.Errorf("invalid --profile error = %v", err)
 	}
 }
@@ -87,7 +87,7 @@ func TestResolveProfileLegacyToolClaudeCode(t *testing.T) {
 func TestResolveProfileInvalidLegacyTool(t *testing.T) {
 	checkout(t, "")
 	_, err := ResolveProfile(Options{Tool: "bogus"})
-	if err == nil || !strings.Contains(err.Error(), "Error: --tool must be 'claude-code' or 'opencode' (got 'bogus').") {
+	if err == nil || !strings.Contains(err.Error(), "--tool must be 'claude-code' or 'opencode' (got 'bogus').") {
 		t.Errorf("invalid --tool error = %v", err)
 	}
 }
@@ -106,7 +106,7 @@ func TestResolveProfileDefaultsToManigotProfile(t *testing.T) {
 func TestResolveProfileInvalidManigotProfile(t *testing.T) {
 	checkout(t, "MANIGOT_PROFILE=bogus\n")
 	_, err := ResolveProfile(Options{})
-	if err == nil || !strings.Contains(err.Error(), "Error: MANIGOT_PROFILE in") || !strings.Contains(err.Error(), "is not a valid profile (got 'bogus').") {
+	if err == nil || !strings.Contains(err.Error(), "MANIGOT_PROFILE in") || !strings.Contains(err.Error(), "is not a valid profile (got 'bogus').") {
 		t.Errorf("invalid MANIGOT_PROFILE error = %v", err)
 	}
 }
@@ -142,6 +142,29 @@ func TestResolveProfileZAIForwarding(t *testing.T) {
 	if !contains(info.KeyEnv, "-e", "ZHIPU_API_KEY=z-secret") || !contains(info.KeyEnv, "-e", "OPENCODE_MODEL=zai-coding-plan/glm-5.2") {
 		t.Errorf("zai KeyEnv = %v", info.KeyEnv)
 	}
+	// Only the profile's own keys are forwarded — the CLAUDE_* subscription
+	// keys belong to claude-pro and must not leak into an opencode run's env.
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if contains(info.KeyEnv, "-e", k+"=") {
+			t.Errorf("zai KeyEnv forwards %s, want only the profile's own keys: %v", k, info.KeyEnv)
+		}
+	}
+}
+
+func TestCheckAuthClaudeProForwardsSubscriptionKeys(t *testing.T) {
+	checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_ACCOUNT_UUID=u\nCLAUDE_EMAIL=e\nCLAUDE_ORG_UUID=o\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	for _, want := range []string{"-e", "CLAUDE_CODE_OAUTH_TOKEN=t", "-e", "CLAUDE_ACCOUNT_UUID=u", "-e", "CLAUDE_EMAIL=e", "-e", "CLAUDE_ORG_UUID=o"} {
+		if !contains(info.KeyEnv, want) {
+			t.Errorf("claude-pro KeyEnv missing %q: %v", want, info.KeyEnv)
+		}
+	}
 }
 
 func TestResolveProfileOpenCodeGoModelOverride(t *testing.T) {
@@ -162,7 +185,7 @@ func TestResolveProfileClaudeRequiresToken(t *testing.T) {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
 	err = info.CheckAuth()
-	if err == nil || !strings.Contains(err.Error(), "Error: CLAUDE_CODE_OAUTH_TOKEN is not set.") {
+	if err == nil || !strings.Contains(err.Error(), "CLAUDE_CODE_OAUTH_TOKEN is not set.") {
 		t.Errorf("missing token error = %v", err)
 	}
 	if !strings.Contains(err.Error(), "Add it to ") || !strings.Contains(err.Error(), "or run 'mg setup claude-pro' for help:") {
@@ -178,7 +201,7 @@ func TestResolveProfileClaudeRefusesAnthropicKey(t *testing.T) {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
 	err = info.CheckAuth()
-	if err == nil || !strings.Contains(err.Error(), "Error: ANTHROPIC_API_KEY is set — this overrides your subscription and bills per token.") {
+	if err == nil || !strings.Contains(err.Error(), "ANTHROPIC_API_KEY is set — this overrides your subscription and bills per token.") {
 		t.Errorf("ANTHROPIC_API_KEY error = %v", err)
 	}
 }
@@ -190,7 +213,7 @@ func TestResolveProfileOpenCodeMissingKey(t *testing.T) {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
 	err = info.CheckAuth()
-	if err == nil || !strings.Contains(err.Error(), "Error: profile 'zai' is missing its API key.") {
+	if err == nil || !strings.Contains(err.Error(), "profile 'zai' is missing its API key.") {
 		t.Errorf("missing opencode key error = %v", err)
 	}
 	if !strings.Contains(err.Error(), "  ZHIPU_API_KEY") {
@@ -225,7 +248,7 @@ func TestResolveProfileLegacyToolOpenCodeNoKeys(t *testing.T) {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
 	err = info.CheckAuth()
-	if err == nil || !strings.Contains(err.Error(), "Error: --tool opencode needs at least one provider API key.") {
+	if err == nil || !strings.Contains(err.Error(), "--tool opencode needs at least one provider API key.") {
 		t.Errorf("legacy no-keys error = %v", err)
 	}
 }
@@ -233,7 +256,7 @@ func TestResolveProfileLegacyToolOpenCodeNoKeys(t *testing.T) {
 func TestResolveProfilePrintRejectedForLegacy(t *testing.T) {
 	checkout(t, "OPENAI_API_KEY=sk-oa\n")
 	_, err := ResolveProfile(Options{Tool: "opencode", Print: true})
-	if err == nil || !strings.Contains(err.Error(), "Error: --print is not supported with the legacy --tool opencode (no --profile).") {
+	if err == nil || !strings.Contains(err.Error(), "--print is not supported with the legacy --tool opencode (no --profile).") {
 		t.Errorf("legacy --print rejection = %v", err)
 	}
 }

@@ -110,6 +110,10 @@ func TestInitNonTTYSkipsPrompter(t *testing.T) {
 	}
 }
 
+// TestInitUnknownArgument pins the single-line unknown-flag error: the old
+// hand-rolled loop printed exactly one "Unknown argument: <flag>" line and
+// nothing else, and the flag package's own diagnostic must not leak ahead of
+// it (fs.SetOutput(io.Discard)).
 func TestInitUnknownArgument(t *testing.T) {
 	initCheckout(t)
 	var errOut strings.Builder
@@ -117,8 +121,60 @@ func TestInitUnknownArgument(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(errOut.String(), "Unknown argument: --bogus") {
-		t.Errorf("missing unknown-arg error:\n%s", errOut.String())
+	if want := "Unknown argument: --bogus\n"; errOut.String() != want {
+		t.Errorf("stderr = %q, want exactly %q", errOut.String(), want)
+	}
+}
+
+// TestInitMissingValue pins the single-line missing-value error the same way:
+// "mg init --tool" must print exactly one "Unknown argument: --tool" line,
+// not the flag package's "flag needs an argument" diagnostic.
+func TestInitMissingValue(t *testing.T) {
+	initCheckout(t)
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"tool", []string{"--tool"}, "Unknown argument: --tool\n"},
+		{"profile", []string{"--profile"}, "Unknown argument: --profile\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var errOut strings.Builder
+			code := runInit(tc.args, strings.NewReader(""), &strings.Builder{}, &errOut, false)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if errOut.String() != tc.want {
+				t.Errorf("stderr = %q, want exactly %q", errOut.String(), tc.want)
+			}
+		})
+	}
+}
+
+// TestInitRejectsPositionals pins the script's hand-rolled-loop behavior:
+// any positional (flag.FlagSet leaves them in fs.Args()) is an unknown
+// argument, not a silently-ignored extra.
+func TestInitRejectsPositionals(t *testing.T) {
+	initCheckout(t)
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"bare-word", []string{"extra"}, "Unknown argument: extra"},
+		{"after-tool-flag", []string{"--tool", "opencode", "extra"}, "Unknown argument: extra"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut strings.Builder
+			code := runInit(tc.args, strings.NewReader(""), &out, &errOut, false)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if !strings.Contains(errOut.String(), tc.want) {
+				t.Errorf("missing %q:\n%s", tc.want, errOut.String())
+			}
+		})
 	}
 }
 

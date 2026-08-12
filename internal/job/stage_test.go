@@ -287,3 +287,35 @@ func TestStageOfDiscoveredWorktreeJob(t *testing.T) {
 		t.Errorf("worktree job Stage = %s, want implement", got)
 	}
 }
+
+// TestVerdictOverallMatch pins the single verdict-section extraction
+// (verdictOverallSection / verdictOverallMatch, unified in the "improve code
+// quality" job's TASK-4). The whole-section behavior wins over finish-job.sh's
+// grep -A5 window: a status line anywhere under the "## Overall" heading is
+// recognised — the "status beyond line 5" case below documents exactly that
+// decision — and the scaffold's HTML-comment guidance lines are not verdict
+// content.
+func TestVerdictOverallMatch(t *testing.T) {
+	cases := []struct {
+		name string
+		md   string
+		want string
+	}{
+		{"approved", "# Verdict\n\n## Overall\n\nAPPROVED\n", "APPROVED"},
+		{"needs work", "# Verdict\n\n## Overall\n\nNEEDS WORK — fix TASK-1\n", "NEEDS WORK — fix TASK-1"},
+		{"rejected in first lines", "# Verdict\n\n## Overall\n\nThe reviewer says REJECTED.\nmore\nmore\nmore\nmore\n", "The reviewer says REJECTED."},
+		{"no heading", "# Verdict\n\nJust text.\n", ""},
+		// The decided corner: the section (not grep's -A5 window) wins, so a
+		// genuine status more than five lines below the heading IS recognised.
+		{"status beyond line 5 (section wins)", "# Verdict\n\n## Overall\n\nok\nok\nok\nok\nok\nok\nAPPROVED\n", "APPROVED"},
+		// Scaffold guidance comments are stripped, not read as verdicts.
+		{"scaffold comment is not a status", "# Verdict\n\n## Overall\n\n<!-- APPROVED / REJECTED / NEEDS WORK -->\n", ""},
+		{"status line plus comment", "# Verdict\n\n## Overall\n\nREJECTED — fix TASK-1\n\n<!-- Summary -->\n", "REJECTED — fix TASK-1"},
+		{"status beyond next heading", "# Verdict\n\n## Overall\n\nAPPROVED\n\n## Security\n\nnone\n", "APPROVED"},
+	}
+	for _, c := range cases {
+		if got := verdictOverallMatch([]byte(c.md)); got != c.want {
+			t.Errorf("%s: verdictOverallMatch = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

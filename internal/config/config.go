@@ -4,9 +4,8 @@
 // credentials + model) launch.Agent starts a session under.
 //
 // The editor lives in config/tui-settings.json in the manigot checkout. The
-// profile lives in manigot/.env as MANIGOT_PROFILE — the same value
-// scripts/run.sh sources for bare `mg` runs and `mg profiles` writes, so CLI
-// and TUI share one profile default. The settings screen (see ui/settings.go)
+// profile lives in manigot/.env as MANIGOT_PROFILE — the value bare `mg` runs
+// and `mg profiles` write, so CLI and TUI share one profile default. The settings screen (see ui/settings.go)
 // is the only writer; every other reader treats a missing or unreadable file
 // as "use the defaults" rather than an error.
 package config
@@ -22,18 +21,16 @@ import (
 )
 
 // ToolClaudeCode and ToolOpenCode are the legacy tool values once held by
-// Settings.Tool (and still accepted by scripts/run.sh's --tool flag). They are
-// kept for migration and for the run.sh contract; new code should use
-// Profiles instead.
+// Settings.Tool (and still accepted by the session launcher's --tool alias).
+// New code should use Profiles instead.
 const (
 	ToolClaudeCode = "claude-code"
 	ToolOpenCode   = "opencode"
 )
 
 // ProfileClaudePro, ProfileZAI and ProfileOpenCodeGo are the three supported
-// subscription profiles: Settings.Profile holds one of them, and scripts/run.sh
-// accepts them as --profile values. Keep the IDs in sync with the profile
-// table in scripts/run.sh.
+// subscription profiles: Settings.Profile holds one of them, and the session
+// launcher accepts them as --profile values.
 const (
 	ProfileClaudePro  = "claude-pro"
 	ProfileZAI        = "zai"
@@ -50,8 +47,8 @@ const DefaultRecentActivityCount = 5
 // billed against, and the model the CLI should default to — the whole point is
 // that switching profile, not tool, is what changes which subscription is used.
 type Profile struct {
-	// ID is the value Settings.Profile and scripts/run.sh's --profile flag
-	// hold: ProfileClaudePro, ProfileZAI or ProfileOpenCodeGo.
+	// ID is the value Settings.Profile (and the session launcher's
+	// --profile flag) holds: ProfileClaudePro, ProfileZAI or ProfileOpenCodeGo.
 	ID string
 
 	// Label is a short human name for the settings screen and help text.
@@ -67,8 +64,7 @@ type Profile struct {
 }
 
 // Profiles is the ordered list of subscription profiles, in the order the TUI
-// settings screen cycles them. Keep the IDs in sync with the profile table in
-// scripts/run.sh. No model is listed here: the opencode profiles' model comes
+// settings screen cycles them. No model is listed here: the opencode profiles' model comes
 // from the OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL values in manigot's .env,
 // which the TUI does not read — showing a compiled-in default would mislead.
 var profiles = []Profile{
@@ -133,7 +129,7 @@ type Settings struct {
 	// (launch.Agent/Quick/AgentQuick), e.g. "kitty" or "alacritty -e". Empty
 	// means fall back to today's auto-detect spawn order (tmux split pane,
 	// macOS Terminal.app, then a Linux emulator list) — see
-	// tui/internal/launch's buildCmd.
+	// internal/launch's buildCmd.
 	Terminal string `json:"terminal,omitempty"`
 }
 
@@ -156,8 +152,8 @@ func (s Settings) RecentActivityCountValue() int {
 
 // EnvFile returns the manigot checkout's .env file path, or "" if Dir does.
 // .env is the shared store for the default profile: MANIGOT_PROFILE there is
-// read by scripts/run.sh for bare `mg` runs, written by `mg profiles`, and
-// read/written here so the TUI and CLI share one profile default.
+// read by bare `mg` runs, written by `mg profiles`, and read/written here so
+// the TUI and CLI share one profile default.
 func EnvFile() string {
 	home := home.Root()
 	if home == "" {
@@ -168,8 +164,8 @@ func EnvFile() string {
 
 // GetEnv returns the value of key in the manigot checkout's .env ("" when
 // absent or unreadable). Lines may carry an `export ` prefix or surrounding
-// quotes — both are tolerated, mirroring the leniency of scripts/run.sh
-// sourcing the file. It is the generic form of the profile lookup that
+// quotes — both are tolerated, mirroring the leniency of sourcing a shell
+// env file. It is the generic form of the profile lookup that
 // readEnvProfile wraps; the ported CLI commands (mg profiles, mg setup) use it
 // to read any credential key.
 func GetEnv(key string) string {
@@ -229,8 +225,7 @@ func unquoteEnvValue(value string) string {
 // UpsertEnv upserts key=value into the manigot checkout's .env, preserving
 // every other line (credentials, comments, model overrides). The file is
 // created with the standard header when it does not exist yet. value is
-// written unquoted, exactly as scripts/profiles.sh and scripts/setup.sh write
-// values, so scripts/run.sh's `set -a; source .env` reads it back unchanged.
+// written unquoted, matching the format config's own reader tolerates.
 // It is the generic form of writeEnvProfile; the ported CLI commands use it to
 // write any credential or model key.
 func UpsertEnv(key, value string) error {
@@ -279,8 +274,8 @@ func UpsertEnv(key, value string) error {
 }
 
 // readEnvProfile returns the MANIGOT_PROFILE value from manigot/.env ("" when
-// absent or unreadable). It is a best-effort scan mirroring the leniency of
-// scripts/run.sh sourcing the file: a missing .env is the normal pre-first
+// absent or unreadable). It is a best-effort scan tolerant of shell-isms in
+// the file: a missing .env is the normal pre-first
 // save state and the caller falls back to the legacy tui-settings.json fields
 // and finally to ProfileClaudePro. Lines may carry an `export ` prefix or
 // surrounding quotes — both are tolerated.
@@ -292,8 +287,7 @@ func readEnvProfile() string {
 // preserving every other line (credentials, comments, model overrides). The
 // file is created with the standard header when it does not exist yet.
 // profile must already be validated by the caller (see Save); it is written
-// unquoted, exactly as scripts/profiles.sh and scripts/setup.sh write values,
-// so scripts/run.sh's `set -a; source .env` reads it back unchanged.
+// unquoted, matching the format config's own reader tolerates.
 func writeEnvProfile(profile string) error {
 	return UpsertEnv("MANIGOT_PROFILE", profile)
 }

@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/lmuskalla/manigot/internal/config"
+	"github.com/lmuskalla/manigot/internal/fs"
+	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/home"
 )
 
@@ -25,7 +27,7 @@ type DockerInvocation struct {
 const dockerImageName = "manigot"
 
 // BuildDockerInvocation assembles the docker run argv, mirroring run.sh's
-// launch construction (brief notes 1, 5 and 10) — every flag, mount, and env
+// launch construction — every flag, mount, and env
 // var is load-bearing, so the argument order and exact strings are pinned by
 // the tests. Diagnostics (banner, warnings, shadowing lines) are written to
 // diag — always stderr, per the brief's note 1 (the script's fd-3 juggling
@@ -44,11 +46,11 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	// project's git config (local overrides global, matching git behavior).
 	gitName := os.Getenv("GIT_AUTHOR_NAME")
 	if gitName == "" {
-		gitName = configValue(root.ProjectRoot, "user.name")
+		gitName = git.ConfigUserName(root.ProjectRoot)
 	}
 	gitEmail := os.Getenv("GIT_AUTHOR_EMAIL")
 	if gitEmail == "" {
-		gitEmail = configValue(root.ProjectRoot, "user.email")
+		gitEmail = git.ConfigEmail(root.ProjectRoot)
 	}
 	if gitName == "" || gitEmail == "" {
 		fmt.Fprintln(diag, "Warning: no git user.name/user.email configured for this project — container commits will fall back to a generic 'manigot' identity.")
@@ -61,9 +63,9 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	}
 
 	contextFile := ""
-	if isFile(filepath.Join(root.DocsDir, "AGENTS.md")) {
+	if fs.IsFile(filepath.Join(root.DocsDir, "AGENTS.md")) {
 		contextFile = filepath.Join(root.DocsDir, "AGENTS.md")
-	} else if isFile(filepath.Join(root.DocsDir, "CLAUDE.md")) {
+	} else if fs.IsFile(filepath.Join(root.DocsDir, "CLAUDE.md")) {
 		contextFile = filepath.Join(root.DocsDir, "CLAUDE.md")
 	}
 
@@ -84,7 +86,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	}
 
 	var docsMount []string
-	if isDir(root.DocsDir) {
+	if fs.IsDir(root.DocsDir) {
 		docsMount = []string{"-v", root.DocsDir + ":" + docsMountTarget + ":z"}
 	}
 
@@ -193,10 +195,6 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, info.KeyEnv...)
-	argv = append(argv, "-e", "CLAUDE_CODE_OAUTH_TOKEN="+config.EnvValue("CLAUDE_CODE_OAUTH_TOKEN"))
-	argv = append(argv, "-e", "CLAUDE_ACCOUNT_UUID="+config.EnvValue("CLAUDE_ACCOUNT_UUID"))
-	argv = append(argv, "-e", "CLAUDE_EMAIL="+config.EnvValue("CLAUDE_EMAIL"))
-	argv = append(argv, "-e", "CLAUDE_ORG_UUID="+config.EnvValue("CLAUDE_ORG_UUID"))
 	argv = append(argv, "-e", "GIT_AUTHOR_NAME_CFG="+gitName)
 	argv = append(argv, "-e", "GIT_AUTHOR_EMAIL_CFG="+gitEmail)
 	argv = append(argv, "-e", "MANIGOT_TOOL="+info.Tool)
@@ -228,16 +226,6 @@ func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-// configValue returns `git -C root config <key>` ("" when unset or not a
-// repo) — the project-side git identity the script read.
-func configValue(root, key string) string {
-	out, _, err := gitRaw(root, "config", key)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // findEnvFiles lists every .env / .env.* file under root (recursively),

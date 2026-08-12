@@ -1,23 +1,23 @@
 // Package launch spawns manigot agent sessions in a new terminal window or
 // pane so the TUI can keep running while the agent works.
 //
-// Spawn order (per the TASK-1 scope decision — macOS + Linux, no Windows v1):
+// Spawn order (macOS + Linux; no Windows v1):
 //  1. Inside tmux — when the TUI is itself running inside tmux (detected via
 //     the $TMUX env var), this works the same on every platform. The session
 //     is opened as a split pane in the TUI's current window (`tmux
-//     split-window`, TASK-2), replacing the pane manigot opened last so at
-//     most one manigot pane exists at a time (TASK-3's replace policy).
+//     split-window), replacing the pane manigot opened last so at
+//     most one manigot pane exists at a time (the replace policy).
 //  2. macOS Terminal.app via osascript.
 //  3. A Linux terminal emulator, tried in order: gnome-terminal, ptyxis
 //     (Fedora's default GNOME terminal since Fedora 41), x-terminal-emulator
 //     (Debian), konsole, xterm.
 //
-// config.Settings.Terminal (r5x2a7) overrides this whole spawn order
+// config.Settings.Terminal overrides this whole spawn order
 // unconditionally, including the tmux branch: when set, every launch path
 // below invokes it directly instead — see buildOverrideCmd.
 //
 // The command opened is always `<mg-binary> --agent <agent> --job <jobID>` run
-// from the project root, matching the invocation contract in scripts/run.sh.
+// from the project root, matching the session launcher's invocation contract.
 // <mg-binary> is the running binary's own path (os.Executable) — the one Go
 // binary IS the command now — so an install under a different name still
 // works.
@@ -39,7 +39,7 @@ import (
 // window (see launchTmuxPane) — that runs manigot with `--profile <profile>
 // --agent <agent> --job <jobID>` in projectRoot. profile is one of the
 // subscription profiles in config.Profiles; an empty value defaults to
-// config.ProfileClaudePro, matching scripts/run.sh's own default. terminal is
+// config.ProfileClaudePro, matching the session launcher's own default. terminal is
 // config.Settings.Terminal: when non-empty it overrides the entire spawn
 // order below (including the tmux branch) and that terminal is invoked
 // directly instead — see buildOverrideCmd; empty reproduces today's
@@ -48,12 +48,12 @@ import (
 // override's own binary name) so the caller can surface it in a status line.
 //
 // The launcher runs from projectRoot (the main worktree) even though the job
-// lives in its own worktree (207bfu_git-worktrees): scripts/run.sh re-derives
-// the effective mount root itself from the --job it is given (branch-match +
-// worktree lookup, hard error on a worktree-less job), so launching from
-// projectRoot is not just sufficient but required — the script locates the
-// project from $PWD via find_project_root, and only then resolves the job's
-// worktree. The same reasoning keeps Quick/AgentQuick (no --job at all, mount
+// lives in its own worktree: the session launcher
+// (session.ResolveRootFrom) re-derives the effective mount root itself from
+// the --job it is given (branch-match + worktree lookup, hard error on a
+// worktree-less job), so launching from projectRoot is not just sufficient
+// but required — it locates the project from $PWD and only then resolves the
+// job's worktree. The same reasoning keeps Quick/AgentQuick (no --job at all, mount
 // PROJECT_ROOT directly) and Jdi (mg-jdi, which re-derives per invocation)
 // on projectRoot.
 //
@@ -64,7 +64,7 @@ import (
 // for the replace policy — split-window itself returns in milliseconds, it
 // does not wait for the agent session.
 //
-// TASK-7 review: cmd.Start() failing (the launcher binary itself couldn't be
+// cmd.Start() failing (the launcher binary itself couldn't be
 // spawned — e.g. permission denied) is already surfaced: it's returned as an
 // error here and shown by the caller (App.updateDetail via cmdErrorText). The
 // remaining gap is a launcher that starts successfully but then fails on its
@@ -75,7 +75,7 @@ import (
 // (unlike gnome-terminal/konsole/tmux/osascript, which detach quickly) *is*
 // the window process, so it doesn't return until the window closes — for it,
 // Wait()-ing here would block Update() for the whole agent session, which is
-// strictly worse than the bug this job is fixing. TASK-6's holdOnFailure
+// strictly worse than the bug being fixed. holdOnFailure
 // already covers the failure mode the brief actually reports (the inner `sc
 // --agent` command failing fast); a launcher-binary-itself failure is a
 // narrower, rarer case left uncovered rather than risk reintroducing UI lag.
@@ -99,10 +99,9 @@ func Agent(agent, jobID, projectRoot, profile, terminal string) (string, error) 
 // doc for the override semantics. It returns the same short human description
 // of where it opened so the caller can surface it in a status line.
 //
-// scripts/run.sh already treats --agent and --job as optional, so a bare `sc
+// The session launcher treats --agent and --job as optional, so a bare `sc
 // --profile <profile>` simply runs claude/opencode against the current project
-// with no agent flag and no job prompt — no container-side changes were needed
-// to support this.
+// with no agent flag and no job prompt.
 func Quick(projectRoot, profile, terminal string) (string, error) {
 	exe, err := ExeOverride()
 	if err != nil {
@@ -124,10 +123,9 @@ func Quick(projectRoot, profile, terminal string) (string, error) {
 // same short human description of where it opened so the caller can surface
 // it in a status line.
 //
-// scripts/run.sh already treats --job as optional (see Quick's own doc for
-// the --agent/--job-less case), so `sc --profile <profile> --agent <agent>`
-// simply runs that agent against the current project with no job prompt — no
-// container-side changes were needed to support this.
+// The session launcher treats --job as optional (see Quick's own doc for the
+// --agent/--job-less case), so `sc --profile <profile> --agent <agent>`
+// simply runs that agent against the current project with no job prompt.
 func AgentQuick(agent, projectRoot, profile, terminal string) (string, error) {
 	exe, err := ExeOverride()
 	if err != nil {
@@ -150,23 +148,23 @@ var ExeOverride = func() (string, error) { return os.Executable() }
 var JdiExe = func() (string, error) { return os.Executable() }
 
 // Jdi starts `mg jdi --job <jobID> --profile <profile>` detached in the
-// background — no spawned terminal window at all, unlike Agent/Quick
-// (Decision 7a in the "fully autonomous mode" brief). mg-jdi drives a fixed,
+// background — no spawned terminal window at all, unlike Agent/Quick.
+// mg-jdi drives a fixed,
 // non-interactive agent sequence with no TTY at any point in its own
-// container invocations (see scripts/run.sh's --print flag) and needs no
+// container invocations (the session launcher's --print flag) and needs no
 // terminal for a human or a subprocess to attach to — spawning one anyway
 // would be pure overhead and would reintroduce exactly the per-agent-window
 // cost the backlog's "in-TUI agent terminal" idea is about removing, not
-// adding to. Visibility into a TUI-launched run is TASK-8's list-row status
-// badge and TASK-9's detail-view log tab, not a window; see those for how a
+// adding to. Visibility into a TUI-launched run is the list-row status
+// badge and the detail-view log tab, not a window; see those for how a
 // human watches it run.
 //
 // profile is one of the subscription profiles in config.Profiles, matching
 // Agent/Quick — an empty value defaults to config.ProfileClaudePro, mg-jdi's
-// own default (see tui/cmd/jdi/main.go).
+// own default (see cmd/mg/jdi.go).
 //
 // cmd.Dir stays on projectRoot (the main worktree) even though the job lives
-// in its own worktree (207bfu_git-worktrees): mg-jdi — like every other
+// in its own worktree: mg-jdi — like every other
 // `--job` invocation — re-derives the effective worktree root itself from the
 // job id it is given, per invocation, so it must be launched from the project
 // root that find_project_root expects, never from a job worktree directly.
@@ -222,7 +220,7 @@ var tmuxMu sync.Mutex
 var tmuxLastPaneID string
 
 // launchTmuxPane opens the manigot session as a split pane in the TUI's
-// current tmux window (TASK-2) and implements TASK-3's "replace" reuse policy:
+// current tmux window and implements the "replace" reuse policy:
 // before splitting, the pane manigot opened last is killed so at most one
 // manigot pane exists at a time. It is the tmux-specific launch path — unlike
 // the generic launchDetached tail it runs the split-window client
@@ -269,7 +267,7 @@ func launchTmuxPane(inner string) (string, error) {
 	return desc, nil
 }
 
-// killPreviousTmuxPane implements TASK-3's "replace" reuse policy: it kills
+// killPreviousTmuxPane implements the "replace" reuse policy: it kills
 // the split pane manigot opened last so that at most one manigot pane exists
 // at a time. The pane is identified two ways, both safe against ever killing
 // a pane manigot did not itself open:
@@ -289,7 +287,7 @@ func launchTmuxPane(inner string) (string, error) {
 // manigot TUI might legitimately have its own pane. A pane the user already
 // closed in the meantime is not an error: that kill-pane failure is ignored.
 // The kill is unconditional with respect to the pane's state — a pane mid-
-// hold-on-failure is replaced exactly like a live session (TASK-4 decision).
+// hold-on-failure is replaced exactly like a live session.
 // Called with tmuxMu held.
 func killPreviousTmuxPane() error {
 	candidates := map[string]struct{}{}
@@ -320,15 +318,14 @@ func killPreviousTmuxPane() error {
 // asynchronously so it doesn't zombie (the actual terminal/pane outlives it).
 // It returns the short "where it opened" description buildCmd produces.
 //
-// terminal is config.Settings.Terminal (TASK-1 point 2): when non-empty it
+// terminal is config.Settings.Terminal: when non-empty it
 // takes over unconditionally, bypassing the tmux-detection branch below
 // entirely (not just the macOS/Linux auto-detect chain) — a user who both
 // runs the TUI inside tmux and sets an override loses the split-pane behavior
 // in favor of a plain spawn of their chosen terminal, a deliberate trade-off
-// (see the scope note in docs/jobs/r5x2a7_add-new-global-setting/tasks.md).
-//
+
 // Inside tmux, with no override set, the launch is handled by launchTmuxPane
-// instead: it implements TASK-3's replace policy (killing the previously
+// instead: it implements the replace policy (killing the previously
 // manigot-opened pane before splitting a new one) and needs the split-window
 // client's stdout (the new pane's id), so it runs synchronously rather than
 // through the detached tail below. The same tmux detection ($TMUX set and a
@@ -365,16 +362,16 @@ func launchDetached(inner, terminal string) (string, error) {
 //
 //	cd '<projectRoot>' && '<manigot>' --profile '<profile>' --agent '<agent>' --job '<jobID>'; ec=$?; ...
 //
-// cd-ing first matters because manigot finds the project root from $PWD (see
-// scripts/run.sh find_project_root). manigotPath is the absolute path from the
+// cd-ing first matters because manigot finds the project root from $PWD (the
+// same walk-up job.FindProjectRoot uses). manigotPath is the absolute path from the
 // resolve package; it is quoted like every other value, so a checkout in a
 // directory with spaces survives both osascript and `bash -lc`. Arguments are
 // single-quoted and embedded single quotes are escaped, so no value can break
 // out of its quotes. An empty profile defaults to config.ProfileClaudePro so the
-// flag is always passed explicitly, regardless of what scripts/run.sh's own
-// default happens to be.
+// flag is always passed explicitly, regardless of what the session
+// launcher's own default happens to be.
 //
-// TASK-5 investigation: none of buildCmd's five spawn paths keep the
+// None of buildCmd's five spawn paths keep the
 // window/pane open once the inner command exits, success or failure — tmux
 // destroys a new window as soon as its command exits (no remain-on-exit),
 // Terminal.app's `do script` types the command but the window otherwise
@@ -383,7 +380,7 @@ func launchDetached(inner, terminal string) (string, error) {
 // failure inside the container, an auth error) is therefore invisible: the
 // window flashes and disappears before its output can be read — this is the
 // brief's "a window appears and it immediately closes again". The result is
-// wrapped in holdOnFailure (TASK-6) so a non-zero exit pauses instead.
+// wrapped in holdOnFailure so a non-zero exit pauses instead.
 func shellCommand(manigotPath, agent, jobID, projectRoot, profile string) string {
 	if profile == "" {
 		profile = config.ProfileClaudePro
@@ -400,7 +397,7 @@ func shellCommand(manigotPath, agent, jobID, projectRoot, profile string) string
 //
 // It is the --agent/--job-less counterpart to shellCommand: same cd-first,
 // shellQuote-everything, holdOnFailure-wrap behavior (so a fast failure of the
-// inner command still holds the window open — TASK-6), just without the
+// inner command still holds the window open), just without the
 // agent/job flags. An empty profile defaults to config.ProfileClaudePro for the
 // same reason shellCommand does. It is deliberately a separate function rather
 // than a generalization of shellCommand so the latter's exact-format tests stay
@@ -437,7 +434,7 @@ func agentQuickShellCommand(manigotPath, agent, projectRoot, profile string) str
 
 // holdOnFailure wraps a shell command so that, if it exits non-zero, the
 // window/pane it is running in stays open with the failure message visible
-// instead of closing immediately (TASK-6). A clean exit (status 0) is left
+// instead of closing immediately. A clean exit (status 0) is left
 // alone — the launched agent session usually runs interactively until the
 // user ends it themselves, so closing right away once that happens is the
 // expected behavior; only a fast, invisible failure needs holding open.
@@ -447,15 +444,15 @@ func agentQuickShellCommand(manigotPath, agent, projectRoot, profile string) str
 // the fix uniform across all five spawn paths in buildCmd and lets it be
 // exercised by ordinary string-based tests.
 //
-// TASK-4: the wrap behaves identically inside a tmux split pane as in a
+// The wrap behaves identically inside a tmux split pane as in a
 // window — tmux runs the pane's shell-command in a pty and destroys the pane
 // when the command exits, so the `read -r _ignored` blocking on a non-zero
 // exit keeps the pane open with the failure message visible exactly as it
 // held a new window open (the message may wrap in the narrower 35% pane, but
-// stays fully visible). And because the replace policy (TASK-3) treats every
+// stays fully visible). And because the replace policy treats every
 // manigot pane alike, a pane mid-hold-on-failure is killed by a subsequent
 // launch just like a live session is — deliberate and unconditional (the
-// "skip or warn?" alternative was rejected in TASK-4: skipping would break
+// "skip or warn?" alternative was rejected: skipping would break
 // the at-most-one-pane invariant and needs unfeasible mid-hold detection from
 // outside the pane, and warning needs new TUI plumbing that is out of scope
 // for this job). A user who launches something new has moved on from the
@@ -472,8 +469,8 @@ func shellQuote(s string) string {
 
 // terminalCandidates is the Linux terminal-emulator candidate table used both
 // by buildCmd's auto-detect chain (branch 3) and, by name lookup, by
-// buildOverrideCmd's known-name-vs-"-e"-fallback flag-convention choice
-// (TASK-1 point 3): an override whose binary matches one of these names
+// buildOverrideCmd's known-name-vs-"-e"-fallback flag-convention choice:
+// an override whose binary matches one of these names
 // (case-insensitively) reuses that name's own flag convention instead of the
 // "-e" default.
 var terminalCandidates = []struct {
@@ -488,7 +485,7 @@ var terminalCandidates = []struct {
 }
 
 // buildOverrideCmd constructs the *exec.Cmd for an explicit user-chosen
-// terminal override (config.Settings.Terminal, TASK-1 points 2/3): it takes
+// terminal override (config.Settings.Terminal): it takes
 // over the entire spawn order — no tmux/macOS/Linux auto-detect is
 // considered at all once a caller has decided to use it (see launchDetached).
 //
@@ -546,14 +543,14 @@ func buildCmd(inner, terminal string) (*exec.Cmd, string, error) {
 	}
 
 	// 1. Inside tmux (works on every OS that has tmux): split a pane off the
-	// TUI's current window (TASK-2), replacing the previously manigot-opened
-	// pane (TASK-3).
+	// TUI's current window, replacing the previously manigot-opened
+	// pane.
 	if os.Getenv("TMUX") != "" {
 		if _, err := exec.LookPath("tmux"); err == nil {
 			// -h splits side by side (vertical divider); -l 35% sizes the new
 			// pane to 35% of the window width so the TUI's own pane (run
 			// with no explicit -t, so this targets the TUI's own currently
-			// active pane) keeps the majority share — TASK-1 scope decision.
+			// active pane) keeps the majority share.
 			// -l (not the older -p) is required: tmux deprecated -p's
 			// percentage sizing in 3.1 in favor of -l with a "%" suffix, and
 			// tmux 3.4 rejects -p outright with "size missing" (surfaced to
@@ -562,7 +559,7 @@ func buildCmd(inner, terminal string) (*exec.Cmd, string, error) {
 			// -P -F '#{pane_id}' makes the split-window client print the new
 			// pane's id to its stdout so launchTmuxPane can tag it with
 			// tmuxPaneTag (via select-pane -T — split-window has no -T on any
-			// released tmux) and record it for the replace policy (TASK-3).
+			// released tmux) and record it for the replace policy.
 			//
 			// The trailing "bash", "-lc", inner (three separate argv elements,
 			// not one combined string) matters: given a single shell-command

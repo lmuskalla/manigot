@@ -43,8 +43,8 @@ type opencodeEvent struct {
 	} `json:"part"`
 }
 
-// DetectSignal scans an agent invocation's captured output (TASK-2's
-// `--print` output) for a line matching `^NEEDS-HUMAN-INPUT:` and returns the
+// DetectSignal scans an agent invocation's captured output (the `--print`
+// output) for a line matching `^NEEDS-HUMAN-INPUT:` and returns the
 // reason text after it. ok is false when no such line is present.
 //
 // JSON is tried first: when raw parses as a `--output-format json` payload
@@ -70,9 +70,9 @@ func DetectSignal(raw []byte) (Signal, bool) {
 // the "result" field of a `--output-format json` payload if raw parses as
 // one, the concatenated text of every "text" event if raw parses as an
 // `opencode run --format json` JSONL stream (see opencodeResultText),
-// otherwise raw itself (interpreted as plain text). Exported for
-// tui/cmd/jdi's own logging (TASK-7): a human reading mg-jdi's run.log
-// should see the agent's prose, not a raw JSON blob.
+// otherwise raw itself (interpreted as plain text). Exported for mg-jdi's
+// own logging: a human reading the run.log should see the agent's prose,
+// not a raw JSON blob.
 func ResultText(raw []byte) string {
 	var payload resultPayload
 	if err := json.Unmarshal(raw, &payload); err == nil && payload.Type == "result" {

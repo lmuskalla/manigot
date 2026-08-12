@@ -356,23 +356,35 @@ whole document. Review-diff it.
 Verify: no comment loses a "why"; line counts of the worst offenders drop
 meaningfully.
 
-### 3.3 Decide the fate of the "output is the contract" rule
+### 3.3 Decide the fate of the "output is the contract" rule — DECIDED
 
 Tests pin byte-exact output (CLI wording, docker argv, TUI render). That
 was the right call during the strangler migration — it proved fidelity.
 It's now a tax: any wording change costs test churn, and it pins
 refactoring (2.1 and 2.2 both brush against it).
 
+**Decision (recorded by TASK-13 of the "improve code quality" job):**
+
+- **Keep the rule for user-facing CLI wording.** Error messages, usage
+  lines, warnings, and confirmations are the documented contract — the
+  scripts' wording, pinned by tests, deliberately.
+- **Relax it for internal shapes, with semantic assertions.** Docker argv
+  contents (presence/order of the flags that matter) rather than the full
+  exact vector; rendered-TUI substrings rather than full snapshots; status
+  lines and scroll positions asserted for their meaning, not their bytes.
+
+The audit in TASK-13 found the tests already practice the relaxed regime —
+the docker argv tests use presence assertions (`containsAll`), the TUI
+render tests use substring checks (`strings.Contains`), and no test pins a
+full rendered snapshot or an exact argv vector — so the relaxation was
+already in effect before this decision was written down; what changed here
+is that it is now explicit, and the spot-check below confirmed the semantic
+assertions still catch a deliberate regression.
+
 Do:
-- Make the decision explicit and write it down (in AGENTS.md or this
-  doc's conclusion): keep the rule for *user-facing CLI wording* (it's
-  the documented contract), but relax it for *internal* shapes where a
-  semantic assertion is stronger — e.g. assert on docker argv *contents*
-  (presence/order of flags that matter) rather than the full exact vector,
-  and on rendered-TUI *substrings* rather than full snapshots where the
-  full snapshot only exists to catch regressions.
+- Make the decision explicit and write it down (done here).
 - Do this *after* Phase 1/2 land, so the consolidation happens under the
-  strict regime and the relaxation is a separate, deliberate step.
+  strict regime and the relaxation is a separate, deliberate step (done).
 
 Files: tests across `cmd/mg`, `internal/session`, `internal/ui`
 Risk: medium — relaxing tests reduces the safety net by design; it must be
