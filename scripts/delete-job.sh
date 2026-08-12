@@ -187,7 +187,18 @@ read -rp "  Proceed? [y/N] " CONFIRM
 # `git worktree prune` afterwards is a best-effort cleanup of any stale
 # worktree metadata (Decision 7), not a required step for this to have
 # worked.
-DEFAULT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+# Resolve the branch the main worktree is switched onto. The project's
+# configured baseBranch (the same key new-job.sh cuts job branches from) wins
+# when present; falling back to the remote default branch (origin/HEAD → main)
+# keeps projects that never configured baseBranch behaving exactly as before.
+DEFAULT_BRANCH=""
+SETTINGS_FILE="$PROJECT_ROOT/.manigot/manigot.json"
+if [[ -f "$SETTINGS_FILE" ]]; then
+    DEFAULT_BRANCH=$(sed -n 's/^.*"baseBranch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$SETTINGS_FILE" | head -n1)
+fi
+if [[ -z "$DEFAULT_BRANCH" ]]; then
+    DEFAULT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+fi
 
 # The main worktree must not itself be sitting on the branch being deleted —
 # shouldn't normally happen (PROJECT_ROOT stays on the base branch in

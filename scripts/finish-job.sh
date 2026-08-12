@@ -136,7 +136,18 @@ else
 fi
 
 # ── Git checks ──────────────────────────────────────────────────────────────────
-DEFAULT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+# Resolve the branch the job merges into. The project's configured baseBranch
+# (the same key new-job.sh cuts job branches from) wins when present; falling
+# back to the remote default branch (origin/HEAD → main) keeps projects that
+# never configured baseBranch behaving exactly as before.
+DEFAULT_BRANCH=""
+SETTINGS_FILE="$PROJECT_ROOT/.manigot/manigot.json"
+if [[ -f "$SETTINGS_FILE" ]]; then
+    DEFAULT_BRANCH=$(sed -n 's/^.*"baseBranch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$SETTINGS_FILE" | head -n1)
+fi
+if [[ -z "$DEFAULT_BRANCH" ]]; then
+    DEFAULT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+fi
 
 # A worktree always stays on the branch it was created with unless someone
 # manually checked out a different one inside it by hand — guard against
