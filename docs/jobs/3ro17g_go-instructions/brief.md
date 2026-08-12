@@ -9,7 +9,9 @@ author: Leander Muskalla
 
 ## What
 
-<!-- What needs to be done? Be specific. -->
+So far, you've built this project.
+I want to learn Golang.
+Write a full Golang tutorial based on THIS project. So I can get into doing stuff myself.
 
 ## Why
 
