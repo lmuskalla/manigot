@@ -131,12 +131,13 @@ func (v *listView) recentActivityShown(jobCount, maxRecent, height int) int {
 // columnWidths returns the fixed column widths used by the list and detail
 // headers so rows line up. Kept here so both views agree.
 type columnWidths struct {
-	id, status, typ, date, title int
+	id, status, stage, typ, date, title int
 }
 
-// listColumns returns the list view's fixed column widths.
+// listColumns returns the list view's fixed column widths. stage is wider
+// than typ because the longest stage name ("implement") is 9 chars.
 func listColumns() columnWidths {
-	return columnWidths{id: 8, status: 6, typ: 8, date: 12, title: 0}
+	return columnWidths{id: 8, status: 6, stage: 10, typ: 8, date: 12, title: 0}
 }
 
 // render draws the list view — title, job rows (or the empty-state invite),
@@ -150,7 +151,7 @@ func (v *listView) render(jobs []job.Job, status string, maxRecent, spinnerStep,
 		w = 72
 	}
 	cols := listColumns()
-	titleColsWidth := cols.id + cols.status + cols.typ + cols.date + 4*3 // 3 spaces between cols
+	titleColsWidth := cols.id + cols.status + cols.stage + cols.typ + cols.date + 5*3 // 3 spaces between cols
 	cols.title = w - titleColsWidth
 	if cols.title < 16 {
 		cols.title = 16
@@ -266,6 +267,7 @@ func (v *listView) renderJobRow(j job.Job, cols columnWidths, selected bool, spi
 	cells := []string{
 		pad(j.ID, cols.id),
 		status,
+		pad(string(j.Stage()), cols.stage),
 		pad(j.Type, cols.typ),
 		pad(j.Date, cols.date),
 		truncate(j.Title, cols.title),

@@ -196,8 +196,13 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 
 	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	// Every job row must still be present — the strip must never have pushed
-	// one off the rendered output.
-	if n := strings.Count(got, "open    feature"); n != 20 {
+	// one off the rendered output. The rows' briefs are frontmatter-only, so
+	// job.Stage() reads them as unwritten → define; the status+stage+type
+	// cell run is rebuilt here rather than hand-typed so the spacing can't
+	// drift from renderJobRow's pad()+join.
+	cols := listColumns()
+	row := pad("open", cols.status) + "  " + pad("define", cols.stage) + "  " + pad("feature", cols.typ)
+	if n := strings.Count(got, row); n != 20 {
 		t.Errorf("renderList should still show all 20 job rows; found %d:\n%s", n, got)
 	}
 }
@@ -519,6 +524,30 @@ func TestRenderListStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
 	}
 	if strings.Contains(row, activityFrame(3)) {
 		t.Errorf("needs-human badge unexpectedly shows the spinner frame %q:\n%s", activityFrame(3), row)
+	}
+}
+
+// TestRenderListShowsStageColumn verifies each job row carries the job's
+// current workflow stage as its own column (rendered between status and
+// type) — the rendering change this job ships. mkStageJob builds a job that
+// lands on exactly the requested stage; the row and the full list render are
+// both checked, and the expected cell is rebuilt via pad() so the spacing
+// can't drift from renderJobRow.
+func TestRenderListShowsStageColumn(t *testing.T) {
+	for _, stage := range allStages {
+		j := mkStageJob(t, stage)
+		a := NewApp(j.Root, []job.Job{j})
+		a.width, a.height = 80, 24
+		cols := listColumns()
+
+		want := pad(string(stage), cols.stage)
+		if row := a.list.renderJobRow(j, cols, false, a.spinnerStep); !strings.Contains(row, want) {
+			t.Errorf("stage=%s: job row missing the %q stage cell:\n%s", stage, want, row)
+		}
+		got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+		if !strings.Contains(got, want) {
+			t.Errorf("stage=%s: renderList missing the %q stage column:\n%s", stage, want, got)
+		}
 	}
 }
 
