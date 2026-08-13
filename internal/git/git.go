@@ -222,9 +222,23 @@ func RecentCommits(root string, n int) ([]Commit, error) {
 		ordered = append(ordered, b)
 	}
 
-	format := strings.Join([]string{"%H", "%h", "%s", "%cr", "%S"}, recentCommitsFieldSep)
-	args := append([]string{"log", "-n", strconv.Itoa(n), "--source", "--format=" + format}, ordered...)
+	args := append([]string{"log", "-n", strconv.Itoa(n), "--source", "--format=" + commitLogFormat()}, ordered...)
+	return logCommits(root, args...)
+}
 
+// commitLogFormat is the --format argument RecentCommits and BranchCommits
+// both pass to git log, so the two can never drift.
+func commitLogFormat() string {
+	return strings.Join([]string{"%H", "%h", "%s", "%cr", "%S"}, recentCommitsFieldSep)
+}
+
+// logCommits runs `git log` with the given args (everything after the leading
+// "log" subcommand) and parses its output into Commit entries using the
+// shared recentCommitsFieldSep format. It is the single parsing path behind
+// both RecentCommits and BranchCommits, applying the package's degrade rules:
+// a non-repo / missing git binary returns ErrNotARepo, any other git failure
+// returns the wrapped error including git's stderr.
+func logCommits(root string, args ...string) ([]Commit, error) {
 	out, stderr, err := run(root, args...)
 	if err != nil {
 		if notARepo(stderr, err) {
@@ -251,6 +265,34 @@ func RecentCommits(root string, n int) ([]Commit, error) {
 		})
 	}
 	return commits, nil
+}
+
+// BranchCommits returns the last n commits reachable from a single local
+// branch (short name from LocalBranches), ordered most-recent first — the
+// per-branch counterpart of RecentCommits, used by the detail view's bottom
+// git-log strip to show just one job's branch.
+//
+// It runs `git log -n <n> --source --format=<same format> <branch>` and
+// parses through the same shared logCommits helper, so the line shape (and
+// therefore the UI rendering) cannot drift from RecentCommits'.
+//
+// A branch that doesn't exist — or an unborn repo with no commits yet, where
+// no ref under refs/heads/ can exist — returns an empty slice and a nil
+// error, mirroring the package's other "nothing here" degrades; a caller
+// rendering a strip treats that as "no log to show". A non-repo / missing git
+// binary returns ErrNotARepo.
+func BranchCommits(root, branch string, n int) ([]Commit, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+	exists, err := RefExists(root, branch)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+	return logCommits(root, "log", "-n", strconv.Itoa(n), "--source", "--format="+commitLogFormat(), branch)
 }
 
 // Checkout switches the working tree at root to branch (short name), via

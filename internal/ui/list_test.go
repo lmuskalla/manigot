@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
 )
 
@@ -627,5 +628,51 @@ func TestListJAndKNoLongerMoveCursor(t *testing.T) {
 	a.updateList(keyMsg("up"))
 	if a.list.cursor != 0 {
 		t.Errorf("cursor = %d after pressing up, want 0 (up must still move the selection)", a.list.cursor)
+	}
+}
+
+// --- shared activity-line formatter (TASK-3/4) -------------------------------
+
+// TestRenderActivityLinesByteIdentical is the regression guard for TASK-3's
+// extraction: listView.renderRecentActivity now delegates to the shared
+// renderActivityLines free function (which the detail view's strip also
+// uses), and this test pins that the strip's per-commit line format is
+// byte-for-byte what renderRecentActivity produced before the extraction —
+// hash(7) + 2 spaces + subject(truncated to the leftover width) + 2 spaces +
+// reltime(10) + 2 spaces + branch(16), trailing spaces trimmed, each line
+// dim-styled — by rebuilding the expected output with the original inline
+// logic, and by asserting the list view still delegates to the shared
+// function.
+func TestRenderActivityLinesByteIdentical(t *testing.T) {
+	commits := []git.Commit{
+		{ShortHash: "abc1234", Subject: "a commit subject", RelTime: "2 hours ago", Branch: "feature/abc_x"},
+		{ShortHash: "def5678", Subject: "short", RelTime: "5 days ago", Branch: "main"},
+		{ShortHash: "deadbee", Subject: "a very long subject that must be truncated down to the column width", RelTime: "now", Branch: "averylongbranchname"},
+	}
+	w := 80
+
+	got := renderActivityLines(commits, w)
+
+	// The original inline logic the extraction came from.
+	const hashW, relW, branchW = 7, 10, 16
+	subjectW := w - hashW - relW - branchW - 6
+	var want strings.Builder
+	for _, c := range commits {
+		line := pad(c.ShortHash, hashW) + "  " +
+			pad(truncate(c.Subject, subjectW), subjectW) + "  " +
+			pad(c.RelTime, relW) + "  " +
+			truncate(c.Branch, branchW)
+		want.WriteString(activityStyle.Render(strings.TrimRight(line, " ")))
+		want.WriteString("\n")
+	}
+	if got != want.String() {
+		t.Errorf("renderActivityLines drifted from the pre-extraction list output:\n got: %q\nwant: %q", got, want.String())
+	}
+
+	// The list view's strip must still go through the same formatter, so the
+	// two views can never render different text for the same commits.
+	v := &listView{recentCommits: commits}
+	if viaList := v.renderRecentActivity(w, len(commits)); viaList != got {
+		t.Errorf("listView.renderRecentActivity no longer delegates to renderActivityLines:\n got: %q\nwant: %q", viaList, got)
 	}
 }

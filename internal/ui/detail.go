@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
 	"github.com/lmuskalla/manigot/internal/markdown"
 )
@@ -74,6 +75,22 @@ type detailView struct {
 	// Defaults to 0 for a freshly built view; the next tick re-syncs it even
 	// if the App was already mid-animation when the view opened.
 	spinnerStep int
+
+	// recentCommits backs the bottom-of-view git-log strip: the last few
+	// commits on this job's own branch (git.BranchCommits, fetched via
+	// refreshCommits), the detail view's counterpart of
+	// listView.recentCommits. nil when the job has no branch, the repo has no
+	// commits yet, or BranchCommits errors (e.g. a non-repo project) —
+	// renderCommitStrip degrades to rendering nothing in that case. Populated
+	// by the App on open and on refresh; a detail view constructed directly
+	// (as the tests do) simply has no strip.
+	recentCommits []git.Commit
+
+	// recentMax is the maximum number of strip entries (the settings'
+	// RecentActivityCountValue, stored by refreshCommits) that
+	// commitStripShown clamps to, mirroring listView.recentActivityShown's
+	// use of its maxRecent parameter.
+	recentMax int
 }
 
 // newDetailView loads all four job files, plus the fifth "log" tab, for
@@ -262,6 +279,43 @@ func (d *detailView) reload() { d.loadTabs() }
 // it on save.
 func (d *detailView) reloadCurrent() { d.loadTab(d.cur) }
 
+// refreshCommits re-reads the job-branch git-log strip from git (git.
+// BranchCommits against d.job.Root, d.job.Branch — the branch ref is shared
+// across the whole repo, so the main worktree's root resolves it fine),
+// always fetching up to maxRecent (Settings.RecentActivityCountValue). How
+// many of those cached commits actually get rendered is decided later, at
+// render time, by commitStripShown — the same split the list view uses
+// between refreshRecentCommits and recentActivityShown, so a view that never
+// received a WindowSizeMsg isn't sized against a stale terminal height.
+//
+// Like the list view's strip fetch, an error (e.g. a non-repo project) or an
+// empty job branch degrades to an empty strip rather than surfacing in the
+// status line — this is decorative, optional content, not an action the user
+// asked for.
+func (d *detailView) refreshCommits(maxRecent int) {
+	d.recentMax = maxRecent
+	if d.job.Branch == "" {
+		d.recentCommits = nil
+		d.syncViewerSize()
+		return
+	}
+	commits, err := git.BranchCommits(d.job.Root, d.job.Branch, maxRecent)
+	if err != nil {
+		d.recentCommits = nil
+		d.syncViewerSize()
+		return
+	}
+	d.recentCommits = commits
+	// The strip's footprint may have changed (appeared, disappeared, or
+	// grown), which changes how many chrome rows the total render needs —
+	// resize the active viewer and mark the others stale so the body shrinks
+	// and the total still fits the viewport, mirroring setStatus's own
+	// budget handling. refreshCommits runs right after newDetailView (whose
+	// viewers were sized with no strip yet), so without this the strip would
+	// overflow the alt-screen on open.
+	d.syncViewerSize()
+}
+
 // resize propagates a window-size change to every viewer (a width change means
 // the markdown must be re-wrapped).
 func (d *detailView) resize(width, height int) {
@@ -393,8 +447,12 @@ func (d *detailView) bodyWidth() int {
 
 func (d *detailView) bodyHeight() int {
 	// title(1) + blank(1) + tab bar(1) + agents line(1) + stage/done line(1) + blank(1) + body + blank(1) + footer(footerLines)
-	// = (7 + footerLines) chrome rows around the body.
-	h := d.height - 7 - d.footerLines()
+	// = (7 + footerLines) chrome rows around the body, plus the bottom
+	// git-log strip's own footprint (1 spacer + its commit rows, see
+	// commitStripRows) — the body shrinks so the total render still fits the
+	// alt-screen viewport, the same budget discipline
+	// TestDetailBodyHeightShrinksForMultiLineStatus guards for the footer.
+	h := d.height - 7 - d.footerLines() - d.commitStripRows()
 	if h < 1 {
 		h = 1
 	}
@@ -428,6 +486,53 @@ func (d *detailView) footerLines() int {
 		return 1
 	}
 	return strings.Count(d.status, "\n") + 1
+}
+
+// commitStripShown returns how many of d.recentCommits the bottom git-log
+// strip should actually render, mirroring listView.recentActivityShown's
+// adaptive sizing: between recentActivityFloor and the configured maximum
+// (d.recentMax, stored by refreshCommits), clamped to the spare vertical room
+// and the available commits. 0 when the cache is empty — no strip at all.
+//
+// The spare-room formula is the detail view's analogue of the list's
+// `height - dashboardFixedChrome - jobCount`: the fixed chrome (7 rows +
+// footerLines) is what the list's dashboardFixedChrome is; the body's own
+// 1-row floor stands in for the job rows (the body is scrollable but must
+// never be squeezed out entirely); and the strip's own 1-row spacer is
+// accounted for so the body budget and the rendered output agree.
+//
+// height == 0 (a view that has never received a tea.WindowSizeMsg, e.g.
+// some existing tests) falls back to the floor, the same kind of guard the
+// list view applies.
+func (d *detailView) commitStripShown() int {
+	if len(d.recentCommits) == 0 {
+		return 0
+	}
+	var n int
+	if d.height == 0 {
+		n = recentActivityFloor
+	} else {
+		spare := d.height - 7 - d.footerLines() - 1 - 1 // body floor + strip spacer
+		n = clamp(spare, recentActivityFloor, d.recentMax)
+	}
+	if n > len(d.recentCommits) {
+		// Fewer real commits than the computed count — render whatever's
+		// available, same graceful-degrade rule the list view applies.
+		n = len(d.recentCommits)
+	}
+	return n
+}
+
+// commitStripRows is the strip's total vertical footprint below the footer:
+// its 1-row blank spacer plus one row per commit line it renders (0 when
+// nothing renders). bodyHeight subtracts this from the viewport so the body
+// shrinks and the total render still fits — the detail view's analogue of
+// the list's dashboardFixedChrome strip-spacer row.
+func (d *detailView) commitStripRows() int {
+	if n := d.commitStripShown(); n > 0 {
+		return 1 + n
+	}
+	return 0
 }
 
 // render draws the detail view.
@@ -468,6 +573,11 @@ func (d *detailView) render() string {
 
 	// Footer: scroll position + keys.
 	b.WriteString(d.renderFooter())
+
+	// Job-branch git-log strip: below the footer, mirroring the list view's
+	// recent-activity strip position — read-only supplementary info, kept out
+	// of the way of the job files and the chrome (see renderCommitStrip).
+	b.WriteString(d.renderCommitStrip(w))
 
 	return b.String()
 }
@@ -680,4 +790,25 @@ func (d *detailView) renderFooter() string {
 		return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint)) + "  " + statusStyle.Render(d.status)
 	}
 	return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint))
+}
+
+// renderCommitStrip renders the job-branch git-log strip below the footer —
+// the detail view's counterpart of the list view's recent-activity strip,
+// scoped to just this job's own branch (d.recentCommits, fed by
+// refreshCommits). It reuses the same renderActivityLines formatter, so the
+// visuals are byte-for-byte identical to the list's (the branch column
+// included — "same visuals" per the brief, even though it is redundant when
+// every line belongs to one branch). The blank spacer line before the first
+// commit line is part of the strip's footprint, which bodyHeight's
+// commitStripRows already budgets for.
+//
+// Renders nothing — not even the spacer — when the cache is empty (a
+// non-repo project, a job with no branch, or a job branch with no commits
+// yet): the strip is optional supplementary content, same as the list view's.
+func (d *detailView) renderCommitStrip(w int) string {
+	n := d.commitStripShown()
+	if n == 0 {
+		return ""
+	}
+	return "\n\n" + renderActivityLines(d.recentCommits[:n], w)
 }

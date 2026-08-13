@@ -836,3 +836,175 @@ func TestStripLeadingFrontmatterLeavesNonScaffoldContentAlone(t *testing.T) {
 		}
 	}
 }
+
+// --- job-branch git-log strip (TASK-3/4) -------------------------------------
+
+// TestDetailCommitStripShowsOnlyJobBranchCommits verifies the detail view's
+// bottom git-log strip is scoped to the job's own branch (git.BranchCommits
+// against d.job.Branch): a commit made on the base branch after the job
+// branched off must not appear, while the job branch's own commits (and the
+// shared history it was cut from) do.
+func TestDetailCommitStripShowsOnlyJobBranchCommits(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/st01_s", "st01_s", "# Brief: Strip\n\nstatus: open\nid: st01\nbranch: feature/st01_s\ndate: 2026-01-01\n")
+
+	// A commit on the job branch itself, after the scaffold commit.
+	if err := os.WriteFile(filepath.Join(wtPath, "jobfile.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, wtPath, "add", "jobfile.txt")
+	gitRun(t, wtPath, "commit", "-q", "-m", "ZZJOBCOMMIT")
+
+	// A commit on the base branch made after the job branched — reachable
+	// from the base branch only, so it must never appear in the job's strip.
+	if err := os.WriteFile(filepath.Join(dir, "mainfile.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "mainfile.txt")
+	gitRun(t, dir, "commit", "-q", "-m", "ZZMAINCOMMIT")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	d.refreshCommits(5)
+
+	out := d.render()
+	if !strings.Contains(out, "ZZJOBCOMMIT") {
+		t.Errorf("job strip missing the job branch's own commit:\n%s", out)
+	}
+	if strings.Contains(out, "ZZMAINCOMMIT") {
+		t.Errorf("job strip shows the base-branch-only commit:\n%s", out)
+	}
+}
+
+// TestDetailCommitStripEmptyWhenNoBranchOrNonRepo verifies a job with no
+// branch at all (job.Discover's non-repo working-tree-only fallback) gets no
+// strip: refreshCommits degrades to an empty cache, and the render shows
+// neither commit lines nor an extra spacer, staying within the viewport.
+func TestDetailCommitStripEmptyWhenNoBranchOrNonRepo(t *testing.T) {
+	root := t.TempDir() // not a git repo
+	j := discoverOneJob(t, root, "aaaa06_n")
+	if j.Branch != "" {
+		t.Fatalf("setup: expected a branchless job on a non-repo project, got %q", j.Branch)
+	}
+
+	d := newDetailView(j, 80, 24)
+	d.refreshCommits(5)
+	if len(d.recentCommits) != 0 {
+		t.Fatalf("recentCommits = %+v, want empty for a branchless/non-repo job", d.recentCommits)
+	}
+	out := d.render()
+	if len(strings.Split(out, "\n")) > 24 {
+		t.Errorf("render grew past the viewport without a strip:\n%s", out)
+	}
+}
+
+// TestDetailCommitStripDegradesOnNonRepo covers the other half of the
+// degrade: a job that does carry a Branch field but whose Root isn't a git
+// repo — git.BranchCommits errors, refreshCommits degrades to an empty cache,
+// and no strip renders.
+func TestDetailCommitStripDegradesOnNonRepo(t *testing.T) {
+	root := t.TempDir() // not a git repo
+	j := job.Job{Name: "x_a", Dir: filepath.Join(root, "docs", "jobs", "x_a"), Root: root, Branch: "feature/x_a"}
+	d := newDetailView(j, 80, 24)
+	d.refreshCommits(5)
+	if len(d.recentCommits) != 0 {
+		t.Fatalf("recentCommits = %+v, want empty when BranchCommits errors", d.recentCommits)
+	}
+}
+
+// TestDetailCommitStripFitsViewportAndCoexistsWithFooter verifies the strip
+// renders below the footer and the whole view still fits the terminal: the
+// body must shrink (bodyHeight's commitStripRows budget) so the strip lines
+// don't clip off the alt-screen — the same overflow
+// TestDetailBodyHeightShrinksForMultiLineStatus guards for the footer.
+func TestDetailCommitStripFitsViewportAndCoexistsWithFooter(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/st02_s", "st02_s", "# Brief: Strip\n\nstatus: open\nid: st02\nbranch: feature/st02_s\ndate: 2026-01-01\n")
+	// Enough commits to exercise a multi-line strip at the configured max.
+	for _, subj := range []string{"ZZC3", "ZZC2", "ZZC1", "ZZC0"} {
+		if err := os.WriteFile(filepath.Join(wtPath, "f.txt"), []byte(subj), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitRun(t, wtPath, "add", "-A")
+		gitRun(t, wtPath, "commit", "-q", "-m", subj)
+	}
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	d.refreshCommits(5)
+
+	const height = 24
+	out := d.render()
+	if len(strings.Split(out, "\n")) > height {
+		t.Errorf("render with the commit strip used %d rows, want <= %d (strip clipped by the alt-screen viewport)", len(strings.Split(out, "\n")), height)
+	}
+
+	// Footer and strip must both be present, footer above the strip.
+	if !strings.Contains(out, "q quit") {
+		t.Errorf("footer missing from the render with the strip:\n%s", out)
+	}
+	if !strings.Contains(out, "ZZC3") {
+		t.Errorf("strip missing the job branch's most recent commit:\n%s", out)
+	}
+	if !strings.Contains(out, "ZZC0") {
+		t.Errorf("strip missing the oldest cached commit (all cached entries should render when room allows):\n%s", out)
+	}
+	lines := strings.Split(out, "\n")
+	footerIdx, stripIdx := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "q quit") {
+			footerIdx = i
+		}
+		if strings.Contains(l, "ZZC3") {
+			stripIdx = i
+		}
+	}
+	if footerIdx < 0 || stripIdx < 0 || stripIdx <= footerIdx {
+		t.Errorf("strip should render below the footer (footer line %d, strip line %d):\n%s", footerIdx, stripIdx, out)
+	}
+}
+
+// TestDetailCommitStripSizesAdaptively verifies the strip mirrors the list
+// view's adaptive sizing (listView.recentActivityShown): with an empty
+// height guard falling back to the floor, and with a tall viewport showing
+// the configured maximum — clamped to the available commits.
+func TestDetailCommitStripSizesAdaptively(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/st03_s", "st03_s", "# Brief: Strip\n\nstatus: open\nid: st03\nbranch: feature/st03_s\ndate: 2026-01-01\n")
+	for _, subj := range []string{"c1", "c2", "c3", "c4", "c5", "c6"} {
+		if err := os.WriteFile(filepath.Join(wtPath, "f.txt"), []byte(subj), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitRun(t, wtPath, "add", "-A")
+		gitRun(t, wtPath, "commit", "-q", "-m", subj)
+	}
+
+	jobs, _ := job.Discover(dir)
+	d := newDetailView(jobs[0], 80, 40) // generous height — plenty of spare room
+	d.refreshCommits(7)
+
+	if got := d.commitStripShown(); got != 7 {
+		t.Errorf("commitStripShown() = %d, want the configured max 7 given ample spare room", got)
+	}
+	// All 7 cached entries (6 job commits + the scaffold commit) render.
+	out := d.render()
+	if n := strings.Count(out, "\n"); n > 40 {
+		t.Errorf("render at height 40 with a 7-line strip used %d rows, want <= 40", n)
+	}
+
+	// A view that never received a WindowSizeMsg falls back to the floor.
+	d2 := newDetailView(jobs[0], 80, 0)
+	d2.refreshCommits(7)
+	if got := d2.commitStripShown(); got != recentActivityFloor {
+		t.Errorf("commitStripShown() with height 0 = %d, want the floor %d", got, recentActivityFloor)
+	}
+}

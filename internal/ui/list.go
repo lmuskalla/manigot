@@ -238,8 +238,15 @@ func (v *listView) renderRecentActivity(w, n int) string {
 	if n == 0 {
 		return ""
 	}
-	commits := v.recentCommits[:n]
+	return renderActivityLines(v.recentCommits[:n], w)
+}
 
+// renderActivityLines formats the per-commit lines of a git-log strip — one
+// dim `shortHash  subject  relTime  branch` line per commit, most-recent
+// first — and is the single shared formatter behind both the list view's
+// recent-activity strip and the detail view's per-job strip, so the two
+// views' visuals can never drift.
+func renderActivityLines(commits []git.Commit, w int) string {
 	const hashW, relW, branchW = 7, 10, 16
 	// Subject gets whatever's left after the fixed-width columns and their
 	// spacing, same truncate() job titles use so a long commit message can't

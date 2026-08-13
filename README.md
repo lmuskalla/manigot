@@ -692,6 +692,15 @@ a bounce back to the developer shows that developer's second call as attempt
 "_no mg jdi run has happened for this job yet_" until the first `mg jdi` run
 against it; large files are tailed, not loaded in full. Never editable.
 
+Below the footer, the job view also shows a **git-log strip** — the same dim
+`shortHash  subject  relTime  branch` lines the job list's recent-activity
+strip renders at the bottom of the screen, scoped to just this job's own
+branch (`git.BranchCommits`, the job-branch counterpart of the list's
+cross-branch `git.RecentCommits`). It is refreshed when the job opens and on
+`ctrl+r`, sized like the list's strip (up to the settings'
+recent-activity count, floor of one line), and disappears entirely for a
+job with no branch or a project that isn't a git repo.
+
 `e` resolves the editor to run as: the settings screen's Editor field (see
 below), if set; otherwise `$VISUAL`, then `$EDITOR`, then whichever of
 `nano`/`vi` is found first on `PATH`.

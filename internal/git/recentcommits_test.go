@@ -154,3 +154,115 @@ func TestRecentCommitsNotARepo(t *testing.T) {
 		t.Errorf("RecentCommits on non-repo: err = %v, want ErrNotARepo", err)
 	}
 }
+
+// --- BranchCommits (single-branch log, TASK-1) -------------------------------
+
+// TestBranchCommitsScopedToBranch verifies BranchCommits returns only the
+// history reachable from the named branch: a commit made on the default
+// branch after the feature branch was cut must not appear in the feature
+// branch's log (and vice versa), and each returned commit carries the branch
+// it was reached through.
+func TestBranchCommitsScopedToBranch(t *testing.T) {
+	dir, def := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feature")
+	writeFile(t, dir, "feature.txt", "1\n")
+	commitAllAt(t, dir, "on feature", 1)
+	runGit(t, dir, "checkout", "-q", def)
+	writeFile(t, dir, "main.txt", "1\n")
+	commitAllAt(t, dir, "on main", 2)
+
+	got, err := BranchCommits(dir, "feature", 5)
+	if err != nil {
+		t.Fatalf("BranchCommits(feature): %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("BranchCommits(feature) = %d entries, want 2: %+v", len(got), got)
+	}
+	if got[0].Subject != "on feature" {
+		t.Errorf("most recent commit on feature = %q, want %q", got[0].Subject, "on feature")
+	}
+	if got[0].Branch != "feature" {
+		t.Errorf("most recent commit's branch = %q, want %q", got[0].Branch, "feature")
+	}
+	for _, c := range got {
+		if c.Subject == "on main" {
+			t.Errorf("feature log contains the main-only commit %q: %+v", c.Subject, got)
+		}
+	}
+
+	mainGot, err := BranchCommits(dir, def, 5)
+	if err != nil {
+		t.Fatalf("BranchCommits(%s): %v", def, err)
+	}
+	for _, c := range mainGot {
+		if c.Subject == "on feature" {
+			t.Errorf("%s log contains the feature-only commit %q: %+v", def, c.Subject, mainGot)
+		}
+	}
+}
+
+// TestBranchCommitsTruncatesToN verifies a history longer than n is capped.
+func TestBranchCommitsTruncatesToN(t *testing.T) {
+	dir, def := initRepo(t)
+	for i := 0; i < 4; i++ {
+		writeFile(t, dir, "a.txt", string(rune('a'+i)))
+		commitAllAt(t, dir, "commit "+string(rune('a'+i)), i+1)
+	}
+	// 5 commits total (init + 4), asking for 3 should return exactly 3.
+	got, err := BranchCommits(dir, def, 3)
+	if err != nil {
+		t.Fatalf("BranchCommits: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("BranchCommits(dir, %s, 3) = %d entries, want 3: %+v", def, len(got), got)
+	}
+}
+
+// TestBranchCommitsMissingBranch verifies a branch that doesn't exist
+// degrades to an empty slice and a nil error — "no log to show", not a
+// failure.
+func TestBranchCommitsMissingBranch(t *testing.T) {
+	dir, _ := initRepo(t)
+	got, err := BranchCommits(dir, "no/such-branch", 5)
+	if err != nil {
+		t.Fatalf("BranchCommits on a missing branch: unexpected error %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("BranchCommits on a missing branch = %+v, want empty", got)
+	}
+}
+
+// TestBranchCommitsEmptyRepo verifies a repo with no commits yet (an unborn
+// HEAD, no refs under refs/heads/) degrades to an empty slice and a nil
+// error.
+func TestBranchCommitsEmptyRepo(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-q")
+
+	got, err := BranchCommits(dir, "feature/x", 5)
+	if err != nil {
+		t.Fatalf("BranchCommits on an empty repo: unexpected error %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("BranchCommits on an empty repo = %v, want empty", got)
+	}
+}
+
+// TestBranchCommitsNotARepo verifies a non-repo directory returns
+// ErrNotARepo rather than a generic error.
+func TestBranchCommitsNotARepo(t *testing.T) {
+	_, err := BranchCommits(t.TempDir(), "feature/x", 5)
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("BranchCommits on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
+// TestBranchCommitsNonPositiveN verifies n <= 0 returns nil without touching
+// git, mirroring RecentCommits' own guard.
+func TestBranchCommitsNonPositiveN(t *testing.T) {
+	dir, def := initRepo(t)
+	got, err := BranchCommits(dir, def, 0)
+	if err != nil || got != nil {
+		t.Fatalf("BranchCommits(dir, %s, 0) = %v, %v; want nil, nil", def, got, err)
+	}
+}

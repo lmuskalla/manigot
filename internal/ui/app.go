@@ -603,6 +603,7 @@ func (a *App) refresh() tea.Cmd {
 	}
 	if a.detail != nil {
 		a.detail.reload()
+		a.detail.refreshCommits(a.settings.RecentActivityCountValue())
 	}
 	return spinnerCmd
 }
@@ -628,6 +629,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "l", "right":
 		if j, ok := a.list.selectedJob(a.jobs); ok {
 			a.detail = newDetailView(j, a.width, a.height)
+			a.detail.refreshCommits(a.settings.RecentActivityCountValue())
 			a.state = stateDetail
 		}
 	case "j":
