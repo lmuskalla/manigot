@@ -154,3 +154,93 @@ func TestJobsBadge(t *testing.T) {
 		t.Errorf("needs-human badge = %q, want [needs human]", badge)
 	}
 }
+
+// jobsOrphanWorktree builds a git project root with a dead worktree directory
+// under its .manigot-worktrees sibling parent — the orphan shape DiscoverOrphans
+// detects — and returns the orphan's Name and absolute Dir. It is the git
+// counterpart of jobsCheckout (which builds non-git fixtures). The orphan has
+// no branch and no worktree registration, mirroring a job scaffolded and then
+// abandoned.
+func jobsOrphanWorktree(t *testing.T, root, name string) (orphanName, orphanDir string) {
+	t.Helper()
+	wtParent := filepath.Join(filepath.Dir(root), ".manigot-worktrees", filepath.Base(root))
+	wtPath := filepath.Join(wtParent, name)
+	if err := os.MkdirAll(wtParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mgGit(t, root, "worktree", "add", wtPath, "-b", "feature/"+name)
+	// Read the gitdir the .git file names, then delete that metadata and the
+	// branch behind git's back — leaving wtPath as a dead directory.
+	data, err := os.ReadFile(filepath.Join(wtPath, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(data)), "gitdir:"))
+	if err := os.RemoveAll(gitdir); err != nil {
+		t.Fatal(err)
+	}
+	mgGit(t, root, "branch", "-D", "feature/"+name)
+	return name, wtPath
+}
+
+func TestJobsListsOrphans(t *testing.T) {
+	root := mgCheckout(t)
+	orphanName, _ := jobsOrphanWorktree(t, root, "o3kk3n_jdi-is-broken")
+	t.Chdir(root)
+
+	var out strings.Builder
+	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false)
+	// No jobs, so nothing to pick — the listing + orphan surfacing is the
+	// whole command, and an empty job list is not an error (exit 0).
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (no jobs to select)", code)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Orphaned worktrees") {
+		t.Errorf("missing orphan heading:\n%s", got)
+	}
+	if !strings.Contains(got, orphanName) {
+		t.Errorf("missing orphan %q in listing:\n%s", orphanName, got)
+	}
+	if !strings.Contains(got, "Remove them with: mg delete <name>") {
+		t.Errorf("missing non-TTY removal hint:\n%s", got)
+	}
+}
+
+func TestJobsOrphanRemovalOffer(t *testing.T) {
+	root := mgCheckout(t)
+	orphanName, orphanDir := jobsOrphanWorktree(t, root, "o3kk3n_jdi-is-broken")
+	t.Chdir(root)
+
+	var out strings.Builder
+	code := runJobs(nil, strings.NewReader("y\n"), &out, &strings.Builder{}, true)
+	// No jobs, so after removing the orphan the command ends cleanly (exit 0).
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if _, err := os.Stat(orphanDir); !os.IsNotExist(err) {
+		t.Errorf("orphan dir still exists after removal: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "✓ Orphan removed: "+orphanName) {
+		t.Errorf("missing removal confirmation:\n%s", got)
+	}
+	if !strings.Contains(got, "This cannot be undone.") {
+		t.Errorf("missing 'This cannot be undone.':\n%s", got)
+	}
+}
+
+func TestJobsOrphanRemovalDeclined(t *testing.T) {
+	root := mgCheckout(t)
+	_, orphanDir := jobsOrphanWorktree(t, root, "o3kk3n_jdi-is-broken")
+	t.Chdir(root)
+
+	var out strings.Builder
+	code := runJobs(nil, strings.NewReader("n\n"), &out, &strings.Builder{}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (declined removal is not an error)", code)
+	}
+	if _, err := os.Stat(orphanDir); err != nil {
+		t.Errorf("orphan dir removed despite a declined confirmation: %v", err)
+	}
+}
