@@ -61,8 +61,42 @@ func TestResolveRootWithDocs(t *testing.T) {
 	}
 }
 
-func TestResolveRootNoDocsFallsBackToGitRoot(t *testing.T) {
-	dir := projectCheckout(t, t.TempDir(), false)
+// assertMountTargetsExcluded reads the repo's info/exclude (the common git
+// dir, shared by every worktree) and fails unless both container docs-mount
+// target paths are present — the git-must-never-track-them guard behind the
+// .opencode/.claude collision fix.
+func assertMountTargetsExcluded(t *testing.T, repoRoot string) {
+	t.Helper()
+	excludeData, err := os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatalf("read info/exclude: %v", err)
+	}
+	for _, pattern := range []string{".opencode/", ".claude/"} {
+		if !strings.Contains(string(excludeData), pattern) {
+			t.Errorf("info/exclude missing %q: %q", pattern, excludeData)
+		}
+	}
+}
+
+func TestResolveRootExcludesMountTargets(t *testing.T) {
+	dir := projectCheckout(t, t.TempDir(), true)
+	t.Chdir(dir)
+	if _, err := ResolveRoot(Options{}); err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	assertMountTargetsExcluded(t, dir)
+}
+
+func TestResolveJobWorktreeExcludesMountTargets(t *testing.T) {
+	root, jobName, _ := worktreeProject(t)
+	t.Chdir(root)
+	if _, err := ResolveRoot(Options{Job: jobName}); err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	assertMountTargetsExcluded(t, root)
+}
+
+func TestResolveRootNoDocsFallsBackToGitRoot(t *testing.T) {	dir := projectCheckout(t, t.TempDir(), false)
 	sub := filepath.Join(dir, "sub")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)

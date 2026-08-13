@@ -84,6 +84,14 @@ func ResolveRootFrom(opts Options, startDir string) (Root, error) {
 	r.DocsDir = filepath.Join(root, "docs")
 
 	if opts.Job == "" {
+		// Plain session: the resolved root is the worktree the container will
+		// mount docs/ into, so keep git from ever tracking the mount target
+		// path (.opencode/.claude) in it — an agent staging job files through
+		// the mount would otherwise commit a stale duplicate of docs/ (see
+		// docs/BUG_report-mg-done-dirty-worktree-stale-job-copy.md).
+		if err := git.ExcludeMountTargets(r.ProjectRoot); err != nil {
+			return Root{}, err
+		}
 		return r, nil
 	}
 	if !r.DocsInitialized {
@@ -98,13 +106,16 @@ func ResolveRootFrom(opts Options, startDir string) (Root, error) {
 		jobDir := filepath.Join(root, "docs", "jobs", opts.Job)
 		if fs.IsDir(jobDir) {
 			r.Job = opts.Job
-			return r, nil
+		} else {
+			match := job.PrefixJobDirName(root, opts.Job)
+			if match == "" {
+				return Root{}, fmt.Errorf("job '%s' not found under docs/jobs/", opts.Job)
+			}
+			r.Job = match
 		}
-		match := job.PrefixJobDirName(root, opts.Job)
-		if match == "" {
-			return Root{}, fmt.Errorf("job '%s' not found under docs/jobs/", opts.Job)
+		if err := git.ExcludeMountTargets(r.ProjectRoot); err != nil {
+			return Root{}, err
 		}
-		r.Job = match
 		return r, nil
 	}
 
@@ -142,6 +153,12 @@ func ResolveRootFrom(opts Options, startDir string) (Root, error) {
 	// the job directory (new-job.sh always creates it alongside the worktree).
 	if !fs.IsDir(filepath.Join(r.ProjectRoot, "docs", "jobs", r.Job)) {
 		return Root{}, fmt.Errorf("resolved job worktree at %s has no docs/jobs/%s directory — inconsistent worktree state.", r.ProjectRoot, r.Job)
+	}
+	// Same exclusion as the plain-session path: the container mounts docs/
+	// into this worktree at the colliding repo path, so git must never track
+	// it (see the plain-session comment above).
+	if err := git.ExcludeMountTargets(r.ProjectRoot); err != nil {
+		return Root{}, err
 	}
 	return r, nil
 }
