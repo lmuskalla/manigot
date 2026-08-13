@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/git"
 )
 
@@ -127,7 +128,7 @@ func TestCreateJobNestedMountPointLayout(t *testing.T) {
 	if res.WorktreePath != wantWT {
 		t.Errorf("nested worktree = %q, want %q", res.WorktreePath, wantWT)
 	}
-	if !isDir(wantWT) {
+	if !fs.IsDir(wantWT) {
 		t.Errorf("nested worktree dir missing")
 	}
 
@@ -165,7 +166,7 @@ func TestCreateJobNonGitProject(t *testing.T) {
 	if res.Job.Dir != wantDir {
 		t.Errorf("non-git job dir = %q, want %q", res.Job.Dir, wantDir)
 	}
-	if !isDir(wantDir) {
+	if !fs.IsDir(wantDir) {
 		t.Errorf("non-git job dir missing")
 	}
 	if !strings.Contains(out.String(), "Warning  : not a git repository — skipping branch/worktree creation") {
@@ -207,7 +208,7 @@ func TestCreateJobFreshRepoNoCommits(t *testing.T) {
 	if res.Job.Dir != wantDir {
 		t.Errorf("fresh-repo job dir = %q, want %q", res.Job.Dir, wantDir)
 	}
-	if !isDir(wantDir) {
+	if !fs.IsDir(wantDir) {
 		t.Errorf("fresh-repo job dir missing")
 	}
 	if !strings.Contains(out.String(), "Warning  : not a git repository — skipping branch/worktree creation") {
@@ -227,7 +228,7 @@ func TestCreateJobFreshRepoNoCommits(t *testing.T) {
 func TestCreateJobBaseBranchMissing(t *testing.T) {
 	dir := createCheckout(t, t.TempDir())
 	_, err := CreateJob(dir, "X", CreateOptions{BaseBranchOverride: "develop"}, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "Error: base branch 'develop' does not exist; cannot create job branch from it.") {
+	if err == nil || !strings.Contains(err.Error(), "base branch 'develop' does not exist; cannot create job branch from it.") {
 		t.Errorf("missing-base-branch error = %v", err)
 	}
 }
@@ -256,7 +257,7 @@ func TestCreateJobInvalidType(t *testing.T) {
 
 func TestCreateJobNoProjectRoot(t *testing.T) {
 	_, err := CreateJob("", "X", CreateOptions{}, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "Error: could not find project root (no docs/ directory found).") {
+	if err == nil || !strings.Contains(err.Error(), "could not find project root (no docs/ directory found).") {
 		t.Errorf("no-project-root error = %v", err)
 	}
 }

@@ -32,9 +32,8 @@ const stFieldCount = 6
 // Focus indices for the settings form's fields, in tab cycle order: editor →
 // base branch → job branch prefix → recent activity count → profile →
 // terminal → editor. Used by update() and render() instead of bare ints.
-// Terminal was appended after Profile (TASK-1 point 4 of
-// docs/jobs/r5x2a7_add-new-global-setting/tasks.md) rather than inserted
-// next to Editor, so the existing constants keep their values unchanged.
+// Terminal was appended after Profile rather than inserted next to Editor,
+// so the existing constants keep their values unchanged.
 const (
 	stFocusEditor    = 0
 	stFocusBranch    = 1

@@ -23,8 +23,8 @@ const (
 const agentPickerNameWidth = 16
 
 // agentsPickerView is the "Launch an agent" picker opened by "a" from the
-// list view (dashboard): every agent available to the project (TASK-1's
-// agentlist.Discover), one per row, moved through with ↑/↓/k/j and launched
+// list view (dashboard): every agent available to the project
+// (agentlist.Discover), one per row, moved through with ↑/↓/k/j and launched
 // with enter. Like newJobView/settingsView, it does not launch anything
 // itself — the App calls launch.AgentQuick on apSubmit so this stays a pure
 // input component. The agent list itself is discovered once, by the App,

@@ -25,7 +25,7 @@ func TestRenderListShowsCurrentBranch(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, def) {
 		t.Errorf("renderList output does not mention the current branch %q:\n%s", def, got)
 	}
@@ -47,11 +47,11 @@ func TestRenderListOmitsBranchOnNonRepo(t *testing.T) {
 	jobs, _ := job.Discover(dir)
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
-	if a.currentBranch != "" {
-		t.Fatalf("currentBranch = %q on a non-repo project, want empty", a.currentBranch)
+	if a.list.currentBranch != "" {
+		t.Fatalf("currentBranch = %q on a non-repo project, want empty", a.list.currentBranch)
 	}
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if strings.Contains(got, " - on ") {
 		t.Errorf("renderList should render no branch tag on a non-repo project:\n%s", got)
 	}
@@ -116,7 +116,7 @@ func TestRenderListRecentActivityShowsMostRecentAcrossBranches(t *testing.T) {
 	// clamping the strip to its floor of 1 entry.
 	a.width, a.height = 80, 6
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 
 	// def (the checked-out branch) alone doesn't have ZZFEATURECOMMIT in its
 	// history — only its presence proves the strip looks across all local
@@ -158,11 +158,11 @@ func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 	a.refreshRecentCommits()
 	a.width, a.height = 80, 40 // generous height — plenty of spare room
 
-	if got := a.recentActivityShown(); got != 7 {
+	if got := a.list.recentActivityShown(len(a.jobs), a.settings.RecentActivityCountValue(), a.height); got != 7 {
 		t.Fatalf("recentActivityShown() = %d, want the configured max 7 given ample spare room", got)
 	}
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if n := strings.Count(got, def); n < 1 {
 		t.Errorf("renderList at generous height should show multiple activity entries; def branch %q not found:\n%s", def, got)
 	}
@@ -190,11 +190,11 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24 // a list this long already fills a normal terminal
 
-	if got := a.recentActivityShown(); got != recentActivityFloor {
+	if got := a.list.recentActivityShown(len(a.jobs), a.settings.RecentActivityCountValue(), a.height); got != recentActivityFloor {
 		t.Errorf("recentActivityShown() = %d, want the floor %d when the list already fills the screen", got, recentActivityFloor)
 	}
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	// Every job row must still be present — the strip must never have pushed
 	// one off the rendered output.
 	if n := strings.Count(got, "open    feature"); n != 20 {
@@ -216,7 +216,7 @@ func TestRenderListZeroHeightDoesNotPanic(t *testing.T) {
 	a := NewApp(dir, jobs)
 	// a.width, a.height left at zero.
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if got == "" {
 		t.Fatal("renderList returned nothing for a zero-height App")
 	}
@@ -236,10 +236,10 @@ func TestRenderListRecentActivityEmptyOnFreshRepo(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	if len(a.recentCommits) != 0 {
-		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.recentCommits)
+	if len(a.list.recentCommits) != 0 {
+		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.list.recentCommits)
 	}
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if got == "" {
 		t.Fatal("renderList returned nothing")
 	}
@@ -372,7 +372,7 @@ func TestRenderListEmptyStateInvitesNewJob(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, "press n") {
 		t.Errorf("empty-list state should invite the user to press n:\n%s", got)
 	}
@@ -407,7 +407,7 @@ func TestRenderListShowsJDIRunningBadge(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, "running @developer") {
 		t.Errorf("renderList missing the running badge:\n%s", got)
 	}
@@ -426,7 +426,7 @@ func TestRenderListShowsJDINeedsHumanBadge(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, "needs human") {
 		t.Errorf("renderList missing the needs-human badge:\n%s", got)
 	}
@@ -441,7 +441,7 @@ func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	for _, badge := range []string{"[running", "[finished]", "[needs human]"} {
 		if strings.Contains(got, badge) {
 			t.Errorf("renderList should not render the %s badge with no status sidecar:\n%s", badge, got)
@@ -467,7 +467,7 @@ func TestRenderListRunningBadgeShowsSpinnerFrame(t *testing.T) {
 	a.width, a.height = 80, 24
 	cols := listColumns()
 
-	row := a.renderJobRow(jobs[0], cols, false)
+	row := a.list.renderJobRow(jobs[0], cols, false, a.spinnerStep)
 	if !strings.Contains(row, "running @developer") {
 		t.Errorf("row missing the running badge:\n%s", row)
 	}
@@ -476,7 +476,7 @@ func TestRenderListRunningBadgeShowsSpinnerFrame(t *testing.T) {
 	}
 
 	a.spinnerStep = 1
-	row = a.renderJobRow(jobs[0], cols, false)
+	row = a.list.renderJobRow(jobs[0], cols, false, a.spinnerStep)
 	if !strings.Contains(row, activityFrame(1)) {
 		t.Errorf("row missing the advanced spinner frame %q:\n%s", activityFrame(1), row)
 	}
@@ -502,7 +502,7 @@ func TestRenderListStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
 	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIStoppedFinished, "reviewer"); err != nil {
 		t.Fatal(err)
 	}
-	row := a.renderJobRow(jobs[0], cols, false)
+	row := a.list.renderJobRow(jobs[0], cols, false, a.spinnerStep)
 	if !strings.Contains(row, "[finished]") {
 		t.Errorf("finished badge missing:\n%s", row)
 	}
@@ -513,7 +513,7 @@ func TestRenderListStoppedBadgesShowNoSpinnerFrame(t *testing.T) {
 	if err := job.WriteJDIStatus(dir, "aaaa01_a", job.JDIStoppedNeedsHuman, "reviewer"); err != nil {
 		t.Fatal(err)
 	}
-	row = a.renderJobRow(jobs[0], cols, false)
+	row = a.list.renderJobRow(jobs[0], cols, false, a.spinnerStep)
 	if !strings.Contains(row, "[needs human]") {
 		t.Errorf("needs-human badge missing:\n%s", row)
 	}
@@ -551,15 +551,15 @@ func TestListJAndKNoLongerMoveCursor(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	if a.cursor != 0 {
-		t.Fatalf("setup: cursor = %d, want 0", a.cursor)
+	if a.list.cursor != 0 {
+		t.Fatalf("setup: cursor = %d, want 0", a.list.cursor)
 	}
 
 	// "j" no longer moves down — it launches mg-jdi against the current job
 	// (status proves the launch path ran) and leaves the cursor alone.
 	a.updateList(keyMsg("j"))
-	if a.cursor != 0 {
-		t.Errorf("cursor = %d after pressing j, want 0 (j must not move the selection)", a.cursor)
+	if a.list.cursor != 0 {
+		t.Errorf("cursor = %d after pressing j, want 0 (j must not move the selection)", a.list.cursor)
 	}
 	if a.status == "" {
 		t.Errorf("status empty after pressing j, want the mg-jdi launch message (the launch path should have run)")
@@ -567,17 +567,17 @@ func TestListJAndKNoLongerMoveCursor(t *testing.T) {
 
 	// "k" no longer moves up.
 	a.updateList(keyMsg("k"))
-	if a.cursor != 0 {
-		t.Errorf("cursor = %d after pressing k, want 0 (k must not move the selection)", a.cursor)
+	if a.list.cursor != 0 {
+		t.Errorf("cursor = %d after pressing k, want 0 (k must not move the selection)", a.list.cursor)
 	}
 
 	// Contrast: ↑/↓ still navigate.
 	a.updateList(keyMsg("down"))
-	if a.cursor != 1 {
-		t.Errorf("cursor = %d after pressing down, want 1 (down must still move the selection)", a.cursor)
+	if a.list.cursor != 1 {
+		t.Errorf("cursor = %d after pressing down, want 1 (down must still move the selection)", a.list.cursor)
 	}
 	a.updateList(keyMsg("up"))
-	if a.cursor != 0 {
-		t.Errorf("cursor = %d after pressing up, want 0 (up must still move the selection)", a.cursor)
+	if a.list.cursor != 0 {
+		t.Errorf("cursor = %d after pressing up, want 0 (up must still move the selection)", a.list.cursor)
 	}
 }

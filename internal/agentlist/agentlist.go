@@ -1,6 +1,6 @@
 // Package agentlist discovers every agent available to the current project,
-// mirroring scripts/agents.sh's own listing so the TUI's agent picker
-// (TASK-3) shows exactly the same set `mg agents` would.
+// mirroring scripts/agents.sh's own listing so the TUI's agent picker shows
+// exactly the same set `mg agents` would.
 package agentlist
 
 import (
@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/home"
 )
 
@@ -59,7 +60,7 @@ func Discover(projectRoot string) ([]Agent, error) {
 		file := f
 		if projectDir != "" {
 			override := filepath.Join(projectDir, name+".md")
-			if isFile(override) {
+			if fs.IsFile(override) {
 				file = override
 			}
 		}
@@ -144,11 +145,4 @@ func readDescription(path string) (string, error) {
 		}
 	}
 	return "(no description)", nil
-}
-
-// isFile reports whether path exists and is a regular file (not a
-// directory).
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }

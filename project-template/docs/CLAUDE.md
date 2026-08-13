@@ -6,7 +6,9 @@ manigot is vendor-agnostic: it runs Claude Code or OpenCode (`mg --profile
 claude-pro` vs `mg --profile zai`/`--profile opencode-go`) against the same
 project. Your docs/ directory is
 mounted at /workspace/.claude for Claude Code and /workspace/.opencode for
-OpenCode, and the same global agents are available under @name either way.
+OpenCode, and the same global agents are available under @name either way —
+custom project agents in docs/agents/ work under both tools too, written in
+the built-in format (name:, description:, tools: Read, Grep, ...).
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"strings"
@@ -50,20 +52,33 @@ vice versa.
 // identical output wording. r is the interactive input (used only when tty),
 // stdout carries the listing/confirmations, stderr the errors.
 func runProfiles(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int {
-	if len(args) > 0 {
-		switch args[0] {
-		case "-h", "--help", "help":
-			fmt.Fprint(stdout, profilesHelp)
-			return 0
+	fs := flag.NewFlagSet("mg profiles", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() { fmt.Fprint(stdout, profilesHelp) }
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0 // usage already printed to stdout
 		}
+		// An unknown flag — the script's parser had no flags at all, so any
+		// single argument was a candidate profile name.
+		fmt.Fprintln(stderr, flagParseError(err))
+		fmt.Fprintln(stderr, "Usage: mg profiles [name]")
+		return 1
 	}
-	if len(args) > 1 {
+
+	rest := fs.Args()
+	if len(rest) == 1 && rest[0] == "help" {
+		// The script's bare-word help alias.
+		fmt.Fprint(stdout, profilesHelp)
+		return 0
+	}
+	if len(rest) > 1 {
 		fmt.Fprintln(stderr, "Error: too many arguments.")
 		fmt.Fprintln(stderr, "Usage: mg profiles [name]")
 		return 1
 	}
-	if len(args) == 1 {
-		return profilesSet(args[0], stdout, stderr)
+	if len(rest) == 1 {
+		return profilesSet(rest[0], stdout, stderr)
 	}
 	return profilesList(r, stdout, tty)
 }

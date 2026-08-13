@@ -40,8 +40,8 @@ type Settings struct {
 }
 
 // BaseBranchValue returns s.BaseBranch, defaulting to "main" when unset so
-// every reader (the TUI's "m" checkout, scripts/new-job.sh) gets a usable ref
-// even when .manigot/manigot.json is absent or doesn't set the key.
+// every reader (the TUI's lifecycle actions, mg job) gets a usable ref even
+// when .manigot/manigot.json is absent or doesn't set the key.
 func (s Settings) BaseBranchValue() string {
 	if s.BaseBranch == "" {
 		return "main"

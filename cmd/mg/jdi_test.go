@@ -357,6 +357,46 @@ func TestRunStopsOnStall(t *testing.T) {
 	}
 }
 
+// TestRunStallProbeUsesFreshContext pins the stall backstop against a
+// regression where the post-agent HEAD probe reused the pre-agent probe
+// context: an agent invocation (runner.Run) takes minutes in production, so
+// by the time the probe ran the 10s context was long expired and the probe
+// returned "" — headAfter never equaled headBefore, noChange was always
+// false, and a genuinely stuck agent ran to maxIterations instead of
+// stopping after two no-op invocations. The test simulates that by lowering
+// jdiProbeTimeout and making the fake runner's Run outlive it (but write
+// nothing), then asserting the backstop still fires: it can only if the
+// post-agent probe used a fresh context.
+func TestRunStallProbeUsesFreshContext(t *testing.T) {
+	root, j := initTestRepo(t)
+
+	orig := jdiProbeTimeout
+	jdiProbeTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { jdiProbeTimeout = orig })
+
+	// The fake agent "runs" longer than the probe timeout and writes
+	// nothing at all — exactly the production shape of a stuck agent. 600ms
+	// comfortably outlives the 200ms probe timeout, and 200ms leaves the
+	// pre-agent probes (three fast, real git execs sharing the loop-top
+	// context) plenty of room to complete within it even on a loaded CI
+	// machine.
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		time.Sleep(600 * time.Millisecond)
+		return []byte("thinking out loud, not sure what to do")
+	}}
+
+	got := Run(root, j, r, &bytes.Buffer{}, nil)
+	if got.Kind != orchestrate.StopNeedsHuman {
+		t.Fatalf("Run.Kind = %v, want StopNeedsHuman", got.Kind)
+	}
+	if !strings.Contains(got.Reason, "no progress") {
+		t.Errorf("Reason = %q, want it to mention no progress", got.Reason)
+	}
+	if len(r.calls) != 2 {
+		t.Errorf("calls = %v, want exactly two invocations (stall detected on the second, not looped to maxIterations)", r.calls)
+	}
+}
+
 func TestRunStopsOnRunnerError(t *testing.T) {
 	root, j := initTestRepo(t)
 	writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")

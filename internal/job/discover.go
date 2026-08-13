@@ -4,22 +4,21 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/lmuskalla/manigot/internal/git"
 )
 
 // JobsRelDir is where live jobs live, relative to the project root.
-// Kept in sync with scripts/new-job.sh:10 and scripts/finish-job.sh:9.
 const JobsRelDir = "docs/jobs"
 
 // ArchiveDirName is the subdirectory under JobsRelDir that holds finished
-// jobs. finish-job.sh moves done jobs here and filters it out with
-// `-v '/archive'`; discovery does the same.
+// jobs. mg done moves done jobs here, and discovery excludes it.
 const ArchiveDirName = "archive"
 
 // FindProjectRoot walks up from the current working directory until it finds a
-// directory containing a docs/ subdirectory, mirroring the find_project_root
-// helper in scripts/run.sh:46, scripts/new-job.sh:37 and scripts/finish-job.sh:21.
+// directory containing a docs/ subdirectory — the shared project-root walk-up
+// the session launcher and the CLI commands all use.
 //
 // It returns ("", nil) when no such directory exists before the filesystem
 // root — the same convention the bash scripts use (empty string means "not
@@ -53,8 +52,8 @@ func FindProjectRootFrom(startDir string) (string, error) {
 	}
 }
 
-// Discover enumerates every open job (207bfu_git-worktrees, Decision 5): each
-// job lives in its own git worktree (created by scripts/new-job.sh), so for
+// Discover enumerates every open job: each
+// job lives in its own git worktree (created by mg job), so for
 // every local branch that has a registered worktree (via
 // git.WorktreeForBranch), Discover reads whatever job directories exist under
 // that worktree's own docs/jobs/ straight off disk.
@@ -72,7 +71,7 @@ func FindProjectRootFrom(startDir string) (string, error) {
 // live, correct checkout for it.
 //
 // A directory under docs/jobs/ only counts as a job if it has a brief.md —
-// the file new-job.sh's scaffold always writes. This is what keeps the main
+// the file mg job's scaffold always writes. This is what keeps the main
 // worktree's non-job content (a stray empty directory, or anything else
 // without a brief.md) from being mislisted as a job — mg-jdi's status/run.log
 // sidecar lives under .manigot/jdi-status/, outside docs/jobs/ entirely —
@@ -157,6 +156,31 @@ func discoverWorkingTree(root string) ([]Job, error) {
 
 	sortJobs(jobs)
 	return jobs, nil
+}
+
+// PrefixJobDirName returns the first directory name (not the full path)
+// under root's docs/jobs/ whose name starts with prefix, excluding archive/ —
+// the deterministic stand-in for the scripts' `find docs/jobs -maxdepth 1
+// -type d -name '<prefix>*' -not -name archive | head -1`. Returns "" when
+// there is none; callers join the root themselves. The single docs/jobs scan
+// shared by the --job no-branches fallback (session) and the non-git delete
+// path (job).
+func PrefixJobDirName(root, prefix string) string {
+	jobsDir := filepath.Join(root, JobsRelDir)
+	entries, err := os.ReadDir(jobsDir)
+	if err != nil {
+		return ""
+	}
+	// os.ReadDir already sorts by name.
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == ArchiveDirName {
+			continue
+		}
+		if strings.HasPrefix(e.Name(), prefix) {
+			return e.Name()
+		}
+	}
+	return ""
 }
 
 // sortJobs orders jobs by date descending (newest first) with Name as a stable

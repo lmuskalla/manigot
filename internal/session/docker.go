@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/lmuskalla/manigot/internal/config"
+	"github.com/lmuskalla/manigot/internal/fs"
+	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/home"
 )
 
@@ -19,13 +21,22 @@ import (
 type DockerInvocation struct {
 	// Argv is the complete argument vector: ["docker", "run", ...].
 	Argv []string
+
+	// Cleanup removes any host-side resources the invocation created (e.g.
+	// the converted-project-agents temp dir shadow-mounted over the docs
+	// mount's agents/ subpath — see BuildDockerInvocation's agentMount
+	// block). Run defers it so every caller — the interactive `mg` session
+	// path and `mg jdi`'s --print runs alike — gets the cleanup for free
+	// without having to know about it. nil when there is nothing to clean
+	// up.
+	Cleanup func()
 }
 
 // dockerImageName is the container image run.sh launched.
 const dockerImageName = "manigot"
 
 // BuildDockerInvocation assembles the docker run argv, mirroring run.sh's
-// launch construction (brief notes 1, 5 and 10) — every flag, mount, and env
+// launch construction — every flag, mount, and env
 // var is load-bearing, so the argument order and exact strings are pinned by
 // the tests. Diagnostics (banner, warnings, shadowing lines) are written to
 // diag — always stderr, per the brief's note 1 (the script's fd-3 juggling
@@ -44,11 +55,11 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	// project's git config (local overrides global, matching git behavior).
 	gitName := os.Getenv("GIT_AUTHOR_NAME")
 	if gitName == "" {
-		gitName = configValue(root.ProjectRoot, "user.name")
+		gitName = git.ConfigUserName(root.ProjectRoot)
 	}
 	gitEmail := os.Getenv("GIT_AUTHOR_EMAIL")
 	if gitEmail == "" {
-		gitEmail = configValue(root.ProjectRoot, "user.email")
+		gitEmail = git.ConfigEmail(root.ProjectRoot)
 	}
 	if gitName == "" || gitEmail == "" {
 		fmt.Fprintln(diag, "Warning: no git user.name/user.email configured for this project — container commits will fall back to a generic 'manigot' identity.")
@@ -61,9 +72,9 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	}
 
 	contextFile := ""
-	if isFile(filepath.Join(root.DocsDir, "AGENTS.md")) {
+	if fs.IsFile(filepath.Join(root.DocsDir, "AGENTS.md")) {
 		contextFile = filepath.Join(root.DocsDir, "AGENTS.md")
-	} else if isFile(filepath.Join(root.DocsDir, "CLAUDE.md")) {
+	} else if fs.IsFile(filepath.Join(root.DocsDir, "CLAUDE.md")) {
 		contextFile = filepath.Join(root.DocsDir, "CLAUDE.md")
 	}
 
@@ -84,8 +95,26 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	}
 
 	var docsMount []string
-	if isDir(root.DocsDir) {
+	if fs.IsDir(root.DocsDir) {
 		docsMount = []string{"-v", root.DocsDir + ":" + docsMountTarget + ":z"}
+	}
+
+	// ── Project agents ─────────────────────────────────────────────────────
+	// docs/agents/ rides along inside the docs mount above — fine for Claude
+	// Code, whose subagent schema the list-form frontmatter already is, but
+	// OpenCode hard-errors on the list-form tools: key (see convertAgents),
+	// so custom project agents must be converted before the container sees
+	// them. The converted copies land in a temp dir shadow-mounted over the
+	// docs mount's agents/ subpath; the host's docs/agents/ source tree is
+	// never modified. The temp dir is removed via the invocation's Cleanup
+	// hook (see DockerInvocation.Run).
+	var agentMount []string
+	var agentCleanup func()
+	if tmp, hasAgents, err := convertAgents(filepath.Join(root.DocsDir, "agents"), info.Tool); err != nil {
+		return DockerInvocation{}, fmt.Errorf("convert project agents: %w", err)
+	} else if hasAgents {
+		agentMount = []string{"-v", tmp + ":/workspace/.opencode/agents:z"}
+		agentCleanup = func() { os.RemoveAll(tmp) }
 	}
 
 	// ── Job prompt ──────────────────────────────────────────────────────────
@@ -190,13 +219,10 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, "-v", root.ProjectRoot+":/workspace:z")
 	argv = append(argv, gitDirMount...)
 	argv = append(argv, docsMount...)
+	argv = append(argv, agentMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, info.KeyEnv...)
-	argv = append(argv, "-e", "CLAUDE_CODE_OAUTH_TOKEN="+config.EnvValue("CLAUDE_CODE_OAUTH_TOKEN"))
-	argv = append(argv, "-e", "CLAUDE_ACCOUNT_UUID="+config.EnvValue("CLAUDE_ACCOUNT_UUID"))
-	argv = append(argv, "-e", "CLAUDE_EMAIL="+config.EnvValue("CLAUDE_EMAIL"))
-	argv = append(argv, "-e", "CLAUDE_ORG_UUID="+config.EnvValue("CLAUDE_ORG_UUID"))
 	argv = append(argv, "-e", "GIT_AUTHOR_NAME_CFG="+gitName)
 	argv = append(argv, "-e", "GIT_AUTHOR_EMAIL_CFG="+gitEmail)
 	argv = append(argv, "-e", "MANIGOT_TOOL="+info.Tool)
@@ -210,12 +236,16 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 
-	return DockerInvocation{Argv: append([]string{"docker"}, argv...)}, nil
+	return DockerInvocation{Argv: append([]string{"docker"}, argv...), Cleanup: agentCleanup}, nil
 }
 
 // Run executes the assembled docker invocation, wiring stdin/stdout/stderr
 // through so Ctrl+C reaches the container, and returns docker's exit code.
+// The invocation's Cleanup hook (if any) runs after the container exits.
 func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
+	if d.Cleanup != nil {
+		defer d.Cleanup()
+	}
 	cmd := exec.Command(d.Argv[0], d.Argv[1:]...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -228,16 +258,6 @@ func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-// configValue returns `git -C root config <key>` ("" when unset or not a
-// repo) — the project-side git identity the script read.
-func configValue(root, key string) string {
-	out, _, err := gitRaw(root, "config", key)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // findEnvFiles lists every .env / .env.* file under root (recursively),

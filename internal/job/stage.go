@@ -23,9 +23,9 @@ import (
 // Stage is informational only: it labels which step of the ideal workflow a
 // job's files say it has reached, shown as a horizontal timeline in the TUI's
 // detail view. It used to also gate which agents could be launched from
-// there, but per the "launch agents without workflow" brief that gate was
-// removed — all agents are always launchable, regardless of stage — so Stage
-// no longer has an Agents() method; do not reintroduce one as a gate.
+// there, but that gate was removed — all agents are always launchable,
+// regardless of stage — so Stage no longer has an Agents() method; do not
+// reintroduce one as a gate.
 type Stage string
 
 const (
@@ -112,7 +112,7 @@ func (j Job) verdictApproved() bool {
 	if !ok {
 		return false
 	}
-	section := verdictOverallSection(stripHTMLComments(string(data)))
+	section := verdictOverallSection(string(data))
 	if verdictNotApprovedRe.MatchString(section) {
 		return false
 	}
@@ -140,10 +140,20 @@ func VerdictNotApproved(status string) bool {
 	return verdictNotApprovedRe.MatchString(status)
 }
 
-// verdictOverallSection extracts the text following a "## Overall" heading up
-// to the next "##" heading (or end of file), from HTML-comment-stripped
-// verdict.md content. Returns "" if there is no such heading at all.
+// verdictOverallSection is the single extraction primitive for the "## Overall"
+// region of a verdict file (the other verdict helpers are all built on it):
+// the text following the heading up to the next "##" heading (or end of file),
+// with HTML comments stripped — the scaffold's guidance comments are not
+// verdict content. Returns "" if there is no such heading at all.
+//
+// The whole section, not grep's -A5 window, is the behavior that wins: a
+// status line anywhere under the heading is a verdict statement, and the
+// window (a fidelity artifact of finish-job.sh's `grep -A5`) could miss a
+// genuine status placed more than five lines down, spuriously warning
+// "could not determine verdict status". Pinned by TestVerdictOverallMatch's
+// "status beyond line 5" case.
 func verdictOverallSection(body string) string {
+	body = stripHTMLComments(body)
 	loc := verdictOverallRe.FindStringIndex(body)
 	if loc == nil {
 		return ""
@@ -155,11 +165,25 @@ func verdictOverallSection(body string) string {
 	return rest
 }
 
+// verdictOverallMatch returns the first verdict-status line (a line containing
+// APPROVED, REJECTED, or NEEDS WORK) under the "## Overall" heading — the
+// status finish-job.sh surfaced in its warnings — or "" when there is none. It
+// reads the whole section (see verdictOverallSection) rather than grep's -A5
+// window, so a status line anywhere under the heading is recognised.
+func verdictOverallMatch(data []byte) string {
+	section := verdictOverallSection(string(data))
+	for _, line := range strings.Split(section, "\n") {
+		if verdictNotApprovedRe.MatchString(line) || verdictApprovedRe.MatchString(line) {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
 // FileIsWritten reports whether the file at path has real content beyond its
 // scaffold template.
 //
-// "Written" rule (pinned here for TASK-7, corrected by TASK-2 of the "jdi
-// does not work" job; the brief leaves "written" undefined): a job markdown
+// "Written" rule (the brief leaves "written" undefined): a job markdown
 // file is scaffolded by new-job.sh with a title heading, loose key:value
 // frontmatter, HTML-comment guidance, and bare section headers — all of
 // which we ignore. The file is "written" when, after stripping HTML

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // EnvHome is the environment variable that overrides the checkout location
@@ -69,6 +70,25 @@ func Seed() string {
 // directory, which is not a checkout — looksLikeCheckout rejects it, so that
 // case falls through to the working-directory fallback.
 func executableRoots() []string {
+	executableRootsOnce.Do(func() {
+		executableRootsCache = computeExecutableRoots()
+	})
+	return executableRootsCache
+}
+
+// executableRootsOnce / executableRootsCache memoize computeExecutableRoots:
+// os.Executable and filepath.EvalSymlinks are process-constant and not cheap,
+// and Root() sits on config's env-read hot path — deriving them once per
+// process is the win. The MANIGOT_HOME env check in Root() stays uncached: it
+// is cheap and must be read fresh (Seed sets it at startup, and tests set it
+// per-test).
+var (
+	executableRootsOnce  sync.Once
+	executableRootsCache []string
+)
+
+// computeExecutableRoots is executableRoots' uncached body.
+func computeExecutableRoots() []string {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil

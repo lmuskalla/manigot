@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/project"
 )
@@ -50,30 +51,26 @@ func DeleteJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (DeleteR
 	if berr != nil {
 		return DeleteResult{}, berr
 	}
-	branch := exactBranchMatch(branches, jobArg)
+	branch := git.ExactBranchMatch(branches, jobArg)
 	if branch == "" {
-		prefixMatches := prefixBranchMatches(branches, jobArg)
+		prefixMatches := git.PrefixBranchMatches(branches, jobArg)
 		switch len(prefixMatches) {
 		case 0:
-			msg := fmt.Sprintf("Error: job '%s' not found among local branches.\nActive job branches:", jobArg)
-			for _, b := range branches {
-				msg += "\n  " + b
-			}
-			return DeleteResult{}, fmt.Errorf("%s", msg)
+			return DeleteResult{}, jobNotFoundError(jobArg, branches)
 		case 1:
 			branch = prefixMatches[0]
 		default:
-			return DeleteResult{}, fmt.Errorf("Error: job '%s' is ambiguous — matches branches: %s", jobArg, strings.Join(prefixMatches, " "))
+			return DeleteResult{}, fmt.Errorf("job '%s' is ambiguous — matches branches: %s", jobArg, strings.Join(prefixMatches, " "))
 		}
 	}
-	jobName := branchTail(branch)
+	jobName := git.BranchTail(branch)
 
 	wtPath, ok, werr := git.WorktreeForBranch(root, branch)
 	if werr != nil {
 		return DeleteResult{}, werr
 	}
 	if !ok {
-		return DeleteResult{}, fmt.Errorf("Error: branch '%s' has no git worktree — cannot delete job '%s'.\nA job's worktree is created by 'mg job' and should always exist for an open job; this is an inconsistent state.", branch, jobName)
+		return DeleteResult{}, fmt.Errorf("branch '%s' has no git worktree — cannot delete job '%s'.\nA job's worktree is created by 'mg job' and should always exist for an open job; this is an inconsistent state.", branch, jobName)
 	}
 
 	jobDir := filepath.Join(wtPath, JobsRelDir, jobName)
@@ -169,18 +166,16 @@ func DeleteJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (DeleteR
 // (exact then prefix, excluding archive/), confirm, and remove it — a plain
 // directory delete, no git involved.
 func deleteNonGit(root, jobArg string, confirm ConfirmFunc, out io.Writer) (DeleteResult, error) {
-	jobsDir := filepath.Join(root, JobsRelDir)
-
 	var jobDir, jobName string
-	if isDir(filepath.Join(jobsDir, jobArg)) {
-		jobDir = filepath.Join(jobsDir, jobArg)
+	if fs.IsDir(filepath.Join(root, JobsRelDir, jobArg)) {
+		jobDir = filepath.Join(root, JobsRelDir, jobArg)
 		jobName = jobArg
 	} else {
-		match := prefixJobDirName(jobsDir, jobArg)
+		match := PrefixJobDirName(root, jobArg)
 		if match == "" {
-			return DeleteResult{}, fmt.Errorf("Error: job '%s' not found under %s/", jobArg, JobsRelDir)
+			return DeleteResult{}, fmt.Errorf("job '%s' not found under %s/", jobArg, JobsRelDir)
 		}
-		jobDir = filepath.Join(jobsDir, match)
+		jobDir = filepath.Join(root, JobsRelDir, match)
 		jobName = match
 	}
 
@@ -204,26 +199,6 @@ func deleteNonGit(root, jobArg string, confirm ConfirmFunc, out io.Writer) (Dele
 	return DeleteResult{JobName: jobName, Dir: jobDir}, nil
 }
 
-// prefixJobDirName scans jobsDir for a directory whose name starts with prefix,
-// excluding archive/, returning the first match in sorted order (a
-// deterministic stand-in for the script's `find ... | grep -v '/archive' |
-// head -1`). Returns "" when there is none.
-func prefixJobDirName(jobsDir, prefix string) string {
-	entries, err := os.ReadDir(jobsDir)
-	if err != nil {
-		return ""
-	}
-	for _, e := range entries {
-		if !e.IsDir() || e.Name() == ArchiveDirName {
-			continue
-		}
-		if strings.HasPrefix(e.Name(), prefix) {
-			return e.Name()
-		}
-	}
-	return ""
-}
-
 // titleOrName returns title when non-empty, else name — the script's
 // `${JOB_TITLE:-$JOB_NAME}` default.
 func titleOrName(title, name string) string {
@@ -231,10 +206,4 @@ func titleOrName(title, name string) string {
 		return name
 	}
 	return title
-}
-
-// isDir reports whether path exists and is a directory.
-func isDir(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }

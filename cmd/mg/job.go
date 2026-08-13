@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 
@@ -16,32 +18,37 @@ func runJob(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	title := args[0]
-	var jobType, baseBranchOverride string
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--type":
-			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "Unknown argument: %s\n", args[i])
-				return 1
-			}
-			jobType = args[i+1]
-			i++
-		case "--base-branch":
-			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "Unknown argument: %s\n", args[i])
-				return 1
-			}
-			baseBranchOverride = args[i+1]
-			i++
-		default:
-			fmt.Fprintf(stderr, "Unknown argument: %s\n", args[i])
+
+	fs := flag.NewFlagSet("mg job", flag.ContinueOnError)
+	// Discard the flag package's own diagnostics: the script's loop printed
+	// exactly one error line, and the branches below print that mapped line.
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	jobType := fs.String("type", "", "job type: feature, fix, or chore")
+	baseBranchOverride := fs.String("base-branch", "", "branch to cut the job branch from")
+	if err := fs.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// The script's own loop had no help case — a bare --help was
+			// just an unknown argument.
+			fmt.Fprintln(stderr, "Unknown argument: --help")
 			return 1
 		}
+		// flagParseError reproduces the script's "Unknown argument: <flag>"
+		// wording (pinned by tests).
+		fmt.Fprintln(stderr, flagParseError(err))
+		return 1
+	}
+	// flag.FlagSet stops at the first non-flag argument and leaves the
+	// remainder in fs.Args(); the script's hand-rolled loop rejected any such
+	// positional as an unknown argument, so restore that here.
+	if rest := fs.Args(); len(rest) > 0 {
+		fmt.Fprintf(stderr, "Unknown argument: %s\n", rest[0])
+		return 1
 	}
 
 	root, err := job.FindProjectRoot()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		cliError(stderr, err)
 		return 1
 	}
 	if root == "" {
@@ -49,8 +56,8 @@ func runJob(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if _, err := job.CreateJob(root, title, job.CreateOptions{Type: jobType, BaseBranchOverride: baseBranchOverride}, stdout); err != nil {
-		fmt.Fprintln(stderr, err)
+	if _, err := job.CreateJob(root, title, job.CreateOptions{Type: *jobType, BaseBranchOverride: *baseBranchOverride}, stdout); err != nil {
+		cliError(stderr, err)
 		return 1
 	}
 	return 0

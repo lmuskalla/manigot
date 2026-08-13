@@ -11,12 +11,15 @@
 package session
 
 import (
+	"errors"
+	"flag"
 	"fmt"
+	"io"
 
 	"github.com/lmuskalla/manigot/internal/config"
 )
 
-// Options carries the parsed run.sh flag set.
+// Options carries the parsed session flag set.
 type Options struct {
 	Agent   string // --agent
 	Job     string // --job
@@ -27,45 +30,63 @@ type Options struct {
 	Pass    []string
 }
 
-// ParseArgs parses the session flags, mirroring run.sh's arg loop: known
-// --flags consume their value, --print is a bare flag, anything else is
-// passthrough (handed to the container CLI).
+// ParseArgs parses the session flags: known --flags consume their value,
+// --print is a bare flag, anything else — an unknown flag or a bare word — is
+// passthrough, handed verbatim to the container CLI (run.sh's semantics).
+//
+// The passthrough rule is why the known flags are extracted first (splitFlags)
+// and parsed with a flag.FlagSet, rather than feeding flag the raw args:
+// flag stops at the first non-flag argument and treats unknown flags as
+// errors, neither of which matches "everything unknown goes through".
 func ParseArgs(args []string) Options {
 	var o Options
+	fs := flag.NewFlagSet("mg", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&o.Agent, "agent", "", "")
+	fs.StringVar(&o.Job, "job", "", "")
+	fs.StringVar(&o.Prompt, "prompt", "", "")
+	fs.StringVar(&o.Tool, "tool", "", "")
+	fs.StringVar(&o.Profile, "profile", "", "")
+	fs.BoolVar(&o.Print, "print", false, "")
+
+	var flagArgs []string
+	flagArgs, o.Pass = splitFlags(args, sessionValueFlags, sessionBareFlags)
+	// The only parse error possible is a known flag left without its value at
+	// the end (e.g. a bare "--agent"); flag leaves the field unset, which is
+	// the loop's old silent-ignore behavior. There is no error path to the
+	// caller.
+	_ = fs.Parse(flagArgs)
+	return o
+}
+
+// sessionValueFlags / sessionBareFlags name the session's own flags for
+// ParseArgs's splitFlags extraction.
+var (
+	sessionValueFlags = map[string]bool{"--agent": true, "--job": true, "--prompt": true, "--tool": true, "--profile": true}
+	sessionBareFlags  = map[string]bool{"--print": true}
+)
+
+// splitFlags separates args into the known flag tokens (with their values)
+// and everything else, preserving order within each group: the pieces the
+// flag.FlagSet parses, and the passthrough remainder. valueFlags take one
+// value each; bareFlags take none. Any other token — an unknown flag or a
+// bare word — lands in rest.
+func splitFlags(args []string, valueFlags, bareFlags map[string]bool) (flagArgs, rest []string) {
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--agent":
+		switch {
+		case bareFlags[args[i]]:
+			flagArgs = append(flagArgs, args[i])
+		case valueFlags[args[i]]:
+			flagArgs = append(flagArgs, args[i])
 			if i+1 < len(args) {
-				o.Agent = args[i+1]
 				i++
+				flagArgs = append(flagArgs, args[i])
 			}
-		case "--job":
-			if i+1 < len(args) {
-				o.Job = args[i+1]
-				i++
-			}
-		case "--prompt":
-			if i+1 < len(args) {
-				o.Prompt = args[i+1]
-				i++
-			}
-		case "--tool":
-			if i+1 < len(args) {
-				o.Tool = args[i+1]
-				i++
-			}
-		case "--profile":
-			if i+1 < len(args) {
-				o.Profile = args[i+1]
-				i++
-			}
-		case "--print":
-			o.Print = true
 		default:
-			o.Pass = append(o.Pass, args[i])
+			rest = append(rest, args[i])
 		}
 	}
-	return o
+	return flagArgs, rest
 }
 
 // legacyOpenCodeKeys is the nine-key list the legacy profile-less `--tool
@@ -103,14 +124,15 @@ type ProfileInfo struct {
 	// ("" when none — only the legacy path can leave it unset).
 	OpenCodeModel string
 
-	// KeyEnv holds the docker -e arguments for the forwarded opencode keys
-	// (and the model), e.g. ["-e", "ZHIPU_API_KEY=...", "-e", "OPENCODE_MODEL=..."].
-	// Filled by CheckAuth.
+	// KeyEnv holds the docker -e arguments for the forwarded credential keys
+	// (and the opencode model), e.g. ["-e", "CLAUDE_CODE_OAUTH_TOKEN=...",
+	// "-e", "ZHIPU_API_KEY=...", "-e", "OPENCODE_MODEL=..."]. Filled by
+	// CheckAuth.
 	KeyEnv []string
 }
 
 // ResolveProfile implements run.sh's profile resolution block verbatim in
-// behavior (brief note 2): precedence is --profile > --tool (legacy map:
+// behavior: precedence is --profile > --tool (legacy map:
 // claude-code→claude-pro, opencode→legacy empty-profile mode) >
 // $MANIGOT_PROFILE (validated) > claude-pro; then the profile→tool/key/model
 // mapping and the --print + legacy-opencode rejection. Values are read via
@@ -131,7 +153,7 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 		switch profile {
 		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo:
 		default:
-			return ProfileInfo{}, fmt.Errorf("Error: --profile must be one of: %s (got '%s').", valid, profile)
+			return ProfileInfo{}, fmt.Errorf("--profile must be one of: %s (got '%s').", valid, profile)
 		}
 	case opts.Tool != "":
 		switch opts.Tool {
@@ -140,7 +162,7 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 		case config.ToolOpenCode:
 			profile = "" // legacy opencode mode, handled below
 		default:
-			return ProfileInfo{}, fmt.Errorf("Error: --tool must be 'claude-code' or 'opencode' (got '%s').", opts.Tool)
+			return ProfileInfo{}, fmt.Errorf("--tool must be 'claude-code' or 'opencode' (got '%s').", opts.Tool)
 		}
 	default:
 		profile = config.EnvValue("MANIGOT_PROFILE")
@@ -150,7 +172,7 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 		switch profile {
 		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo:
 		default:
-			return ProfileInfo{}, fmt.Errorf("Error: MANIGOT_PROFILE in %s is not a valid profile (got '%s').\nValid profiles: %s", config.EnvFile(), profile, valid)
+			return ProfileInfo{}, fmt.Errorf("MANIGOT_PROFILE in %s is not a valid profile (got '%s').\nValid profiles: %s", config.EnvFile(), profile, valid)
 		}
 	}
 
@@ -176,7 +198,7 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 	// callers like mg-jdi. The legacy, profile-less --tool opencode path is
 	// intentionally left rejected here — it predates the profile system.
 	if opts.Print && info.Tool == config.ToolOpenCode && info.Profile == "" {
-		return ProfileInfo{}, fmt.Errorf("Error: --print is not supported with the legacy --tool opencode (no --profile).\nUse --profile zai or --profile opencode-go instead.")
+		return ProfileInfo{}, fmt.Errorf("--print is not supported with the legacy --tool opencode (no --profile).\nUse --profile zai or --profile opencode-go instead.")
 	}
 
 	return info, nil
@@ -188,12 +210,21 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 func (info *ProfileInfo) CheckAuth() error {
 	if info.Tool == config.ToolClaudeCode {
 		if config.EnvValue("CLAUDE_CODE_OAUTH_TOKEN") == "" {
-			return fmt.Errorf("Error: CLAUDE_CODE_OAUTH_TOKEN is not set.\nAdd it to %s, or run 'mg setup claude-pro' for help:\n  CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...", config.EnvFile())
+			return fmt.Errorf("CLAUDE_CODE_OAUTH_TOKEN is not set.\nAdd it to %s, or run 'mg setup claude-pro' for help:\n  CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...", config.EnvFile())
 		}
 		// Subscription protection: an API key would override the mounted
 		// OAuth credentials and bill per token.
 		if v := config.EnvValue("ANTHROPIC_API_KEY"); v != "" {
-			return fmt.Errorf("Error: ANTHROPIC_API_KEY is set — this overrides your subscription and bills per token.\nRemove it from your environment before running mg with the claude-pro profile.")
+			return fmt.Errorf("ANTHROPIC_API_KEY is set — this overrides your subscription and bills per token.\nRemove it from your environment before running mg with the claude-pro profile.")
+		}
+		// Forward the subscription credentials into the container. The
+		// empty-value filter matches the opencode handling below, so a
+		// non-claude profile's docker argv never carries -e CLAUDE_*==""
+		// noise (the token was just validated; the other three are optional).
+		for _, key := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+			if v := config.EnvValue(key); v != "" {
+				info.KeyEnv = append(info.KeyEnv, "-e", key+"="+v)
+			}
 		}
 		return nil
 	}
@@ -208,14 +239,14 @@ func (info *ProfileInfo) CheckAuth() error {
 	if len(info.KeyEnv) == 0 {
 		var msg string
 		if info.Profile != "" {
-			msg = fmt.Sprintf("Error: profile '%s' is missing its API key.\nAdd it to %s, or run 'mg setup %s' for help:", info.Profile, config.EnvFile(), info.Profile)
+			msg = fmt.Sprintf("profile '%s' is missing its API key.\nAdd it to %s, or run 'mg setup %s' for help:", info.Profile, config.EnvFile(), info.Profile)
 		} else {
-			msg = fmt.Sprintf("Error: --tool opencode needs at least one provider API key.\nAdd one of these to %s:", config.EnvFile())
+			msg = fmt.Sprintf("--tool opencode needs at least one provider API key.\nAdd one of these to %s:", config.EnvFile())
 		}
 		for _, k := range info.OpenCodeKeys {
 			msg += "\n  " + k
 		}
-		return fmt.Errorf("%s", msg)
+		return errors.New(msg)
 	}
 
 	// The model each profile defaults to, consumed by scripts/entrypoint.sh

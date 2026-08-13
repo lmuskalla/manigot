@@ -8,6 +8,7 @@ import (
 
 	"github.com/lmuskalla/manigot/internal/agentlist"
 	"github.com/lmuskalla/manigot/internal/cli"
+	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/home"
 	"github.com/lmuskalla/manigot/internal/job"
 )
@@ -66,9 +67,8 @@ func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty 
 	fmt.Fprintf(stdout, "→ Starting a session in @%s...\n", chosen)
 	fmt.Fprintln(stdout, "")
 
-	// Re-exec the same binary's session path (strangler stage 0: that still
-	// lands in run.sh; once Phase 3 ports the session in-process, this keeps
-	// working unchanged).
+	// Re-exec the same binary's session path — the launch is in-process, so
+	// this just re-runs `mg --agent <chosen> <passthrough>`.
 	launchArgs := append([]string{"--agent", chosen}, passthrough...)
 	return reexec(launchArgs, stderr)
 }
@@ -81,17 +81,11 @@ func agentSource(home, projectAgentsDir, name string) string {
 		return ""
 	}
 	projectFile := filepath.Join(projectAgentsDir, name+".md")
-	if !isRegularFile(projectFile) {
+	if !fs.IsFile(projectFile) {
 		return ""
 	}
-	if isRegularFile(filepath.Join(home, "agents", name+".md")) {
+	if fs.IsFile(filepath.Join(home, "agents", name+".md")) {
 		return " (project override)"
 	}
 	return " (project)"
-}
-
-// isRegularFile reports whether path exists and is a regular file.
-func isRegularFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }

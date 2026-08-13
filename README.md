@@ -209,10 +209,12 @@ its first argument:
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job: directory + branch, checked out in the job's own worktree (off `main`); needs `docs/` |
+| `mg jobs` | list open jobs with state and pick one to start a session in; needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
 | `mg delete` | permanently delete a job (worktree + branch, no merge); needs `docs/` |
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
+| `mg host` | run a session directly on the host, without the docker container — the profile's CLI runs as-is from the project root, so the agent can touch the host itself (thematic alias: `mg wild`, same command/behavior) |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
@@ -306,6 +308,11 @@ mg done a3f9k2
 
 # Drive a job unattended: @analyst -> @developer -> @reviewer, end to end
 mg jdi --job a3f9k2
+
+# Run a session on the host — no docker container (work that must touch the host)
+mg host
+mg host --job a3f9k2              # same flags as a docker session, host-pathed job prompt
+mg wild --profile zai             # thematic alias, same command/behavior
 ```
 
 Three ways to seed a session's initial prompt: `--job <id>` (the job's
@@ -343,19 +350,56 @@ What differs per profile:
 Both tools get the same `agents/*.md` files baked in at build time. The
 OpenCode copies are generated from the same sources with the `name` and `tools`
 frontmatter keys removed, since OpenCode derives the agent name from the
-filename and uses a different schema for tool permissions.
+filename and uses a different schema for tool permissions. Custom project
+agents in `your-project/docs/agents/` are written in the same list form and
+converted the same way at session launch — manigot strips `name`/`tools` from
+the mounted copies before an OpenCode session sees them (OpenCode hard-errors
+on the list form, so this is what keeps one file working under both CLIs).
+Your `docs/agents/` source files are never modified.
 
 Both CLIs start with all permissions auto-approved — no per-tool confirmation
 prompts (e.g. "can I run this python script?") appear in either tool. The
 container is isolated and ephemeral, so this is safe: Claude Code runs with
 `--dangerously-skip-permissions`, OpenCode with `--auto` (which auto-approves
 anything not explicitly denied; the container's opencode config defines no
-denies).
+denies). `mg host` runs without the container and therefore without these
+flags — see [Host mode](#host-mode-mg-host).
 
 One caveat: because `tools:` is dropped, the read-only agents are **not**
 restricted under OpenCode — `@reviewer`, `@security`, `@analyst` and
 `@owner` can write files there. Under Claude Code the restriction is
 enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
+
+---
+
+### Host mode (`mg host`)
+
+Most sessions run inside the isolated Docker container. `mg host` (thematic
+alias: `mg wild`) is the deliberate exception: it launches the profile's
+agent CLI directly on the host — no container, no image, no mounts — as a
+launcher for work that must touch the host itself.
+
+- It reuses the same session machinery: `--profile`, `--agent`, `--job`,
+  `--prompt` and passthrough behave exactly as in a docker session, and the
+  credentials resolve the same way — the profile's keys go into the CLI's
+  environment, nothing is written to your config.
+- The CLI runs from the resolved project root (the job's worktree with
+  `--job`), and the job prompt names the job's **host** path.
+- The CLI must be installed on the host — the docker path has both CLIs in
+  the image. `mg host` fails with a clear error if it is not.
+- **No auto-approval flags.** The container path starts Claude Code with
+  `--dangerously-skip-permissions` and OpenCode with `--auto`, safe only
+  because the container is isolated and ephemeral. On the host there is no
+  isolation, so `mg host` deliberately does not pass them: the CLI keeps its
+  normal per-tool confirmation prompts and you supervise every action.
+- **Agents.** manigot's global agents are baked into the container image,
+  not installed on the host — `--agent` works only if the host's own CLI has
+  that agent installed (it errors clearly otherwise).
+- **OpenCode model.** The zai/opencode-go profiles' plan model is forwarded
+  via opencode's `--model` flag; mg never writes your host's opencode
+  config.
+- **`--print` stays a container path.** `mg host --print` is rejected with a
+  clear error — non-interactive runs (and `mg jdi`) still use the container.
 
 ---
 
@@ -385,6 +429,9 @@ The Tools column is enforced under Claude Code only — see the caveat under
 
 To override an agent for a specific project, create a file with the same name
 in `your-project/docs/agents/`. Project agents take precedence over global ones.
+Write them in the same format as the built-ins (`name:`, `description:`,
+`tools: Read, Grep, ...`) — the OpenCode copy is generated from that file at
+launch, so you never need to hand-write OpenCode's object form.
 
 ---
 

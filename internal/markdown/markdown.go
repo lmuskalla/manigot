@@ -1,10 +1,9 @@
 // Package markdown renders manigot job markdown files to terminal-styled text
 // and provides a scrollable Viewer over the rendered output.
 //
-// It wraps Charm's Glamour (the same family as the Bubble Tea stack chosen in
-// TASK-1) for the markdown→ANSI conversion, and adds a small scroll buffer so
-// the detail view (TASK-6) can page through a file that is taller than the
-// terminal.
+// It wraps Charm's Glamour (the same family as the Bubble Tea stack) for the
+// markdown→ANSI conversion, and adds a small scroll buffer so the detail view
+// can page through a file that is taller than the terminal.
 package markdown
 
 import (
@@ -34,7 +33,7 @@ const minWidth = 20
 // response — or until termenv.OSCTimeout (5s) elapses. That read races with —
 // and can consume/discard — Bubble Tea's own raw-mode stdin reader. Caching
 // the renderer here only bounds how often that race can happen (once per
-// width instead of once per keypress, TASK-1/2); it does not remove the race
+// width instead of once per keypress); it does not remove the race
 // itself. The actual fix is style, below.
 var (
 	rendererMu    sync.Mutex

@@ -28,13 +28,18 @@ The seam between the orchestrator (host-side Go) and the agent environment
 
 - `cmd/mg/main.go` — the single binary's dispatcher. Every command is a
   subcommand run in-process: bare `mg` (session), `profiles`, `setup`,
-  `agents`/`crew`, `job`, `done`, `delete`, `init`, `tui`, `jdi`/`made-man`,
-  `help`. `make mg` builds it to `bin/mg`; `make install` symlinks one `mg`
-  onto `PATH`.
+  `agents`/`crew`, `job`, `jobs`, `done`, `delete`, `init`, `tui`,
+  `jdi`/`made-man`, `help`. `make mg` builds it to `bin/mg`; `make install`
+  symlinks one `mg` onto `PATH`.
 - `internal/session` — the docker session launcher (was `scripts/run.sh`):
   profile/tool resolution, auth validation, project-root + `--job` worktree
   resolution, docker argv/mount/env construction, and the run itself.
-  The TUI and mg-jdi call it directly.
+  The TUI and mg-jdi call it directly. For OpenCode sessions it also converts
+  project-level `docs/agents/*.md` to OpenCode's schema at launch (the same
+  `name`/`tools` strip the Dockerfile applies to the built-in agents), writing
+  the converted copies to a temp dir shadow-mounted over the docs mount's
+  `agents/` subpath — the host's `docs/agents/` is never modified, and the
+  temp dir is cleaned up after the run.
 - `internal/job` — the job lifecycle (was `new-job.sh`/`finish-job.sh`/
   `delete-job.sh`): `CreateJob` (scaffold + worktree + first commit),
   `FinishJob` (archive + squash merge + branch delete), `DeleteJob`
@@ -61,9 +66,10 @@ The seam between the orchestrator (host-side Go) and the agent environment
   `opencode run <message> --agent <agent> --auto --format json`.
 - `Dockerfile` — builds the image; installs both agent CLIs, bakes the global
   `agents/` in (twice: verbatim for Claude Code, and for OpenCode with the
-  `name`/`tools` frontmatter keys stripped), and pre-warms the Go module
-  cache from the root `go.mod`/`go.sum` (with `GOTOOLCHAIN=local` a stale
-  path breaks the build).
+  `name`/`tools` frontmatter keys stripped — the same strip the session
+  launcher applies at launch to project `docs/agents/` overrides), and
+  pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
+  `GOTOOLCHAIN=local` a stale path breaks the build).
 
 ### Session launch (bare `mg`)
 
@@ -245,6 +251,7 @@ either way.
 - `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
   dir + branch + worktree (the branch is cut from the configured base branch;
   `--base-branch` overrides it for one invocation)
+- `mg jobs` — list open jobs with state and pick one to start a session in
 - `mg done <id>` — archive a finished job (squash-merge into the base branch
   and remove its worktree; the merge target is the configured `baseBranch`,
   falling back to the remote default branch when unset)
@@ -254,6 +261,15 @@ either way.
   `@developer` → `@reviewer` sequence end to end, unattended, under the given
   subscription profile (default `claude-pro`)
   (thematic alias: `mg made-man`, same command/behavior)
+- `mg host` — run a session directly on the host, without the docker
+  container: the profile's agent CLI (`claude`/`opencode`) runs as-is from
+  the resolved project root (the job's worktree with `--job`), with the
+  profile's credentials in its environment and the job prompt naming the
+  job's host path. The CLI must be installed on the host, and it keeps its
+  normal per-tool confirmation prompts — the container path's auto-approval
+  flags (`--dangerously-skip-permissions`/`--auto`) are deliberately not
+  passed, since host sessions have no isolation. For work that must touch
+  the host itself (thematic alias: `mg wild`, same command/behavior)
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:

@@ -65,7 +65,7 @@ type CreateResult struct {
 // opened on, not the TUI process's working directory.
 func CreateJob(root, title string, opts CreateOptions, out io.Writer) (CreateResult, error) {
 	if root == "" {
-		return CreateResult{}, fmt.Errorf("Error: could not find project root (no docs/ directory found).")
+		return CreateResult{}, fmt.Errorf("could not find project root (no docs/ directory found).")
 	}
 
 	// ── Resolve type + base branch + prefix ─────────────────────────────────
@@ -129,7 +129,7 @@ func CreateJob(root, title string, opts CreateOptions, out io.Writer) (CreateRes
 		if ok, err := git.RefExists(root, baseBranch); err != nil {
 			return CreateResult{}, err
 		} else if !ok {
-			return CreateResult{}, fmt.Errorf("Error: base branch '%s' does not exist; cannot create job branch from it.", baseBranch)
+			return CreateResult{}, fmt.Errorf("base branch '%s' does not exist; cannot create job branch from it.", baseBranch)
 		}
 
 		if err := checkBranchNamespace(root, branch); err != nil {
@@ -232,7 +232,7 @@ func checkBranchNamespace(root, branch string) error {
 			return err
 		}
 		if ok {
-			return fmt.Errorf("Error: cannot create job branch '%s': a branch named '%s' already exists, which blocks the '%s/...' namespace.\n  Set jobBranchPrefix in .manigot/manigot.json (or rename the conflicting branch) and retry.", branch, seg, seg)
+			return fmt.Errorf("cannot create job branch '%s': a branch named '%s' already exists, which blocks the '%s/...' namespace.\n  Set jobBranchPrefix in .manigot/manigot.json (or rename the conflicting branch) and retry.", branch, seg, seg)
 		}
 		if !strings.Contains(seg, "/") {
 			break // a bare segment (e.g. "jobs") is the last ancestor
@@ -260,21 +260,38 @@ var (
 // `LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 6`.
 func randomID() (string, error) {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	// Rejection sampling: 256 is not a multiple of 36, so a naive
+	// `byte % 36` overweights the first few chars (values 252-255 would all
+	// map onto them). Draw a fresh byte until it lands in [0, 252) — the
+	// largest multiple of 36 below 256 — so every char is exactly as likely
+	// as every other. The bias was negligible for job ids, but the correct
+	// shape costs nothing.
+	const limit = byte(256 - 256%len(chars)) // 252
 	b := make([]byte, 6)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
 	for i := range b {
+		for {
+			if _, err := rand.Read(b[i : i+1]); err != nil {
+				return "", err
+			}
+			if b[i] < limit {
+				break
+			}
+		}
 		b[i] = chars[int(b[i])%len(chars)]
 	}
 	return string(b), nil
 }
 
 // writeScaffold writes the four job files with content byte-identical to
-// new-job.sh's heredocs.
+// new-job.sh's heredocs. A slice of {name, content} pairs, not a map: the
+// write order is deterministic (the files are independent, so a map's random
+// order was harmless — fixed iteration is simply tidier).
 func writeScaffold(dir, title, jobType, jobID, branch, date, author string) error {
-	files := map[string]string{
-		"brief.md": fmt.Sprintf(`# Brief: %s
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"brief.md", fmt.Sprintf(`# Brief: %s
 
 status: open
 type: %s
@@ -298,8 +315,8 @@ author: %s
 ## Notes
 
 <!-- Anything the analyst or developer should know before starting. -->
-`, title, jobType, jobID, branch, date, author),
-		"tasks.md": fmt.Sprintf(`# Tasks: %s
+`, title, jobType, jobID, branch, date, author)},
+		{"tasks.md", fmt.Sprintf(`# Tasks: %s
 
 id: %s
 status: open
@@ -317,8 +334,8 @@ date:
 
 TASK-2: ...
 -->
-`, title, jobID),
-		"implementation.md": fmt.Sprintf(`# Implementation: %s
+`, title, jobID)},
+		{"implementation.md", fmt.Sprintf(`# Implementation: %s
 
 id: %s
 status: open
@@ -338,8 +355,8 @@ date:
 ## Known issues / follow-ups
 
 <!-- Anything that came up during implementation that wasn't in scope but should be tracked. -->
-`, title, jobID),
-		"verdict.md": fmt.Sprintf(`# Verdict: %s
+`, title, jobID)},
+		{"verdict.md", fmt.Sprintf(`# Verdict: %s
 
 id: %s
 status: open
@@ -364,10 +381,10 @@ TASK-2: ...
 
 <!-- APPROVED / REJECTED / NEEDS WORK -->
 <!-- Summary of what needs to change before this can be approved, if anything. -->
-`, title, jobID),
+`, title, jobID)},
 	}
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(dir, f.name), []byte(f.content), 0o644); err != nil {
 			return err
 		}
 	}

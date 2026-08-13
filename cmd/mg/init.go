@@ -1,15 +1,17 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/lmuskalla/manigot/internal/cli"
 	"github.com/lmuskalla/manigot/internal/config"
+	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/home"
 )
 
@@ -44,44 +46,59 @@ func runInit(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int
 
 	// --profile is canonical; --tool is a legacy alias mapped to the matching
 	// profile (claude-code → claude-pro, opencode → zai).
+	fs := flag.NewFlagSet("mg init", flag.ContinueOnError)
+	// Discard the flag package's own diagnostics: the script's loop printed
+	// exactly one error line, and the branches below print that mapped line.
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	toolArg := fs.String("tool", "", "")
+	profileArg := fs.String("profile", "", "")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// The script's own loop had no help case — a bare --help was
+			// just an unknown argument.
+			fmt.Fprintln(stderr, "Unknown argument: --help")
+			return 1
+		}
+		fmt.Fprintln(stderr, flagParseError(err))
+		return 1
+	}
+	// flag.FlagSet stops at the first non-flag argument and leaves the
+	// remainder in fs.Args(); the script's hand-rolled loop rejected any such
+	// positional as an unknown argument, so restore that here.
+	if rest := fs.Args(); len(rest) > 0 {
+		fmt.Fprintf(stderr, "Unknown argument: %s\n", rest[0])
+		return 1
+	}
+
 	profile := ""
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--tool", "--profile":
-			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "Unknown argument: %s\n", args[i])
-				return 1
-			}
-			if args[i] == "--tool" {
-				switch args[i+1] {
-				case "claude-code":
-					profile = config.ProfileClaudePro
-				case "opencode":
-					profile = config.ProfileZAI
-				default:
-					fmt.Fprintf(stderr, "Error: --tool must be 'claude-code' or 'opencode' (got '%s').\n", args[i+1])
-					return 1
-				}
-			} else {
-				switch args[i+1] {
-				case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo:
-					profile = args[i+1]
-				default:
-					fmt.Fprintf(stderr, "Error: --profile must be 'claude-pro', 'zai' or 'opencode-go' (got '%s').\n", args[i+1])
-					return 1
-				}
-			}
-			i++
+	switch {
+	case *profileArg != "":
+		switch *profileArg {
+		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo:
+			profile = *profileArg
 		default:
-			fmt.Fprintf(stderr, "Unknown argument: %s\n", args[i])
+			fmt.Fprintf(stderr, "Error: --profile must be 'claude-pro', 'zai' or 'opencode-go' (got '%s').\n", *profileArg)
+			return 1
+		}
+	case *toolArg != "":
+		switch *toolArg {
+		case "claude-code":
+			profile = config.ProfileClaudePro
+		case "opencode":
+			profile = config.ProfileZAI
+		default:
+			fmt.Fprintf(stderr, "Error: --tool must be 'claude-code' or 'opencode' (got '%s').\n", *toolArg)
 			return 1
 		}
 	}
 
 	// Target dir: git top-level when in a repo, else $PWD — NOT the docs
 	// walk-up, since init is what creates docs/.
-	target := gitToplevel(stderr)
-	if target == "" {
+	target, terr := git.RevParseToplevel(".")
+	if terr != nil {
+		// Not in a repo (or git missing) — fall back to $PWD, the same
+		// "empty means not a repo" degrade init.sh's gitToplevel had.
 		cwd, err := os.Getwd()
 		if err != nil {
 			fmt.Fprintf(stderr, "mg init: %v\n", err)
@@ -156,16 +173,6 @@ func runInit(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int
 	return 0
 }
 
-// gitToplevel returns the git top-level of the working directory ("" when not
-// in a repo), the container-boundary fallback init.sh used.
-func gitToplevel(stderr io.Writer) string {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // copyFile copies a file's contents and mode to dst (creating parents assumed
 // to exist).
 func copyFile(src, dst string) error {
@@ -176,8 +183,8 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, data, 0o644)
 }
 
-// reexec runs the current binary with the given args (strangler stage 0: the
-// session path still lands in run.sh until Phase 3), exiting with its code.
+// reexec runs the current binary with the given args — the launch path for
+// the @prompter hand-off — and exits with its code.
 func reexec(args []string, stderr io.Writer) int {
 	exe, err := os.Executable()
 	if err != nil {

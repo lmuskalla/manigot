@@ -48,13 +48,66 @@ func TestRunJobUsage(t *testing.T) {
 	}
 }
 
+// TestRunJobUnknownArg pins the single-line unknown-flag error: the old
+// hand-rolled loop printed exactly one "Unknown argument: <flag>" line and
+// nothing else, and the flag package's own diagnostic must not leak ahead of
+// it (fs.SetOutput(io.Discard)).
 func TestRunJobUnknownArg(t *testing.T) {
 	var out, errOut strings.Builder
 	if code := runJob([]string{"title", "--bogus"}, &out, &errOut); code != 1 {
 		t.Errorf("unknown-arg exit code = %d, want 1", code)
 	}
-	if !strings.Contains(errOut.String(), "Unknown argument: --bogus") {
-		t.Errorf("missing unknown-arg error:\n%s", errOut.String())
+	if want := "Unknown argument: --bogus\n"; errOut.String() != want {
+		t.Errorf("stderr = %q, want exactly %q", errOut.String(), want)
+	}
+}
+
+// TestRunJobMissingValue pins the single-line missing-value error the same
+// way: "mg job T --type" must print exactly one "Unknown argument: --type"
+// line, not the flag package's "flag needs an argument" diagnostic.
+func TestRunJobMissingValue(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"type", []string{"title", "--type"}, "Unknown argument: --type\n"},
+		{"base-branch", []string{"title", "--base-branch"}, "Unknown argument: --base-branch\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut strings.Builder
+			if code := runJob(tc.args, &out, &errOut); code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if errOut.String() != tc.want {
+				t.Errorf("stderr = %q, want exactly %q", errOut.String(), tc.want)
+			}
+		})
+	}
+}
+
+// TestRunJobRejectsPositionals pins the script's hand-rolled-loop behavior:
+// any positional after the title (flag.FlagSet leaves them in fs.Args()) is
+// an unknown argument, not a silently-ignored extra.
+func TestRunJobRejectsPositionals(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unquoted-title-word", []string{"Add", "Gallery"}, "Unknown argument: Gallery"},
+		{"after-type", []string{"Title", "--type", "fix", "stray"}, "Unknown argument: stray"},
+		{"after-base-branch", []string{"Title", "--base-branch", "main", "stray"}, "Unknown argument: stray"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut strings.Builder
+			if code := runJob(tc.args, &out, &errOut); code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if !strings.Contains(errOut.String(), tc.want) {
+				t.Errorf("missing %q:\n%s", tc.want, errOut.String())
+			}
+		})
 	}
 }
 

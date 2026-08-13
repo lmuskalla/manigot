@@ -156,7 +156,7 @@ func TestFinishJobDirtyWorktreeRejected(t *testing.T) {
 
 	var out bytes.Buffer
 	_, err := FinishJob(root, "ab12cd", yesConfirm, &out)
-	if err == nil || !strings.Contains(err.Error(), "Error: uncommitted changes in the worktree for branch 'feature/ab12cd_roundtrip-job'. Commit or stash before finishing.") {
+	if err == nil || !strings.Contains(err.Error(), "uncommitted changes in the worktree for branch 'feature/ab12cd_roundtrip-job'. Commit or stash before finishing.") {
 		t.Errorf("dirty-tree error = %v", err)
 	}
 }
@@ -206,7 +206,7 @@ func TestFinishJobJobNotFound(t *testing.T) {
 	root := createCheckout(t, t.TempDir())
 	var out bytes.Buffer
 	_, err := FinishJob(root, "zzzz99", yesConfirm, &out)
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'zzzz99' not found among local branches.") {
+	if err == nil || !strings.Contains(err.Error(), "job 'zzzz99' not found among local branches.") {
 		t.Errorf("not-found error = %v", err)
 	}
 	if !strings.Contains(err.Error(), "Active job branches:") {
@@ -222,27 +222,8 @@ func TestFinishJobAmbiguous(t *testing.T) {
 	// first, matching the script's resolution order.
 	var out bytes.Buffer
 	_, err := FinishJob(root, "ab12cd", yesConfirm, &out)
-	if err == nil || !strings.Contains(err.Error(), "Error: job 'ab12cd' is ambiguous — matches branches:") {
+	if err == nil || !strings.Contains(err.Error(), "job 'ab12cd' is ambiguous — matches branches:") {
 		t.Errorf("ambiguity error = %v", err)
-	}
-}
-
-func TestVerdictOverallMatch(t *testing.T) {
-	cases := []struct {
-		name string
-		md   string
-		want string
-	}{
-		{"approved", "# Verdict\n\n## Overall\n\nAPPROVED\n", "APPROVED"},
-		{"needs work", "# Verdict\n\n## Overall\n\nNEEDS WORK — fix TASK-1\n", "NEEDS WORK — fix TASK-1"},
-		{"rejected in window", "# Verdict\n\n## Overall\n\nThe reviewer says REJECTED.\nmore\nmore\nmore\nmore\n", "The reviewer says REJECTED."},
-		{"no heading", "# Verdict\n\nJust text.\n", ""},
-		{"status outside 5-line window", "# Verdict\n\n## Overall\n\nok\nok\nok\nok\nok\nok\nAPPROVED\n", ""},
-	}
-	for _, c := range cases {
-		if got := verdictOverallMatch([]byte(c.md)); got != c.want {
-			t.Errorf("%s: verdictOverallMatch = %q, want %q", c.name, got, c.want)
-		}
 	}
 }
 

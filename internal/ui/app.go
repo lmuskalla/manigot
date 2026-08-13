@@ -5,6 +5,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -40,21 +41,14 @@ type App struct {
 	jobs  []job.Job
 	state appState
 
-	// currentBranch is the branch checked out in root right now (git.
-	// CurrentBranch), refreshed alongside the job list so it never goes
-	// stale relative to renderJobRow's "· <branch>" tags. Empty for a
-	// detached HEAD or a non-repo project (job.Discover's working-tree-only
-	// fallback) — both render nothing rather than an awkward empty label.
-	currentBranch string
+	// list is the job list view (stateList) — see list.go. It owns the
+	// cursor, the recent-activity strip data, and the list rendering; App
+	// feeds it the job list, settings, and cross-view state on each render.
+	list *listView
 
-	// recentCommits backs the list header's read-only "recent activity"
-	// strip: the last few commits across all local branches (git.
-	// RecentCommits), refreshed alongside currentBranch. nil when the repo
-	// has no commits yet or RecentCommits errors (e.g. a non-repo project)
-	// — renderRecentActivity degrades to rendering nothing in that case.
-	recentCommits []git.Commit
-
-	cursor int
+	// width / height are the viewport size, used to construct and resize the
+	// overlay views (detail, new-job, settings, agents picker, confirm) and
+	// passed to the list view on each render.
 	width  int
 	height int
 
@@ -91,17 +85,15 @@ type App struct {
 	status string
 
 	// jdiSeen tracks, per job Name, the last job.JDIState observed for that
-	// job's mg-jdi status sidecar (Decision 7a/TASK-11) — the TUI's own
-	// stop-notification dedup. The very first observation of any given job
+	// job's mg-jdi status sidecar — the TUI's own stop-notification dedup. The very first observation of any given job
 	// (no prior entry) always just seeds this map rather than ringing the
 	// bell, even if that first-seen status is already stopped: a restarted
 	// TUI re-observing an already-stopped job isn't a new event worth
 	// alerting on. Reset (empty) on every TUI restart — in-memory only, no
 	// new event-streaming subsystem or persisted state.
 	//
-	// jdiAlreadyRunning's launch-block guard (TASK-1 of the "multiple jdi
-	// instances" job) also falls back to this same map when no on-disk
-	// sidecar exists yet — see jdiSeenAt below for why that fallback has its
+	// jdiAlreadyRunning's launch-block guard also falls back to this same
+	// map when no on-disk sidecar exists yet — see jdiSeenAt below for why that fallback has its
 	// own expiry, independent of this dedup's own (unrelated) purpose.
 	jdiSeen map[string]job.JDIState
 
@@ -141,11 +133,20 @@ type App struct {
 // of sitting as a static badge.
 type spinnerTickMsg struct{}
 
+// hostGitTimeout bounds the TUI's background git cmds (push-to-origin, the
+// auto-commit after a brief.md edit). These run off the UI goroutine, so an
+// unbounded git call — most realistically a stalled network push — would hang
+// the app's command channel forever (GIT_TERMINAL_PROMPT=0 covers only the
+// credential case). The interactive session and mg done/mg delete keep no
+// timeout: the user is waiting on git there. The mg-jdi probes use their own,
+// shorter timeout (see cmd/mg/jdi.go).
+const hostGitTimeout = 30 * time.Second
+
 // jdiSeenFallbackTTL bounds how long jdiAlreadyRunning trusts a jdiSeen
 // JDIRunning entry that has no corroborating on-disk sidecar file at all.
 // It exists to bridge the real race this fallback is for — the gap between
 // launch.Jdi's Start() returning and mg-jdi's own first WriteJDIStatus call,
-// which per cmd/jdi/main.go happens before it invokes its first agent, so
+// which happens before mg-jdi invokes its first agent, so
 // normally within seconds (a git checkout, not a full agent run) — while
 // still being short enough that a launch whose mg-jdi process crashed or was
 // killed before ever writing that first status file recovers on its own
@@ -166,13 +167,13 @@ var jdiNow = time.Now
 // tui-settings.json) is non-fatal — the app starts with default settings and
 // surfaces the error in the footer instead.
 func NewApp(root string, jobs []job.Job) *App {
-	a := &App{root: root, jobs: jobs, state: stateList, jdiSeen: map[string]job.JDIState{}, jdiSeenAt: map[string]time.Time{}}
+	a := &App{root: root, jobs: jobs, state: stateList, list: newListView(root), jdiSeen: map[string]job.JDIState{}, jdiSeenAt: map[string]time.Time{}}
 	settings, err := config.Load()
 	a.settings = settings
 	if err != nil {
 		a.status = cmdErrorText(err)
 	}
-	a.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
+	a.list.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
 	// Settings must be loaded before the initial recent-commits fetch so the
 	// strip honors the configured maximum count on the very first render —
 	// not just after the first settings submit.
@@ -209,14 +210,14 @@ type editorDoneMsg struct {
 	err  error
 }
 
-// doneMsg reports the outcome of the "D" mark-done shortcut's
-// tea.ExecProcess once the suspended finish-job.sh run returns.
+// doneMsg reports the outcome of the "D" mark-done shortcut's background
+// job.FinishJob run once it returns.
 type doneMsg struct {
 	err error
 }
 
-// deleteMsg reports the outcome of the "delete" shortcut's tea.ExecProcess
-// once the suspended delete-job.sh run returns.
+// deleteMsg reports the outcome of the "delete" shortcut's background
+// job.DeleteJob run once it returns.
 type deleteMsg struct {
 	err error
 }
@@ -292,14 +293,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case doneMsg:
-		// finish-job.sh's exit code is not a reliable success/failure signal:
-		// every one of its read -rp confirmation prompts does `exit 0` on
-		// decline, not just the happy path. So regardless of msg.err, always
-		// fall back to refreshing the job list from disk and returning to it
-		// — a job that got archived is simply gone from the re-read list, one
-		// that was declined or failed is still there. A non-zero exit (the
-		// script itself erroring, e.g. uncommitted changes) still surfaces
-		// through cmdErrorText first, same as any other host-command failure.
+		// The lifecycle outcome is not a reliable done signal: a declined
+		// confirmation (ErrCancelled) and a real failure both carry an error,
+		// while a successful archive carries none — and a declined-but-kept
+		// job looks identical to an archived one from the error alone. So
+		// regardless of msg.err, always fall back to refreshing the job list
+		// from disk and returning to it — a job that got archived is simply
+		// gone from the re-read list, one that was declined or failed is
+		// still there. An error still surfaces through cmdErrorText first,
+		// same as any other host-command failure.
 		spinnerCmd := a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
@@ -310,10 +312,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, spinnerCmd
 	case deleteMsg:
-		// Same reasoning as doneMsg: delete-job.sh's own read -rp confirmation
-		// exits 0 on decline too, so a declined/aborted delete just leaves the
-		// job present in the re-read list — refreshJobs and returning to the
-		// list handles both outcomes uniformly.
+		// Same reasoning as doneMsg: a declined delete (ErrCancelled) leaves
+		// the job present in the re-read list — refreshJobs and returning to
+		// the list handles both outcomes uniformly.
 		spinnerCmd := a.refreshJobs()
 		a.detail = nil
 		a.state = stateList
@@ -395,45 +396,20 @@ func (a *App) View() string {
 	case stateConfirm:
 		content = a.confirm.render()
 	default:
-		content = a.renderList()
+		content = a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	}
 	return uiPaddingStyle.Render(content)
 }
 
-// selectedJob returns the job under the cursor, or false if the list is empty.
-func (a *App) selectedJob() (job.Job, bool) {
-	if len(a.jobs) == 0 || a.cursor < 0 || a.cursor >= len(a.jobs) {
-		return job.Job{}, false
-	}
-	return a.jobs[a.cursor], true
-}
-
-// --- List view --------------------------------------------------------------
-
-// recentActivityFloor bounds how few commits the bottom-of-screen "recent
-// activity" strip can show: the strip's minimum footprint, so it never
-// pushes job rows down further than the pre-existing header already did. The
-// upper bound is configurable — Settings.RecentActivityCountValue
-// (DefaultRecentActivityCount = 5) — see recentActivityShown for the part of
-// this that scales with available room.
-const recentActivityFloor = 1
-
-// dashboardFixedChrome is the number of renderList rows that are always
-// present outside the job rows, the job-summary line, and the recent-activity
-// strip's own variable footprint: title line, blank spacer beneath it, "jobs"
-// headline, divider, blank line before the footer, the footer itself, and the
-// blank spacer before the recent-activity strip.
-const dashboardFixedChrome = 7
-
 // refreshRecentCommits re-reads the recent-activity strip from git, always
 // fetching up to the configured maximum (Settings.RecentActivityCountValue).
 // How many of those cached commits actually get rendered is decided later, at
-// render time, by recentActivityShown — not here. This split matters because
-// refreshRecentCommits runs before the first tea.WindowSizeMsg ever arrives
-// (see NewApp), when a.width/a.height are still zero; sizing the *fetch*
-// against that would size against a stale terminal height on first render.
-// Fetching the configured maximum and deciding the display count at render
-// time (once layout is known) avoids that hazard.
+// render time, by listView.recentActivityShown — not here. This split matters
+// because refreshRecentCommits runs before the first tea.WindowSizeMsg ever
+// arrives (see NewApp), when the viewport size is still zero; sizing the
+// *fetch* against that would size against a stale terminal height on first
+// render. Fetching the configured maximum and deciding the display count at
+// render time (once layout is known) avoids that hazard.
 //
 // Like currentBranch, an error (e.g. a non-repo project) degrades to an empty
 // strip rather than surfacing in the status line — this is decorative,
@@ -441,9 +417,10 @@ const dashboardFixedChrome = 7
 func (a *App) refreshRecentCommits() {
 	commits, err := git.RecentCommits(a.root, a.settings.RecentActivityCountValue())
 	if err != nil {
-		a.recentCommits = nil
+		a.list.recentCommits = nil
 		return
 	}
+<<<<<<< HEAD
 	a.recentCommits = commits
 }
 
@@ -488,6 +465,9 @@ func (a *App) recentActivityShown() int {
 		n = len(a.recentCommits)
 	}
 	return n
+=======
+	a.list.recentCommits = commits
+>>>>>>> ef8533d4a317b446a6dd74029150ee9a3ec38de7
 }
 
 // clamp bounds n to [lo, hi].
@@ -518,21 +498,21 @@ func (a *App) refreshJobs() tea.Cmd {
 	if jobs, err := job.Discover(a.root); err == nil {
 		a.jobs = jobs
 	}
-	a.currentBranch, _ = git.CurrentBranch(a.root) // "" on detached HEAD / non-repo
+	a.list.currentBranch, _ = git.CurrentBranch(a.root) // "" on detached HEAD / non-repo
 	a.refreshRecentCommits()
-	if a.cursor > 0 && a.cursor >= len(a.jobs) {
-		a.cursor = len(a.jobs) - 1
+	if a.list.cursor > 0 && a.list.cursor >= len(a.jobs) {
+		a.list.cursor = len(a.jobs) - 1
 	}
-	if a.cursor < 0 {
-		a.cursor = 0
+	if a.list.cursor < 0 {
+		a.list.cursor = 0
 	}
 	a.pollJDIBell()
 	return a.startSpinnerIfRunning()
 }
 
-// pollJDIBell is the TUI-side half of the stop notification (Decision
-// 5/7a/TASK-11): a TUI-launched mg-jdi run has no terminal of its own to
-// ring `\a` into (see tui/cmd/jdi's own CLI-path bell), so instead the TUI
+// pollJDIBell is the TUI-side half of the stop notification: a TUI-launched
+// mg-jdi run has no terminal of its own to
+// ring `\a` into (see cmd/mg/jdi.go's own CLI-path bell), so instead the TUI
 // rings it on its own next poll — this function, called from refreshJobs,
 // which is every "poll tick" this app has (ctrl+r, returning to list, a
 // checkout, etc.) — the first time it observes a job's status transition
@@ -574,8 +554,7 @@ func isJDIStopped(s job.JDIState) bool {
 }
 
 // jdiAlreadyRunning reports whether j already has an mg-jdi run in progress,
-// for the "j" key's launch-block guard (TASK-1 of the "multiple jdi
-// instances" brief). The on-disk sidecar (job.ReadJDIStatus) is the source
+// for the "j" key's launch-block guard. The on-disk sidecar (job.ReadJDIStatus) is the source
 // of truth once mg-jdi has written it — a JDIStoppedFinished/
 // JDIStoppedNeedsHuman status there always wins, even if a.jdiSeen still
 // remembers this same session having launched it earlier, so a job is never
@@ -675,37 +654,26 @@ func (a *App) refresh() tea.Cmd {
 	return spinnerCmd
 }
 
-// updateList handles keys while the job list is showing.
+// updateList handles keys while the job list is showing. The cursor-movement
+// keys delegate to the list view (a.list.update); everything else is App
+// routing — view switches, refresh, launches.
 func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	a.status = "" // status is transient — cleared on every key unless a case sets it
 	switch msg.String() {
 	case "q", "esc":
 		return a, tea.Quit
-	case "up":
-		if a.cursor > 0 {
-			a.cursor--
-		}
-	case "down":
-		if a.cursor < len(a.jobs)-1 {
-			a.cursor++
-		}
-	case "home", "g":
-		a.cursor = 0
-	case "end", "G":
-		if len(a.jobs) > 0 {
-			a.cursor = len(a.jobs) - 1
-		}
 	case "ctrl+r":
 		// Refresh first, then report the *post*-refresh job count — the
-		// original ordering (see main), preserved across TASK-2's return-value
-		// refactor. The refresh is the discovery point for runs started
+		// original ordering (see main), preserved across the
+		// refresh-return-value refactor. The refresh is the discovery point
+		// for runs started
 		// outside this session (its returned tick cmd is propagated below),
 		// and len(a.jobs) must reflect the re-read list, not the stale one.
 		spinnerCmd := a.refresh()
 		a.status = fmt.Sprintf("refreshed · %d job(s)", len(a.jobs))
 		return a, spinnerCmd
 	case "enter", "l", "right":
-		if j, ok := a.selectedJob(); ok {
+		if j, ok := a.list.selectedJob(a.jobs); ok {
 			a.detail = newDetailView(j, a.width, a.height)
 			a.state = stateDetail
 		}
@@ -717,7 +685,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Status lands in the list footer, and the wording points at the list
 		// badge — the list has no log tab open to point at. No-op when the
 		// list is empty (nothing under the cursor).
-		j, ok := a.selectedJob()
+		j, ok := a.list.selectedJob(a.jobs)
 		if !ok {
 			return a, nil
 		}
@@ -766,8 +734,8 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Pick any agent and launch it as a jobless quick session — the
 		// native-TUI counterpart to `mg agents` (scripts/agents.sh),
 		// mirroring "o" (bare quick session) but for a specific agent.
-		// A discovery failure (TASK-1 error, e.g. no resolvable manigot
-		// checkout) or an empty agent list degrades to a status line
+		// A discovery failure (e.g. no resolvable manigot checkout) or an
+		// empty agent list degrades to a status line
 		// instead of opening the picker, the same "never crash on a
 		// host-command error" convention every other action in this file
 		// follows (cmdErrorText).
@@ -780,6 +748,10 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.agentsPicker = newAgentsPickerView(agents, a.width, a.height)
 			a.state = stateAgents
 		}
+	default:
+		// Cursor movement — the list view's own key handling. "g"/"G" land
+		// here too, below the routing keys (none of which collide).
+		a.list.update(msg, len(a.jobs))
 	}
 	return a, nil
 }
@@ -849,9 +821,9 @@ func (a *App) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if jobs, derr := job.Discover(a.root); derr == nil {
 			a.jobs = jobs
 		}
-		a.currentBranch, _ = git.CurrentBranch(a.root) // "" on detached HEAD / non-repo
+		a.list.currentBranch, _ = git.CurrentBranch(a.root) // "" on detached HEAD / non-repo
 		a.refreshRecentCommits()
-		a.cursor = 0 // newest first after Discover's date-desc sort
+		a.list.cursor = 0 // newest first after Discover's date-desc sort
 		a.status = "created \"" + title + "\" (" + typ + ")"
 		a.newJob = nil
 		a.state = stateList
@@ -924,13 +896,12 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.openConfirm(confirmDone)
 		return a, nil
 	case "j":
-		// Run mg-jdi (TASK-12): a bigger, composite action like "D", not a
+		// Run mg-jdi: a bigger, composite action like "D", not a
 		// single-agent launch, so it's handled here rather than through
 		// agentForKey. Unlike launch.Agent, this starts detached in the
-		// background with no spawned terminal window at all (Decision 7a) —
-		// see launch.Jdi's own doc for why. Every job now has its own
-		// worktree (207bfu_git-worktrees), so — unlike before that job —
-		// there is no "wrong branch checked out" state to guard against
+		// background with no spawned terminal window at all — see launch.Jdi's
+		// own doc for why. Every job now has its own worktree, so there is
+		// no "wrong branch checked out" state to guard against
 		// here: mg-jdi resolves its own correct worktree per invocation.
 		// Block a second concurrent launch against the same job — the brief
 		// this job exists for ("press j ... multiple times" spawns several
@@ -950,7 +921,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.detail.setStatus(cmdErrorText(err))
 			return a, nil
 		}
-		// Seed the stop-notification dedup (TASK-11) as "running" right
+		// Seed the stop-notification dedup as "running" right
 		// away rather than waiting for the first poll to discover it —
 		// otherwise a run that finishes before the next refresh would
 		// look like a first-ever observation of an already-stopped job
@@ -978,7 +949,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case "P":
 		// Push this job's branch to origin — the "quick way to push feature
-		// branches" from the "commit-feature-branches" brief. git.Push
+		// branches". git.Push
 		// pushes the named branch ref directly (git push origin <branch>),
 		// which does not require that branch to be checked out in the
 		// working tree.
@@ -1081,11 +1052,15 @@ func yesConfirm(prompt string) (bool, error) { return true, nil }
 
 // pushCmd returns the tea.Cmd behind the "P" push-to-origin action: a plain
 // git call off the UI goroutine — no interactive process, just a git push —
-// and reports the outcome as a pushMsg once it returns.
+// and reports the outcome as a pushMsg once it returns. The call is bounded
+// by a timeout (see hostGitTimeout) so a stalled network can't hang the TUI's
+// command channel forever; the timeout surfaces as an ordinary pushMsg error.
 func (a *App) pushCmd(branch string) tea.Cmd {
 	root := a.root
 	return func() tea.Msg {
-		err := git.Push(root, branch)
+		ctx, cancel := context.WithTimeout(context.Background(), hostGitTimeout)
+		defer cancel()
+		err := git.PushWithContext(ctx, root, branch)
 		return pushMsg{branch: branch, err: err}
 	}
 }
@@ -1099,7 +1074,7 @@ func (a *App) pushCmd(branch string) tea.Cmd {
 // only brief.md ever reaches here.
 //
 // The commit runs inside the job's own worktree (git -C <job-worktree>), not
-// a.root: since 207bfu_git-worktrees a job's files live in its own worktree,
+// a.root: since the worktree model a job's files live in its own worktree,
 // a sibling of the project root, so a pathspec relative to a.root would
 // escape the main worktree ("outside repository") — and even if it didn't, it
 // would stage/commit against the main worktree's branch and index instead of
@@ -1116,7 +1091,9 @@ func (a *App) commitBriefCmd() tea.Cmd {
 		if err != nil {
 			return commitMsg{err: err}
 		}
-		err = git.CommitFile(worktreeRoot, rel, fmt.Sprintf("[%s] brief: edit via TUI", id))
+		ctx, cancel := context.WithTimeout(context.Background(), hostGitTimeout)
+		defer cancel()
+		err = git.CommitFileWithContext(ctx, worktreeRoot, rel, fmt.Sprintf("[%s] brief: edit via TUI", id))
 		return commitMsg{err: err}
 	}
 }
@@ -1139,6 +1116,7 @@ func (a *App) agentForKey(k string) string {
 	return ""
 }
 
+<<<<<<< HEAD
 // columnWidths returns the fixed column widths used by the list and detail
 // headers so rows line up. Kept here so both views agree.
 type columnWidths struct {
@@ -1293,8 +1271,10 @@ func (a *App) renderJobRow(j job.Job, cols columnWidths, selected bool) string {
 	return dimStyle.Render("  ") + line
 }
 
+=======
+>>>>>>> ef8533d4a317b446a6dd74029150ee9a3ec38de7
 // jdiStatusBadge renders a short "[...]" tag for a job's list row
-// when an autonomous run has something to report (Decision 4/4a/TASK-8):
+// when an autonomous run has something to report:
 // running (naming the active agent), or one of the two stop reasons.
 // Renders "" when there's nothing to show — no sidecar status file for this
 // job, or one job.ReadJDIStatus itself degrades away (a missing/unparseable
@@ -1333,16 +1313,13 @@ func jdiStatusBadge(root string, j job.Job, spinnerStep int) string {
 	}
 }
 
-// footer is the bottom help/status line.
-// footer renders the dim key hint and, when a.status is set (e.g. right
-// after "ctrl+r"), the status alongside it rather than replacing it — a
-// status message must never leave the user not knowing what keys exist.
+// footer is the App's bottom help/status line — the list view's footer,
+// rendering the dim key hint and, when a.status is set (e.g. right after
+// "ctrl+r"), the status alongside it rather than replacing it. Kept on App
+// because status is cross-view state; the list view renders the same footer
+// via listFooter.
 func (a *App) footer() string {
-	hint := "↑/↓ navigate · enter view · j mg-jdi · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
-	if a.status != "" {
-		return dimStyle.Render(hint) + "  " + statusStyle.Render(a.status)
-	}
-	return dimStyle.Render(hint)
+	return listFooter(a.status)
 }
 
 // --- helpers ----------------------------------------------------------------

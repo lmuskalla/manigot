@@ -37,6 +37,11 @@ func TestBuildPlainClaudeSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
+	// The real session flow runs CheckAuth before building the argv — the
+	// credential -e flags come from the resulting KeyEnv.
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
 	r, err := ResolveRoot(Options{})
 	if err != nil {
 		t.Fatalf("ResolveRoot: %v", err)
@@ -142,6 +147,117 @@ func TestBuildOpenCodeProfile(t *testing.T) {
 		"-v", filepath.Join(root, "docs")+":/workspace/.opencode:z",
 		"-v", filepath.Join(root, "docs", "AGENTS.md")+":/workspace/AGENTS.md:ro",
 	)
+	// The CLAUDE_* subscription keys belong to claude-pro only — an opencode
+	// profile's argv must not carry them (previously passed with empty
+	// values, noise in docker inspect). The value token is a standalone argv
+	// element, so search the newline-joined vector for the token itself.
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if strings.Contains(joined, k+"=") {
+			t.Errorf("zai docker argv forwards %s, want only the profile's own keys:\n%s", k, joined)
+		}
+	}
+}
+
+func TestBuildOpenCodeProjectAgentsConvertedMount(t *testing.T) {
+	root, _ := docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+
+	// A custom project agent in the canonical list form.
+	agentsDir := filepath.Join(root, "docs", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "custom.md"),
+		[]byte("---\nname: custom\ndescription: Project agent.\ntools: Read\n---\n\nBody.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+
+	// The converted copies shadow the docs mount's agents/ subpath, and the
+	// invocation owns their cleanup.
+	containsAll(t, inv.Argv, "/workspace/.opencode/agents:z")
+	if inv.Cleanup == nil {
+		t.Error("converted-agents invocation must carry a Cleanup hook")
+	}
+
+	// The host source tree is untouched — the raw list-form file is still
+	// in place for Claude Code sessions.
+	data, err := os.ReadFile(filepath.Join(agentsDir, "custom.md"))
+	if err != nil || !strings.Contains(string(data), "tools: Read") {
+		t.Errorf("docs/agents/ source was modified: %v", err)
+	}
+}
+
+func TestBuildNoAgentsConversionMount(t *testing.T) {
+	// claude-pro with docs/agents/ present: no conversion — the list form is
+	// Claude's native schema, the raw file rides the docs mount unchanged.
+	root, _ := docProject(t)
+	agentsDir := filepath.Join(root, "docs", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "custom.md"), []byte("---\ntools: Read\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	if inv.Cleanup != nil {
+		t.Error("claude invocation must not carry a Cleanup hook")
+	}
+	if strings.Contains(strings.Join(inv.Argv, "\n"), "/workspace/.opencode/agents") {
+		t.Error("claude invocation must not mount converted opencode agents")
+	}
+
+	// opencode with no docs/agents/ at all: no conversion, no mount.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	if inv2.Cleanup != nil {
+		t.Error("no-agents opencode invocation must not carry a Cleanup hook")
+	}
+	if strings.Contains(strings.Join(inv2.Argv, "\n"), "/workspace/.opencode/agents") {
+		t.Error("no-agents invocation must not mount converted agents")
+	}
 }
 
 func TestBuildJobWorktreeGitCommonDirMount(t *testing.T) {

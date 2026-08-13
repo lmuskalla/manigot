@@ -55,17 +55,17 @@ func TestRefreshClampsCursor(t *testing.T) {
 
 	jobs, _ := job.Discover(root)
 	a := NewApp(root, jobs)
-	a.cursor = len(a.jobs) - 1 // point at the last job
+	a.list.cursor = len(a.jobs) - 1 // point at the last job
 
 	// Remove the job under the cursor (simulate archiving).
 	os.RemoveAll(filepath.Join(root, "docs", "jobs", "bb0002_b"))
 
 	a.refresh()
-	if a.cursor >= len(a.jobs) {
-		t.Errorf("cursor = %d after refresh, but only %d jobs remain", a.cursor, len(a.jobs))
+	if a.list.cursor >= len(a.jobs) {
+		t.Errorf("cursor = %d after refresh, but only %d jobs remain", a.list.cursor, len(a.jobs))
 	}
-	if a.cursor < 0 {
-		t.Errorf("cursor went negative: %d", a.cursor)
+	if a.list.cursor < 0 {
+		t.Errorf("cursor went negative: %d", a.list.cursor)
 	}
 }
 
@@ -118,16 +118,16 @@ func TestRefreshJobsClampsCursorWithoutTouchingDetail(t *testing.T) {
 
 	jobs, _ := job.Discover(root)
 	a := NewApp(root, jobs)
-	a.cursor = len(a.jobs) - 1 // a.detail stays nil throughout
+	a.list.cursor = len(a.jobs) - 1 // a.detail stays nil throughout
 
 	os.RemoveAll(filepath.Join(root, "docs", "jobs", "bb0003_b"))
 
 	a.refreshJobs()
-	if a.cursor >= len(a.jobs) {
-		t.Errorf("cursor = %d after refreshJobs, but only %d jobs remain", a.cursor, len(a.jobs))
+	if a.list.cursor >= len(a.jobs) {
+		t.Errorf("cursor = %d after refreshJobs, but only %d jobs remain", a.list.cursor, len(a.jobs))
 	}
-	if a.cursor < 0 {
-		t.Errorf("cursor went negative: %d", a.cursor)
+	if a.list.cursor < 0 {
+		t.Errorf("cursor went negative: %d", a.list.cursor)
 	}
 }
 
