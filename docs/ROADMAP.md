@@ -12,7 +12,7 @@ The product is coherent, feature-dense, and — for the first time — boring in
 the right places. Single `mg` binary, three subscription profiles
 (`claude-pro` / `zai` / `opencode-go`), real filesystem isolation, a full job
 lifecycle on git worktrees, an autonomous mode (`mg jdi`), a TUI, host mode,
-ntfy notifications, twelve agents, a strong test suite, and the CODE_QUALITY
+ntfy notifications, thirteen agents, a strong test suite, and the CODE_QUALITY
 consolidation (one git-exec point, one branch-matching definition, one
 error-framing place, probe timeouts, shared agent-name constants) all landed.
 The first roadmap's core-loop work is done; the worry tax on `mg jdi` is paid
