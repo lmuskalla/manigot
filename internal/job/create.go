@@ -32,9 +32,18 @@ type CreateOptions struct {
 	// tests can force the nested layout without an actual second mount.
 	DeviceCheck func(parent, root string) bool
 
-	// RandomID generates the 6-char job id (a-z0-9). nil uses crypto/rand.
-	// Injectable so tests get a deterministic id.
+	// RandomID generates the job id. nil uses the default word-based
+	// generator — a uniform random pick from jobWords, wrapped in CreateJob's
+	// uniqueness retry loop (uniqueJobID). Injectable so tests get a
+	// deterministic id.
 	RandomID func() (string, error)
+
+	// ExistingIDs returns the set of job ids already in use in the project,
+	// which the default uniqueness retry loop consults so a word id is never
+	// re-used — including against archived jobs. nil uses the real scan
+	// (existingJobIDs), covering open and archived jobs. Injectable so tests
+	// can simulate collisions without a git repo.
+	ExistingIDs func() (map[string]bool, error)
 }
 
 // CreateResult is the outcome of a successful CreateJob.
@@ -89,11 +98,19 @@ func CreateJob(root, title string, opts CreateOptions, out io.Writer) (CreateRes
 	}
 
 	// ── Generate id, slug, date, author ─────────────────────────────────────
-	id := opts.RandomID
-	if id == nil {
-		id = randomID
+	// The default path wraps the word picker in a uniqueness retry loop so a
+	// word id is never re-used (existingJobIDs covers open + archived jobs);
+	// an injected RandomID bypasses the check, matching its test-only role.
+	var jobID string
+	if opts.RandomID != nil {
+		jobID, err = opts.RandomID()
+	} else {
+		existing := opts.ExistingIDs
+		if existing == nil {
+			existing = func() (map[string]bool, error) { return existingJobIDs(root) }
+		}
+		jobID, err = uniqueJobID(wordID, existing)
 	}
-	jobID, err := id()
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("generating job id: %w", err)
 	}
@@ -256,30 +273,77 @@ var (
 	regexpCollapseDash = regexp.MustCompile(`-+`)
 )
 
-// randomID generates a 6-char id from a-z0-9 via crypto/rand — the Go form of
-// `LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 6`.
-func randomID() (string, error) {
-	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-	// Rejection sampling: 256 is not a multiple of 36, so a naive
-	// `byte % 36` overweights the first few chars (values 252-255 would all
-	// map onto them). Draw a fresh byte until it lands in [0, 252) — the
-	// largest multiple of 36 below 256 — so every char is exactly as likely
-	// as every other. The bias was negligible for job ids, but the correct
-	// shape costs nothing.
-	const limit = byte(256 - 256%len(chars)) // 252
-	b := make([]byte, 6)
-	for i := range b {
-		for {
-			if _, err := rand.Read(b[i : i+1]); err != nil {
-				return "", err
-			}
-			if b[i] < limit {
-				break
-			}
-		}
-		b[i] = chars[int(b[i])%len(chars)]
+// maxIDAttempts caps the uniqueness retry loop in uniqueJobID. With a
+// ~2,300-word list the expected number of attempts stays near 1 until a
+// project has hundreds of jobs, so the cap is a sanity guard against an
+// exhausted word list, not a realistic limit.
+const maxIDAttempts = 100
+
+// uniqueJobID returns a job id that is guaranteed not to collide with any
+// existing id in the project — the never-reuse policy (including against
+// archived jobs). It re-draws from jobWords (via pick) until the candidate
+// is acceptable: not an exact existing id, not a prefix of one, and not
+// prefixed by one. The prefix rules matter because --job / mg done /
+// mg delete resolve jobs by prefix-matching on branch tails: two
+// prefix-related ids (e.g. "flower" and "flowerbed") would make
+// `mg --job flower` ambiguous, so they must never coexist in the same
+// project. A failed scan of existing ids fails the create rather than
+// proceeding blind and risking a duplicate word.
+func uniqueJobID(pick func() (string, error), existing func() (map[string]bool, error)) (string, error) {
+	ids, err := existing()
+	if err != nil {
+		return "", fmt.Errorf("scanning existing job ids: %w", err)
 	}
-	return string(b), nil
+	for range maxIDAttempts {
+		candidate, err := pick()
+		if err != nil {
+			return "", err
+		}
+		if idAvailable(candidate, ids) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate a unique job id after %d attempts — the word list is exhausted. Add words to internal/job/words.go.", maxIDAttempts)
+}
+
+// idAvailable reports whether candidate is free to use given the set of
+// existing ids: it must not equal one, must not be a prefix of one, and must
+// not have one as a prefix (see uniqueJobID for why the prefix rules exist).
+func idAvailable(candidate string, existing map[string]bool) bool {
+	if existing[candidate] {
+		return false
+	}
+	for id := range existing {
+		if strings.HasPrefix(candidate, id) || strings.HasPrefix(id, candidate) {
+			return false
+		}
+	}
+	return true
+}
+
+// wordID picks a uniformly random word from jobWords via crypto/rand. The
+// 6-char a-z0-9 id it replaces had ~2.2e9 combinations; a single word from
+// the ~2,300-word list is a far smaller space, so CreateJob couples this
+// with the uniqueness retry loop in uniqueJobID — collisions are absorbed
+// by re-drawing, never by failing.
+func wordID() (string, error) {
+	// Rejection sampling on a uint16: 65536 is not a multiple of
+	// len(jobWords), so a naive `v % len` would overweight the first few
+	// words. Draw two random bytes, treat them as a 16-bit integer, and
+	// accept only values below the largest multiple of len(jobWords) below
+	// 65536, so every word is exactly as likely as every other.
+	const max = 1 << 16
+	limit := max - max%len(jobWords)
+	b := make([]byte, 2)
+	for {
+		if _, err := rand.Read(b); err != nil {
+			return "", err
+		}
+		v := int(b[0])<<8 | int(b[1])
+		if v < limit {
+			return jobWords[v%len(jobWords)], nil
+		}
+	}
 }
 
 // writeScaffold writes the four job files with content byte-identical to

@@ -183,6 +183,42 @@ func PrefixJobDirName(root, prefix string) string {
 	return ""
 }
 
+// existingJobIDs returns the set of every job id already in use in the
+// project rooted at root — open jobs (from Discover, which covers the
+// worktree-per-branch layout and falls back to the working tree for non-git
+// or branchless repos) plus archived jobs in docs/jobs/archive/. CreateJob
+// uses it to guarantee a word id is never re-used, including against jobs
+// that were archived long ago (the confirmed never-reuse policy). Old random
+// ids (e.g. "irw320") are ordinary set members; mixed old/new formats are
+// handled uniformly.
+func existingJobIDs(root string) (map[string]bool, error) {
+	ids := make(map[string]bool)
+	jobs, err := Discover(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, j := range jobs {
+		ids[j.ID] = true
+	}
+
+	archiveDir := filepath.Join(root, JobsRelDir, ArchiveDirName)
+	entries, err := os.ReadDir(archiveDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ids, nil
+		}
+		return nil, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		j, _ := ReadJob(filepath.Join(archiveDir, e.Name()))
+		ids[j.ID] = true
+	}
+	return ids, nil
+}
+
 // sortJobs orders jobs by date descending (newest first) with Name as a stable
 // tiebreaker — the "recent work first" ordering the README's job workflow
 // implies. Shared by both the worktree-backed and working-tree paths.

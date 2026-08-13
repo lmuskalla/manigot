@@ -134,10 +134,12 @@ type columnWidths struct {
 	id, status, stage, typ, date, title int
 }
 
-// listColumns returns the list view's fixed column widths. stage is wider
+// listColumns returns the list view's fixed column widths. id is 12 rather
+// than 8 so word-based job ids (e.g. "caterpillar") render untruncated —
+// pad() would cut a longer word at the column edge. stage is wider
 // than typ because the longest stage name ("implement") is 9 chars.
 func listColumns() columnWidths {
-	return columnWidths{id: 8, status: 6, stage: 10, typ: 8, date: 12, title: 0}
+	return columnWidths{id: 12, status: 6, stage: 10, typ: 8, date: 12, title: 0}
 }
 
 // render draws the list view — title, job rows (or the empty-state invite),

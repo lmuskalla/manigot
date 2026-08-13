@@ -444,7 +444,8 @@ launch, so you never need to hand-write OpenCode's object form.
 ## Job workflow
 
 Each piece of work gets its own directory under `docs/jobs/`,
-named with a 6-character random ID and a slugified title. A git branch is
+named with an English-word ID (e.g. `flower`, never re-used across open or
+archived jobs) and a slugified title. A git branch is
 created automatically with the same ID, checked out in the job's **own git
 worktree** — a sibling directory of the project root, under
 `<parent>/.manigot-worktrees/<project-name>/` — so every job gets its own
@@ -453,13 +454,13 @@ directory and multiple jobs can be worked on (interactively or via
 
 ```bash
 mg job "add image gallery block"
-# creates: docs/jobs/a3f9k2_add-image-gallery-block/   (inside the job's worktree)
+# creates: docs/jobs/flower_add-image-gallery-block/   (inside the job's worktree)
 #   brief.md    ← you fill in: what and why
 #   tasks.md    ← @analyst fills in: atomic task breakdown
 #   implementation.md  ← @developer fills in: what was implemented
 #   verdict.md  ← @reviewer and/or @security fill in: pass/fail per task
-# creates branch: feature/a3f9k2_add-image-gallery-block
-# creates worktree: ../.manigot-worktrees/<project>/a3f9k2_add-image-gallery-block
+# creates branch: feature/flower_add-image-gallery-block
+# creates worktree: ../.manigot-worktrees/<project>/flower_add-image-gallery-block
 ```
 
 **Typical flow for a feature:**

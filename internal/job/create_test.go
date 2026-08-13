@@ -262,6 +262,58 @@ func TestCreateJobNoProjectRoot(t *testing.T) {
 	}
 }
 
+func TestExistingJobIDs(t *testing.T) {
+	dir := createCheckout(t, t.TempDir())
+
+	// An open, worktree-backed job.
+	if _, err := CreateJob(dir, "Open Job", CreateOptions{RandomID: fixedID("open01")}, io.Discard); err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+
+	// An archived job under the main worktree's docs/jobs/archive/.
+	archiveJob := filepath.Join(dir, "docs", "jobs", "archive", "old99_archived")
+	if err := os.MkdirAll(archiveJob, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(archiveJob, "brief.md"), []byte("# Brief: Archived\n\nid: old99\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := existingJobIDs(dir)
+	if err != nil {
+		t.Fatalf("existingJobIDs: %v", err)
+	}
+	for _, want := range []string{"open01", "old99"} {
+		if !ids[want] {
+			t.Errorf("existingJobIDs missing %q: %v", want, ids)
+		}
+	}
+}
+
+func TestExistingJobIDsNonGit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs", "jobs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// A working-tree-only job (the non-git / no-branches fallback).
+	jobDir := filepath.Join(dir, "docs", "jobs", "plain01_plain")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: Plain\n\nid: plain01\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := existingJobIDs(dir)
+	if err != nil {
+		t.Fatalf("existingJobIDs: %v", err)
+	}
+	if !ids["plain01"] {
+		t.Errorf("existingJobIDs missing working-tree job id: %v", ids)
+	}
+}
+
 func TestCreateJobSlugify(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"Add Gallery Block", "add-gallery-block"},
