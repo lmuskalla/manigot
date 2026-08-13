@@ -3,6 +3,8 @@ package job
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,6 +86,53 @@ func TestUniqueJobIDScanErrorFailsCreate(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "scanning existing job ids") {
 		t.Errorf("scan error not wrapped: %v", err)
+	}
+}
+
+// TestWordIDReturnsListMembers draws repeatedly and asserts every result is
+// a member of jobWords — which also implies the charset/length contract.
+func TestWordIDReturnsListMembers(t *testing.T) {
+	members := make(map[string]bool, len(jobWords))
+	for _, w := range jobWords {
+		members[w] = true
+	}
+	for i := 0; i < 50; i++ {
+		w, err := wordID()
+		if err != nil {
+			t.Fatalf("wordID: %v", err)
+		}
+		if !members[w] {
+			t.Errorf("wordID returned %q, which is not in jobWords", w)
+		}
+	}
+}
+
+// TestCreateJobArchivedWordNotReused verifies the never-reuse policy against
+// archived jobs through the real CreateJob default path: a word that was used
+// by an archived job must never be minted again — exactly, as a prefix, or as
+// a superset — whatever the random draw produces.
+func TestCreateJobArchivedWordNotReused(t *testing.T) {
+	dir := createCheckout(t, t.TempDir())
+
+	// An archived job that took the word "flower" long ago.
+	archiveJob := filepath.Join(dir, "docs", "jobs", "archive", "flower_old")
+	if err := os.MkdirAll(archiveJob, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(archiveJob, "brief.md"), []byte("# Brief: Old\n\nid: flower\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := CreateJob(dir, "New Job", CreateOptions{}, io.Discard)
+	if err != nil {
+		t.Fatalf("CreateJob (default path): %v", err)
+	}
+	id := res.Job.ID
+	if id == "flower" || strings.HasPrefix(id, "flower") || strings.HasPrefix("flower", id) {
+		t.Errorf("default path reused an archived job's word: id = %q", id)
+	}
+	if !jobWordRe.MatchString(id) {
+		t.Errorf("default path produced non-word id %q", id)
 	}
 }
 

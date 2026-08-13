@@ -551,6 +551,25 @@ func TestRenderListShowsStageColumn(t *testing.T) {
 	}
 }
 
+// TestRenderListWordIDNotTruncated verifies the job-id column renders
+// word-based ids in full — the column was widened from 8 to 12 so a word like
+// "caterpillar" (11 chars) isn't cut off by pad() at the column edge.
+func TestRenderListWordIDNotTruncated(t *testing.T) {
+	j := job.Job{
+		Name:   "caterpillar_garden",
+		Dir:    t.TempDir(), // no job files → stage define
+		ID:     "caterpillar",
+		Title:  "Caterpillar Garden",
+		Type:   "feature",
+		Status: "open",
+	}
+	cols := listColumns()
+	row := (&listView{}).renderJobRow(j, cols, false, 0)
+	if !strings.Contains(row, "caterpillar") {
+		t.Errorf("job row truncated the word id:\n%s", row)
+	}
+}
+
 // TestListJAndKNoLongerMoveCursor is the b8kbwb regression test: after "j"
 // became the mg-jdi launch key and "k" was dropped, neither vim key may move
 // the list cursor anymore — navigation is purely ↑/↓ (plus home/end, g/G).
