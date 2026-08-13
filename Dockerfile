@@ -6,6 +6,7 @@ FROM node:22-trixie-slim
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    tig \
     curl \
     unzip \
     ca-certificates \

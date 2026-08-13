@@ -28,7 +28,7 @@ The seam between the orchestrator (host-side Go) and the agent environment
 
 - `cmd/mg/main.go` — the single binary's dispatcher. Every command is a
   subcommand run in-process: bare `mg` (session), `profiles`, `setup`,
-  `agents`/`crew`, `job`, `jobs`, `done`, `delete`, `init`, `tui`,
+  `agents`/`crew`, `job`, `jobs`, `done`, `delete`, `diff`, `init`, `tui`,
   `jdi`/`made-man`, `help`. `make mg` builds it to `bin/mg`; `make install`
   symlinks one `mg` onto `PATH`.
 - `internal/session` — the docker session launcher (was `scripts/run.sh`):
@@ -353,6 +353,12 @@ either way.
   falling back to the remote default branch when unset)
 - `mg delete <id>` — permanently delete a job (worktree + branch, no merge),
   or an orphaned worktree by its name
+- `mg diff <id> [--full|--name-only|--tig]` — show what a job's branch changed,
+  three-dot `<base>...<branch>` per docs/GIT_DIFF.md: `git log --oneline` +
+  `git diff --stat` by default, `--name-only` for filenames, `--full` for the
+  complete patch, `--tig` to browse it interactively in tig on the host (a
+  clear error when tig isn't installed). Open jobs only — `mg done`
+  squash-merges the branch away, leaving nothing to diff
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
 - `mg jdi --job/-j <id> [--profile <name>]` — drive a job's `@analyst` →
   `@developer` → `@reviewer` sequence end to end, unattended, under the given

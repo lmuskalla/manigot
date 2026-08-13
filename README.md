@@ -24,7 +24,7 @@ manigot/
   Dockerfile              ← build once, rebuild on Claude Code / OpenCode updates
   Makefile                ← build / rebuild / install / help; `make mg` builds bin/mg
   cmd/mg/                 ← the one host-side binary ('mg'); every command is a subcommand
-                            (session, profiles, setup, agents, job, done, delete, init, tui, jdi)
+                            (session, profiles, setup, agents, job, done, delete, diff, init, tui, jdi)
   internal/               ← the host-side logic as Go packages
     session/              ← docker launch construction (mounts, env, profiles)
     job/                  ← job lifecycle: create / finish / delete
@@ -214,6 +214,7 @@ its first argument:
 | `mg jobs` | list open jobs with state and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose); also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
 | `mg delete` | permanently delete a job (worktree + branch, no merge), or an orphaned worktree by its name; needs `docs/` |
+| `mg diff` | show what a job's branch changed, three-dot against the base branch — log + `diff --stat` by default, `--name-only` for filenames, `--full` for the complete patch, `--tig` to browse it in tig on the host; needs `docs/` |
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
 | `mg host` | run a session directly on the host, without the docker container — the profile's CLI runs as-is from the project root, so the agent can touch the host itself (thematic alias: `mg wild`, same command/behavior) |

@@ -24,6 +24,12 @@ diff.
 
 ## Quick eyeball
 
+The tooling is built in: `mg diff <id>` runs the quick eyeball for an open job
+(resolving the job's branch and the project's configured base branch for you),
+`mg diff --name-only <id>` prints just the filenames, `mg diff --full <id>`
+the complete patch, and `mg diff --tig <id>` opens the range in tig on the
+host. The raw commands below are what they run.
+
 ```bash
 git diff --stat main...<branch>       # files changed + line counts
 git diff --name-only main...<branch>  # just filenames
