@@ -1,157 +1,144 @@
 # Roadmap: what to build next
 
 Prioritized recommendations from a product/user-perspective review of the
-current state (2026-08-13). Where `backlog.md` records ideas deliberately
-deferred during job scoping, this document is the opposite: what *should*
-be picked up next, in order, with the evidence behind each call. Promote an
-item to a real job (`mg job`) when it's actually going to be worked on.
+current state (2026-08-13, revised). This is the *only* forward-looking
+planning document — `backlog.md` was deleted in this revision because every
+entry in it had been dispositioned (promoted here or decided against). Promote
+an item to a real job (`mg job`) when it's actually going to be worked on.
 
 ## Current state, in one paragraph
 
-The product is coherent and feature-dense: a single `mg` binary, three
-subscription profiles (`claude-pro` / `zai` / `opencode-go`), real
-filesystem isolation, a full job lifecycle on git worktrees, an autonomous
-mode (`mg jdi`), a TUI, host mode, ntfy notifications, eleven agents, and a
-strong test suite. The consolidation work of the last few days (bash → Go,
-agent format, code quality) was the right move and has mostly landed.
+The product is coherent, feature-dense, and — for the first time — boring in
+the right places. Single `mg` binary, three subscription profiles
+(`claude-pro` / `zai` / `opencode-go`), real filesystem isolation, a full job
+lifecycle on git worktrees, an autonomous mode (`mg jdi`), a TUI, host mode,
+ntfy notifications, eleven agents, a strong test suite, and the CODE_QUALITY
+consolidation (one git-exec point, one branch-matching definition, one
+error-framing place, probe timeouts, shared agent-name constants) all landed.
+The first roadmap's core-loop work is done; the worry tax on `mg jdi` is paid
+off. The abandoned-worktree signal that shaped the last roadmap is gone — the
+tool now detects and removes orphans itself.
 
-The project is past the "add surface area" phase and into the "make the
-core promise bulletproof" phase. The strongest signal in the repo — the
-abandoned worktrees in `.manigot-worktrees/` — is itself a roadmap:
+## Decisions recorded (2026-08-13)
 
-- `o3kk3n_jdi-is-broken`
-- `a75hdc_opencode-jdi-issues`
-- `6ro7eg_add-stage-to-overview`
-- `sd62w9_add-jdi-in-overview`
-- `7431d6_different-configurable-docker-images`
+- **`@owner` and `@security` are not part of `mg jdi` — by design, not by
+  deferral.** The autonomous sequence is exactly three agents (`@analyst` →
+  `@developer` → `@reviewer`) and was never meant to grow. The owner's
+  SHIP/REVISIT/REJECT call and the security pass are human-triggered steps in
+  the interactive flow and stay that way. The previous roadmap listed this as
+  a future extension; that recommendation is withdrawn. Documentation
+  (README, AGENTS.md) already states this correctly and must not be "fixed" to
+  suggest a five-agent autonomous loop.
+- **`feature/3ro17g_go-instructions` is irrelevant.** A lone remote branch
+  with no worktree and no registered job — no action, no job.
+- **`docs/backlog.md` is deleted.** Its entries: in-TUI terminal (now item 6),
+  event-streaming (now item 5), `@owner`/`@security` in jdi (decided against,
+  above), richer step-level logging (folded into item 5), headless/cron (now
+  item 4). Nothing was lost; everything was dispositioned.
 
-Combined with the archived history (`4i5tcx_jdi-does-not-work`,
-`foycfl_jdi-for-opencode`, `gezlwy_attempts-in-jdi`,
-`nrv5sa_multiple-jdi-instances`), one thing is unmistakable: **`mg jdi`
-under the OpenCode profiles has been a recurring source of pain.** That's
-the flagship autonomous feature, and it's the one that fails silently if
-it's wrong.
+## The previous roadmap's items 1–4: done
 
-## Recommended next work, in order
+1. **Prove `mg jdi` end-to-end on all three profiles** — done (`63quv2`):
+   JSONL signal parsing, retry-budget state machine, real runs under `zai`
+   and `opencode-go` with `run.log` and sidecars verified.
+2. **Enforce read-only agents under OpenCode** — done, same job: the
+   `permission:` frontmatter passes the `name:`/`tools:` strip and carries the
+   read-only restriction into OpenCode's schema.
+3. **Stage column in the TUI overview** — done (`3iqg8j`): the list shows
+   id / status / stage / type / date / title.
+4. **Orphaned-worktree detection and cleanup** — done (`nepbxu`): `mg jobs`
+   surfaces orphans, `mg delete` removes them, with `mg delete`'s confirmation
+   discipline.
 
-### 1. Prove `mg jdi` end-to-end on all three profiles, and fix what breaks
+Housekeeping from the old item 6 is likewise landed (CODE_QUALITY Phase 1,
+probe timeouts, error-prefix consistency) — with the sole exception of the
+`go-instructions` fate, which the decision above closes.
 
-The current code (JSONL event parsing in `internal/orchestrate/signal.go`,
-the retry-budget state machine in `internal/orchestrate/orchestrate.go`)
-looks well-engineered — but the evidence says the OpenCode path has burned
-us repeatedly, up to and including two scaffolded jobs literally named
-"jdi is broken" and "opencode jdi issues" that were abandoned rather than
-resolved.
+## What's next, in order
 
-The concrete risk from a user's perspective: a false "needs human" stop, a
-stall, or a reviewer that isn't actually read-only under OpenCode — each of
-which makes the autonomy promise untrustworthy. Success criteria: a real,
-non-trivial job driven end-to-end under `zai` and `opencode-go`, with the
-`run.log` and status sidecars checked for correctness — not just unit tests
-of the parsers. If that passes cleanly, this is closed and the worry tax is
-paid off for good.
+### 1. jdi-status sidecar cleanup (small chore, agreed)
 
-### 2. Enforce read-only agents under OpenCode (the documented `tools:` caveat)
+`mg delete` leaves `.manigot/jdi-status/<job>/` (status + run.log) behind
+forever — the evidence is the three stale sidecar dirs in this repo's own
+`.manigot/jdi-status/`. `mg done` needs a deliberate keep-vs-remove decision.
+Same family as the orphaned-worktree cleanup: the tool not cleaning up after
+itself quietly erodes trust in the lifecycle.
 
-The README is honest about this: `@reviewer`, `@security`, `@analyst` and
-`@owner` are read-only under Claude Code, but **not** under OpenCode,
-because the `tools:` frontmatter key is stripped. This isn't cosmetic — it
-is the integrity of the job workflow. In an `mg jdi` run under an OpenCode
-profile, the reviewer can edit `implementation.md` or the code it's
-supposed to be verifying, and nobody would know. The fix (expressing the
-restriction as OpenCode `permission:` frontmatter) was already identified
-as a follow-up; it should stop being a follow-up.
+### 2. `mg doctor` health check (small, agreed)
 
-This is a correctness fix to the *exact* feature from item 1 — the two
-halves of "can I trust an unattended run." Scope them together if possible.
+One command that verifies the chain in one place: image present, docker daemon
+up, profiles ready, git repo sane, worktree integrity. `mg setup --check`
+covers credentials only. Given the project's history of "jdi does not work"
+jobs, this pre-empts the silent-failure class of problem instead of fixing it
+after the fact.
 
-### 3. Add the stage column to the TUI overview
+### 3. Configurable project toolchains (Docker images) — reframed, now in scope
 
-`6ro7eg_add-stage-to-overview` was scaffolded and never built;
-`sd62w9_add-jdi-in-overview` was effectively delivered by the status badges
-(`[running @agent]`, `[finished]`, `[needs human]`). The jdi badge exists,
-the detail view has the stage timeline — but the **list still shows
-id / status / type / date / title, with no sense of where each job is in
-the workflow.**
+The old rejection ("need isn't evidenced") was aimed at custom images per
+project. The real need is narrower and real: **an agent on a Node/Python/
+whatever project can't run that project's own build or test commands** because
+the single image doesn't carry the toolchain — an agent that can't verify its
+own work. Smallest useful version: keep the single base image as the default,
+let a project declare additions (extra packages/toolchains layered at session
+start) via a documented, `mg init`-era config. No from-scratch images, no
+per-project fork of the isolation story.
 
-For the person juggling several parallel jobs (which the worktree model
-explicitly enables), "which of my five jobs is stuck in review" at a glance
-is the single most useful piece of overview information, and `job.Stage()`
-already computes it — this is a rendering change, not a data one. Small,
-high-value, and it honors the intent of a job already scoped.
+### 4. Headless / cron execution — the VPS promise, now in scope
 
-### 4. Close the lifecycle hole: orphaned-worktree detection and cleanup
+The autonomy story's completion: "set it on a task, it'll handle everything"
+(the `vu33rn` Why). The hard 80% already exists — detached TUI-launched runs,
+ntfy notifications, status sidecars, the `NEEDS-HUMAN-INPUT` marker. Missing:
+a way to queue several jobs (`mg jdi --all`, or an ordered queue), a
+non-terminal trigger, and an *away digest* — "here's what ran, here's what
+finished, here's what needs a human" — surfaced through the notification
+channel already built. The old "attended terminal" objection is mostly
+obsoleted by the machinery built since.
 
-The five dead directories in `.manigot-worktrees/` (~3.5 MB each, `.git`
-files pointing at gitdirs that no longer exist) are the proof. A job
-scaffolded and then abandoned leaves no branch, no worktree registration,
-no entry in `mg jobs` — and no way to clean it up through the tool. The
-user is left `rm -rf`-ing directories by hand and wondering whether they're
-safe to delete.
+### 5. Event-streaming subsystem — designed against a real consumer, now in scope
 
-`mg jobs` or `mg delete` should surface orphans (a registered worktree
-whose metadata is gone, or vice versa) and offer to remove them — mirroring
-`git worktree prune` semantics, but with the confirmation discipline
-`mg delete` already has. This is the tool not cleaning up after itself, and
-it quietly erodes trust in the lifecycle.
+The polling model tells you the *stage*, not what the agent is *doing*. The
+old fear ("wire-format commitment") is answered by building it against a
+concrete need rather than as an abstraction: the first consumer in scope is
+the richer step-level `run.log` (the old "richer logging" backlog item),
+replacing the README's honest "final answer only" limitation. Design the
+writer side in the agent invocation path and the reader side in the TUI for
+*that* consumer; the format earns its keep before anything else attaches to
+it.
 
-### 5. Add the `@owner` gate and `@security` pass to `mg jdi` — after 1–4 land
+### 6. In-TUI embedded terminal — biggest bet, last, smallest slice first, now in scope
 
-The docs describe the ideal flow as `@owner` → `@analyst` → `@developer` →
-`@reviewer` → `@security`, and `mg jdi` drives only the middle three. That
-is the biggest gap between the documented workflow and the autonomous one —
-the exact thing a user means by "don't babysit the whole thing."
+The window-chaos fix, and the largest commitment on the list (PTY in Bubble
+Tea). Ordered last deliberately: its first useful slice — a live "what is the
+running agent doing right now" view in the detail view — can ride on the event
+stream from item 5 instead of inventing visibility from scratch. Full
+interactive embedding (typing to the agent inside the TUI) is a separate,
+later slice. Items 5 and 6 must not collapse into one job; the event system
+must not be designed by the terminal's requirements.
 
-But it is correctly in the backlog with a known wrinkle (`@owner` never
-writes to disk; it needs its own verdict signal convention — the drafted
-"PO-VERDICT:" marker from the `vu33rn` scoping is a reasonable starting
-point). Pull it in only after the core loop is proven reliable on all
-profiles; extending a loop that is still being stabilized just multiplies
-the failure surface.
+## Concerns
 
-### 6. Housekeeping that unblocks everything else
-
-- **CODE_QUALITY_TASKS Phase 1** (branch-matching logic in three copies,
-  git exec in three places, fs helpers in four). The stage-in-overview work
-  and any future `--job` resolution change will touch exactly this
-  duplicated logic. Consolidate first so new features land on one
-  definition instead of three.
-- **Timeouts on the jdi loop's git probes** (Phase 2.3). A stalled probe
-  hangs a whole autonomous run silently — a user-facing reliability bug
-  dressed as an internal one.
-- **The error-prefix inconsistency** (Phase 2.1) — "Error: ..." on some
-  messages, bare on others, in the same commands. Visible to the user every
-  time something goes wrong.
-- **Decide the fate of `feature/3ro17g_go-instructions`** — ten chapters of
-  teaching material sitting unmerged on main. Either it's a deliberate
-  long-running branch (then say so) or it should land or be cut. Invisible
-  open branches are how the orphaned-worktree problem starts.
-
-## What not to build next
-
-- **In-TUI embedded terminal** (backlog): big Bubble Tea/PTY commitment for
-  window-management convenience. The tmux split-pane already covers the
-  "less window chaos" need for tmux users.
-- **Event-streaming subsystem** (backlog): the polling model delivers real
-  value; this is a wire-format commitment that should wait until polling is
-  provably insufficient.
-- **Headless/cron execution** (backlog): genuinely valuable for the VPS use
-  case, but the entire launch model assumes an attended terminal. It needs
-  its own design pass — not a bolt-on.
-- **Configurable Docker images** (`7431d6`): more moving parts in the
-  isolation story for a need that isn't evidenced. The single-image model is
-  a feature, not a limitation.
+- **Four big bets in one roadmap is fine; four big bets in one quarter is
+  not.** The ordering is deliberately value-per-effort: quick wins first
+  (#1–2), then the correctness gap (#3 toolchains), then the autonomy
+  completion (#4 headless), then the visibility foundation (#5 events), then
+  the UI bet last (#6). They're genuinely independent — nothing downstream
+  blocks if one stalls.
+- **Toolchains (#3) has a real failure mode to scope out early:** the added
+  layer is inside the container but it is new attack surface for a read-only
+  agent's session. The hard boundary (read-only git mounts, deny-lists) must
+  survive the change. That regression test belongs in the brief before
+  `@analyst` sees it.
+- **Headless (#4) must not become "cron, naively."** A nightly `mg jdi --all`
+  firing at unread briefs, or two queues stepping on the same worktree, is how
+  the multi-jdi-instances mess returns. The queue needs the same per-job guard
+  the TUI's `j` key already has.
 
 ## Bottom line
 
-The next jobs, in order: **(1) verify and harden `mg jdi` on the OpenCode
-profiles**, **(2) enforce read-only agents under OpenCode**, **(3) stage
-column in the overview**, **(4) orphaned-worktree cleanup**, then **(5)
-extend the autonomous sequence with `@owner`/`@security`**. Items 1 and 2
-are the same job if scoped together. Everything else in the backlog stays
-where it is until the core loop is boring.
-
-One concrete thing to do regardless of job ordering: delete the five
-orphaned worktree directories (or land item 4 first and let the tool do
-it). They are the clearest signal in the repo that something in the
-lifecycle isn't finished.
+The next jobs, in order: **(1) jdi-status sidecar cleanup**, **(2) `mg
+doctor`**, **(3) configurable project toolchains**, **(4) headless/cron
+execution**, **(5) event-streaming against a real consumer**, **(6) in-TUI
+terminal, smallest slice first**. Items 1–2 are immediate chore/feature jobs.
+Items 3–6 are sequenced as separate jobs, not an omnibus. The autonomy story
+is now: three agents, on purpose, boring in the right places — and the docs
+say so.
