@@ -34,7 +34,12 @@ The seam between the orchestrator (host-side Go) and the agent environment
 - `internal/session` — the docker session launcher (was `scripts/run.sh`):
   profile/tool resolution, auth validation, project-root + `--job` worktree
   resolution, docker argv/mount/env construction, and the run itself.
-  The TUI and mg-jdi call it directly.
+  The TUI and mg-jdi call it directly. For OpenCode sessions it also converts
+  project-level `docs/agents/*.md` to OpenCode's schema at launch (the same
+  `name`/`tools` strip the Dockerfile applies to the built-in agents), writing
+  the converted copies to a temp dir shadow-mounted over the docs mount's
+  `agents/` subpath — the host's `docs/agents/` is never modified, and the
+  temp dir is cleaned up after the run.
 - `internal/job` — the job lifecycle (was `new-job.sh`/`finish-job.sh`/
   `delete-job.sh`): `CreateJob` (scaffold + worktree + first commit),
   `FinishJob` (archive + squash merge + branch delete), `DeleteJob`
@@ -61,9 +66,10 @@ The seam between the orchestrator (host-side Go) and the agent environment
   `opencode run <message> --agent <agent> --auto --format json`.
 - `Dockerfile` — builds the image; installs both agent CLIs, bakes the global
   `agents/` in (twice: verbatim for Claude Code, and for OpenCode with the
-  `name`/`tools` frontmatter keys stripped), and pre-warms the Go module
-  cache from the root `go.mod`/`go.sum` (with `GOTOOLCHAIN=local` a stale
-  path breaks the build).
+  `name`/`tools` frontmatter keys stripped — the same strip the session
+  launcher applies at launch to project `docs/agents/` overrides), and
+  pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
+  `GOTOOLCHAIN=local` a stale path breaks the build).
 
 ### Session launch (bare `mg`)
 

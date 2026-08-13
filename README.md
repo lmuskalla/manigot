@@ -343,7 +343,12 @@ What differs per profile:
 Both tools get the same `agents/*.md` files baked in at build time. The
 OpenCode copies are generated from the same sources with the `name` and `tools`
 frontmatter keys removed, since OpenCode derives the agent name from the
-filename and uses a different schema for tool permissions.
+filename and uses a different schema for tool permissions. Custom project
+agents in `your-project/docs/agents/` are written in the same list form and
+converted the same way at session launch — manigot strips `name`/`tools` from
+the mounted copies before an OpenCode session sees them (OpenCode hard-errors
+on the list form, so this is what keeps one file working under both CLIs).
+Your `docs/agents/` source files are never modified.
 
 Both CLIs start with all permissions auto-approved — no per-tool confirmation
 prompts (e.g. "can I run this python script?") appear in either tool. The
@@ -385,6 +390,9 @@ The Tools column is enforced under Claude Code only — see the caveat under
 
 To override an agent for a specific project, create a file with the same name
 in `your-project/docs/agents/`. Project agents take precedence over global ones.
+Write them in the same format as the built-ins (`name:`, `description:`,
+`tools: Read, Grep, ...`) — the OpenCode copy is generated from that file at
+launch, so you never need to hand-write OpenCode's object form.
 
 ---
 

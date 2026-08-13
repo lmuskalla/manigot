@@ -21,6 +21,15 @@ import (
 type DockerInvocation struct {
 	// Argv is the complete argument vector: ["docker", "run", ...].
 	Argv []string
+
+	// Cleanup removes any host-side resources the invocation created (e.g.
+	// the converted-project-agents temp dir shadow-mounted over the docs
+	// mount's agents/ subpath — see BuildDockerInvocation's agentMount
+	// block). Run defers it so every caller — the interactive `mg` session
+	// path and `mg jdi`'s --print runs alike — gets the cleanup for free
+	// without having to know about it. nil when there is nothing to clean
+	// up.
+	Cleanup func()
 }
 
 // dockerImageName is the container image run.sh launched.
@@ -88,6 +97,24 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	var docsMount []string
 	if fs.IsDir(root.DocsDir) {
 		docsMount = []string{"-v", root.DocsDir + ":" + docsMountTarget + ":z"}
+	}
+
+	// ── Project agents ─────────────────────────────────────────────────────
+	// docs/agents/ rides along inside the docs mount above — fine for Claude
+	// Code, whose subagent schema the list-form frontmatter already is, but
+	// OpenCode hard-errors on the list-form tools: key (see convertAgents),
+	// so custom project agents must be converted before the container sees
+	// them. The converted copies land in a temp dir shadow-mounted over the
+	// docs mount's agents/ subpath; the host's docs/agents/ source tree is
+	// never modified. The temp dir is removed via the invocation's Cleanup
+	// hook (see DockerInvocation.Run).
+	var agentMount []string
+	var agentCleanup func()
+	if tmp, hasAgents, err := convertAgents(filepath.Join(root.DocsDir, "agents"), info.Tool); err != nil {
+		return DockerInvocation{}, fmt.Errorf("convert project agents: %w", err)
+	} else if hasAgents {
+		agentMount = []string{"-v", tmp + ":/workspace/.opencode/agents:z"}
+		agentCleanup = func() { os.RemoveAll(tmp) }
 	}
 
 	// ── Job prompt ──────────────────────────────────────────────────────────
@@ -192,6 +219,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, "-v", root.ProjectRoot+":/workspace:z")
 	argv = append(argv, gitDirMount...)
 	argv = append(argv, docsMount...)
+	argv = append(argv, agentMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, info.KeyEnv...)
@@ -208,12 +236,16 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 
-	return DockerInvocation{Argv: append([]string{"docker"}, argv...)}, nil
+	return DockerInvocation{Argv: append([]string{"docker"}, argv...), Cleanup: agentCleanup}, nil
 }
 
 // Run executes the assembled docker invocation, wiring stdin/stdout/stderr
 // through so Ctrl+C reaches the container, and returns docker's exit code.
+// The invocation's Cleanup hook (if any) runs after the container exits.
 func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
+	if d.Cleanup != nil {
+		defer d.Cleanup()
+	}
 	cmd := exec.Command(d.Argv[0], d.Argv[1:]...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
