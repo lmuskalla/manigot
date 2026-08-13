@@ -410,7 +410,7 @@ launcher for work that must touch the host itself.
 
 ## Agents
 
-Eleven agents are available globally in every project. Call them with `@name`
+Twelve agents are available globally in every project. Call them with `@name`
 in your session, or run `mg agents` (or its thematic alias, `mg crew`) from
 the host to list them (with any `docs/agents/` overrides) and pick one to
 start straight into.
@@ -428,6 +428,7 @@ start straight into.
 | `@mentor` | Grounded tech mentor for skill growth and sustainable practice | read-only |
 | `@architect` | Plans how to best build a system — stack, components, deployment | read-only |
 | `@devops` | Expert for pipelines and getting things running — CI/CD, builds | read + write |
+| `@chat` | General chat assistant, like ChatGPT — conversational and advisory | read-only |
 
 The Tools column is enforced under Claude Code; the read-only agents are
 enforced under OpenCode too, via the `permission:` frontmatter they carry —
