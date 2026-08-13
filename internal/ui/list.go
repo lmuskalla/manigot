@@ -135,7 +135,7 @@ type columnWidths struct {
 }
 
 // listColumns returns the list view's fixed column widths. id is 12 rather
-// than 6 so word-based job ids (e.g. "caterpillar") render untruncated —
+// than 8 so word-based job ids (e.g. "caterpillar") render untruncated —
 // pad() would cut a longer word at the column edge. stage is wider
 // than typ because the longest stage name ("implement") is 9 chars.
 func listColumns() columnWidths {
