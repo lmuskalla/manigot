@@ -43,9 +43,10 @@ type Job struct {
 	// lives outside any individual job's worktree).
 	Root string
 
-	// ID is the 6-char job id. It comes from the brief.md frontmatter when
-	// present, otherwise it is derived from the leading segment of Name
-	// (split on the first '_').
+	// ID is the job id — a word picked from jobWords (e.g. "flower"), never
+	// re-used across open or archived jobs. It comes from the brief.md
+	// frontmatter when present, otherwise it is derived from the leading
+	// segment of Name (split on the first '_').
 	ID string
 
 	// Title is the human title, taken from the "# Brief: <title>" heading.
