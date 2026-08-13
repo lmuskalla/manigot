@@ -923,6 +923,39 @@ func ExcludePath(root, pattern string) error {
 	return err
 }
 
+// mountTargetExcludePatterns are the repo-relative paths manigot's container
+// docs mounts collide with: /workspace/.opencode for OpenCode profiles and
+// /workspace/.claude for Claude Code (see internal/session/docker.go's
+// docsMountTarget). Inside the container those mount targets make the job
+// reachable at a second path that looks like a different copy of docs/, and
+// git — which has no notion of mount points — happily tracks whatever an
+// agent stages through them, leaving a stale duplicate of the job in the
+// repository that later trips FinishJob's clean-tree check (see
+// docs/BUG_report-mg-done-dirty-worktree-stale-job-copy.md). The paths must
+// therefore never be tracked.
+var mountTargetExcludePatterns = []string{".opencode/", ".claude/"}
+
+// ExcludeMountTargets appends every container docs-mount target path
+// (.opencode/, .claude/) to the repository's .git/info/exclude via
+// ExcludePath, so git never tracks the mounted docs under the colliding
+// repo-relative path: `git add .` skips it, and an explicit
+// `git add .opencode/...` fails loudly ("paths are ignored") instead of
+// silently creating the duplicate. info/exclude lives in the repository's
+// common git dir and is shared by every worktree, so one call protects the
+// main worktree and all job worktrees alike; ExcludePath's idempotency keeps
+// repeated calls (job creation plus every session launch) from duplicating
+// lines. A non-repo root is not an error — there is no git tracking to
+// protect (ErrNotARepo is absorbed, matching the best-effort nature of the
+// call sites).
+func ExcludeMountTargets(root string) error {
+	for _, pattern := range mountTargetExcludePatterns {
+		if err := ExcludePath(root, pattern); err != nil && !errors.Is(err, ErrNotARepo) {
+			return err
+		}
+	}
+	return nil
+}
+
 // RevParseToplevel returns the absolute top-level working-tree path of the
 // repository at root, via `git rev-parse --show-toplevel` — the
 // MAIN_WORKTREE computation of finish-job.sh and delete-job.sh, used to detect

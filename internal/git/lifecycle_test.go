@@ -294,6 +294,42 @@ func TestExcludePathNotARepo(t *testing.T) {
 	}
 }
 
+func TestExcludeMountTargets(t *testing.T) {
+	dir, _ := initRepo(t)
+	exclude := filepath.Join(dir, ".git", "info", "exclude")
+
+	if err := ExcludeMountTargets(dir); err != nil {
+		t.Fatalf("ExcludeMountTargets: %v", err)
+	}
+	data, err := os.ReadFile(exclude)
+	if err != nil {
+		t.Fatalf("read exclude file: %v", err)
+	}
+	for _, pattern := range mountTargetExcludePatterns {
+		if !strings.Contains(string(data), pattern) {
+			t.Errorf("exclude file missing %q: %q", pattern, data)
+		}
+	}
+
+	// Idempotent: a second call must not duplicate any line.
+	if err := ExcludeMountTargets(dir); err != nil {
+		t.Fatalf("ExcludeMountTargets (second): %v", err)
+	}
+	data2, _ := os.ReadFile(exclude)
+	for _, pattern := range mountTargetExcludePatterns {
+		if strings.Count(string(data2), pattern) != 1 {
+			t.Errorf("exclude pattern %q duplicated: %q", pattern, data2)
+		}
+	}
+}
+
+func TestExcludeMountTargetsNotARepo(t *testing.T) {
+	// A non-repo is not an error — there is no git tracking to protect.
+	if err := ExcludeMountTargets(t.TempDir()); err != nil {
+		t.Errorf("ExcludeMountTargets on non-repo: err = %v, want nil", err)
+	}
+}
+
 func TestRevParseToplevel(t *testing.T) {
 	dir, _ := initRepo(t)
 	got, err := RevParseToplevel(dir)
