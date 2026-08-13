@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-<!-- What needs to be done? Be specific. -->
+Previously, the "owner" was called "product owner". Therefore the keyboard shortcut in the tui on the detail page was p. But now it really needs to be o.
 
 ## Why
 
