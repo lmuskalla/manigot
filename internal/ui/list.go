@@ -105,12 +105,20 @@ const dashboardFixedChrome = 7
 // height == 0 (a view that has never received a tea.WindowSizeMsg, e.g.
 // some existing tests) falls back to the floor, the same kind of guard
 // render already applies to width == 0.
+//
+// Whichever path computes the count, the result is clamped to
+// len(v.recentCommits): a repo with no commits yet (an unborn HEAD — exactly
+// the state right after mg init on a brand-new project) degrades to 0, so
+// renderRecentActivity renders no strip at all instead of slicing past an
+// empty cache.
 func (v *listView) recentActivityShown(jobCount, maxRecent, height int) int {
+	var n int
 	if height == 0 {
-		return recentActivityFloor
+		n = recentActivityFloor
+	} else {
+		spare := height - dashboardFixedChrome - jobCount
+		n = clamp(spare, recentActivityFloor, maxRecent)
 	}
-	spare := height - dashboardFixedChrome - jobCount
-	n := clamp(spare, recentActivityFloor, maxRecent)
 	if n > len(v.recentCommits) {
 		// Fewer real commits than the computed count — render whatever's
 		// available, same graceful-degrade rule renderRecentActivity already

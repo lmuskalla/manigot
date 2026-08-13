@@ -265,11 +265,11 @@ func TestRenderListZeroHeightNoCommitsDoesNotPanic(t *testing.T) {
 	a := NewApp(dir, jobs)
 	// a.width, a.height left at zero.
 
-	if len(a.recentCommits) != 0 {
-		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.recentCommits)
+	if len(a.list.recentCommits) != 0 {
+		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.list.recentCommits)
 	}
 
-	got := a.renderList()
+	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if got == "" {
 		t.Fatal("renderList returned nothing for a zero-height App on a commit-less repo")
 	}

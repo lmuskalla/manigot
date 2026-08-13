@@ -26,16 +26,10 @@ Configures credentials for manigot's subscription profiles into manigot/.env:
   zai           OpenCode, billed to your Z.AI Coding Plan
   opencode-go   OpenCode, billed to the OpenCode Go subscription
 
-<<<<<<< HEAD
 With no profile, the wizard walks through all three, plus the optional ntfy
 push-notification settings (NTFY_URL/NTFY_TOPIC/NTFY_TOKEN) for mg jdi.
 --check reports which profiles are ready without prompting. Values are
 written to the same .env mg reads; nothing is sent anywhere.
-=======
-With no profile, the wizard walks through all three. --check reports which
-profiles are ready without prompting. Values are written to the same .env
-bare mg reads; nothing is sent anywhere.
->>>>>>> ef8533d4a317b446a6dd74029150ee9a3ec38de7
 `
 
 // runSetup implements `mg setup` — the port of scripts/setup.sh with identical
