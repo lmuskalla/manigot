@@ -1,4 +1,4 @@
-.PHONY: build rebuild run mg tui jdi install uninstall check help
+.PHONY: build rebuild run mg install uninstall check help
 
 IMAGE  := manigot
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -15,8 +15,7 @@ rebuild: ## Force rebuild with no cache (use after Claude Code updates)
 # The one `mg` binary is the entire host-side tool: session, profiles, setup,
 # agents, job, done, delete, init, tui and jdi are all subcommands of it. The
 # only bash left is scripts/entrypoint.sh, which runs inside the container
-# image. `make tui` / `make jdi` are aliases of `make mg` — the TUI and the
-# jdi loop run in-process as `mg tui` / `mg jdi`.
+# image.
 
 MG_BIN := bin/mg
 
@@ -27,10 +26,6 @@ mg: ## Build the host-side mg binary into bin/
 		-o "$(CURDIR)/$(MG_BIN)" ./cmd/mg
 	@echo "Built $(MG_BIN) ($(VERSION))"
 	@echo "Install:  make install   (or: make install PREFIX=\$$HOME/.local)"
-
-tui: mg ## Alias — the TUI runs in-process as `mg tui`
-
-jdi: mg ## Alias — mg-jdi runs in-process as `mg jdi`
 
 # ── Run ─────────────────────────────────────────────────────────────────────────
 

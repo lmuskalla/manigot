@@ -313,7 +313,7 @@ either way.
 ## Commands
 - `make build` — build the image (skips if already built)
 - `make rebuild` — force rebuild with no cache, after a Claude Code / OpenCode update
-- `make mg` — build the host-side `bin/mg` binary (`make tui`/`make jdi` are aliases)
+- `make mg` — build the host-side `bin/mg` binary
 - `make install` / `make uninstall` — symlink the single `mg` binary into
   `PREFIX/bin` (default `/usr/local`)
 - `mg` — start an isolated session from inside any project directory; `docs/`

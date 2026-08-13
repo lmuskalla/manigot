@@ -1,6 +1,6 @@
 .env
 
-# Built TUI binary (produced by `make tui`).
+# Built mg binary (produced by `make mg`).
 /bin/
 
 # Accidentally-committed root-level build artifact (a stray `go build` without
