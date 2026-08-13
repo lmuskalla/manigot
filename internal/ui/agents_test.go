@@ -72,7 +72,7 @@ var allStages = []job.Stage{
 // agent is no longer gated by job.Stage().
 func TestAgentForKeyIgnoresStage(t *testing.T) {
 	wantByKey := map[string]string{
-		"p": "owner",
+		"o": "owner",
 		"a": "analyst",
 		"d": "developer",
 		"r": "reviewer",
@@ -122,6 +122,17 @@ func TestAgentForKeyVNoLongerResolves(t *testing.T) {
 	}
 }
 
+// TestAgentForKeyPNoLongerResolves confirms "p" (Owner's key in a previous
+// revision, when the role was still called "product owner") no longer
+// resolves to any agent now that Owner uses "o".
+func TestAgentForKeyPNoLongerResolves(t *testing.T) {
+	a := &App{}
+	a.detail = newDetailView(mkStageJob(t, job.StageDefine), 80, 24)
+	if got := a.agentForKey("p"); got != "" {
+		t.Errorf(`agentForKey("p") = %q, want empty now that Owner uses "o"`, got)
+	}
+}
+
 // TestRenderActionBarAlwaysShowsAllAgents confirms the action bar lists all
 // five agent buttons regardless of the job's stage, and that the stage
 // timeline still names every stage as an informational hint. Uses a generous
@@ -158,7 +169,7 @@ func TestRenderActionBarUnifiedFormat(t *testing.T) {
 	if strings.Contains(bar, "│") {
 		t.Errorf("action bar should no longer use a separator between the agent buttons and Done:\n%s", bar)
 	}
-	for _, want := range []string{"[p] Owner", "[a] Analyst", "[d] Developer", "[r] Reviewer", "[s] Security", "[D] Done"} {
+	for _, want := range []string{"[o] Owner", "[a] Analyst", "[d] Developer", "[r] Reviewer", "[s] Security", "[D] Done"} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("action bar missing button in the unified format %q:\n%s", want, bar)
 		}
@@ -181,7 +192,7 @@ func TestRenderActionBarTruncatesLabelsAt80ColsKeysStayIntact(t *testing.T) {
 		t.Fatalf("action bar should render on two lines (agents, then stage timeline/Done), got %d lines:\n%s", len(lines), bar)
 	}
 	agentsLine, stageLine := lines[0], lines[1]
-	for _, key := range []string{"[p]", "[a]", "[d]", "[r]", "[s]"} {
+	for _, key := range []string{"[o]", "[a]", "[d]", "[r]", "[s]"} {
 		if !strings.Contains(agentsLine, key) {
 			t.Errorf("agents line at 80 cols is missing key %q — keys must never be truncated:\n%s", key, agentsLine)
 		}

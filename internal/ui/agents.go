@@ -17,7 +17,7 @@ var agentMeta = map[string]struct {
 	display string
 }{
 	agents.Analyst:   {key: "a", display: "Analyst"},
-	agents.Owner:     {key: "p", display: "Owner"},
+	agents.Owner:     {key: "o", display: "Owner"},
 	agents.Developer: {key: "d", display: "Developer"},
 	agents.Reviewer:  {key: "r", display: "Reviewer"},
 	agents.Security:  {key: "s", display: "Security"},
