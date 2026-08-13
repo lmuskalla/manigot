@@ -175,3 +175,75 @@ func TestRunDeleteUsage(t *testing.T) {
 		t.Errorf("missing usage:\n%s", errOut.String())
 	}
 }
+
+// mgOrphanWorktree builds a dead worktree dir under root's .manigot-worktrees
+// sibling parent (the orphan shape job.DiscoverOrphans detects) and returns
+// the orphan's dir path. The orphan has no branch and no worktree registration,
+// mirroring a job scaffolded and then abandoned.
+func mgOrphanWorktree(t *testing.T, root, name string) string {
+	t.Helper()
+	wtParent := filepath.Join(filepath.Dir(root), ".manigot-worktrees", filepath.Base(root))
+	wtPath := filepath.Join(wtParent, name)
+	if err := os.MkdirAll(wtParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mgGit(t, root, "worktree", "add", wtPath, "-b", "feature/"+name)
+	data, err := os.ReadFile(filepath.Join(wtPath, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(data)), "gitdir:"))
+	if err := os.RemoveAll(gitdir); err != nil {
+		t.Fatal(err)
+	}
+	mgGit(t, root, "branch", "-D", "feature/"+name)
+	return wtPath
+}
+
+func TestRunDeleteOrphan(t *testing.T) {
+	dir := mgCheckout(t)
+	orphanDir := mgOrphanWorktree(t, dir, "o3kk3n_jdi-is-broken")
+	t.Chdir(dir)
+
+	var out, errOut strings.Builder
+	if code := runDelete([]string{"o3kk3n_jdi-is-broken"}, strings.NewReader("y\n"), &out, &errOut); code != 0 {
+		t.Fatalf("runDelete orphan exit code = %d, stderr: %s", code, errOut.String())
+	}
+	if _, err := os.Stat(orphanDir); !os.IsNotExist(err) {
+		t.Errorf("orphan dir still exists after delete: %v", err)
+	}
+	if !strings.Contains(out.String(), "✓ Orphan removed: o3kk3n_jdi-is-broken") {
+		t.Errorf("missing orphan-removed line:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "This cannot be undone.") {
+		t.Errorf("missing 'This cannot be undone.':\n%s", out.String())
+	}
+}
+
+func TestRunDeleteOrphanPrefix(t *testing.T) {
+	dir := mgCheckout(t)
+	orphanDir := mgOrphanWorktree(t, dir, "o3kk3n_jdi-is-broken")
+	t.Chdir(dir)
+
+	var out, errOut strings.Builder
+	if code := runDelete([]string{"o3kk3n"}, strings.NewReader("y\n"), &out, &errOut); code != 0 {
+		t.Fatalf("runDelete orphan-prefix exit code = %d, stderr: %s", code, errOut.String())
+	}
+	if _, err := os.Stat(orphanDir); !os.IsNotExist(err) {
+		t.Errorf("orphan dir still exists after prefix delete: %v", err)
+	}
+}
+
+func TestRunDeleteOrphanDeclined(t *testing.T) {
+	dir := mgCheckout(t)
+	orphanDir := mgOrphanWorktree(t, dir, "o3kk3n_jdi-is-broken")
+	t.Chdir(dir)
+
+	var out, errOut strings.Builder
+	if code := runDelete([]string{"o3kk3n"}, strings.NewReader("n\n"), &out, &errOut); code != 0 {
+		t.Fatalf("declined orphan delete exit code = %d, want 0 (script exits 0 on decline)", code)
+	}
+	if _, err := os.Stat(orphanDir); err != nil {
+		t.Errorf("orphan dir removed despite a declined confirmation: %v", err)
+	}
+}

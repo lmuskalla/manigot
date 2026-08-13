@@ -19,6 +19,22 @@ import (
 // The CLI treats it as a clean exit with no further output.
 var ErrCancelled = errors.New("cancelled")
 
+// ErrJobNotFound is returned by FinishJob, DeleteJob and the orphan matchers
+// when the given id resolves to no job at all. The CLI checks errors.Is on it
+// to distinguish "there is no such job, try the orphaned-worktree path" from a
+// real failure.
+var ErrJobNotFound = errors.New("job not found")
+
+// jobNotFoundErr is the not-found error shape: its Error() text is exactly
+// the wording finish-job.sh and delete-job.sh used (pinned by tests), while
+// Unwrap keeps it distinguishable via errors.Is(err, ErrJobNotFound).
+type jobNotFoundErr struct {
+	msg string
+}
+
+func (e *jobNotFoundErr) Error() string { return e.msg }
+func (e *jobNotFoundErr) Unwrap() error { return ErrJobNotFound }
+
 // ConfirmFunc asks a y/N confirmation question (writing the prompt to the
 // user's terminal and reading the answer) and reports whether the user
 // answered yes. The CLI wires cli.Confirm; the TUI provides its own prompt or
@@ -243,7 +259,7 @@ func jobNotFoundError(jobArg string, branches []string) error {
 	for _, b := range branches {
 		msg += "\n  " + b
 	}
-	return errors.New(msg)
+	return &jobNotFoundErr{msg: msg}
 }
 
 // briefTitle extracts the job title the way finish-job.sh did:
