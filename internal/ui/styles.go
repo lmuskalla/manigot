@@ -30,8 +30,10 @@ var (
 
 	// activityStyle is for the recent-activity (git log) strip — a notch
 	// lighter than dimStyle so it reads as background information, less
-	// prominent than the job list and footer above it.
-	activityStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#585858"))
+	// prominent than the job list and footer above it. The gray was
+	// lightened from #585858 per the "make git log a bit brighter" brief:
+	// the old value faded to near-invisible on low-contrast screens.
+	activityStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#808080"))
 
 	// headerStyle is for column headers.
 	headerStyle = lipgloss.NewStyle().Bold(true)
