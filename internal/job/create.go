@@ -32,8 +32,10 @@ type CreateOptions struct {
 	// tests can force the nested layout without an actual second mount.
 	DeviceCheck func(parent, root string) bool
 
-	// RandomID generates the 6-char job id (a-z0-9). nil uses crypto/rand.
-	// Injectable so tests get a deterministic id.
+	// RandomID generates the job id. nil uses the default word-based
+	// generator — a uniform random pick from jobWords, wrapped in CreateJob's
+	// uniqueness retry loop (uniqueJobID). Injectable so tests get a
+	// deterministic id.
 	RandomID func() (string, error)
 }
 
@@ -91,7 +93,7 @@ func CreateJob(root, title string, opts CreateOptions, out io.Writer) (CreateRes
 	// ── Generate id, slug, date, author ─────────────────────────────────────
 	id := opts.RandomID
 	if id == nil {
-		id = randomID
+		id = wordID
 	}
 	jobID, err := id()
 	if err != nil {
@@ -256,30 +258,29 @@ var (
 	regexpCollapseDash = regexp.MustCompile(`-+`)
 )
 
-// randomID generates a 6-char id from a-z0-9 via crypto/rand — the Go form of
-// `LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 6`.
-func randomID() (string, error) {
-	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-	// Rejection sampling: 256 is not a multiple of 36, so a naive
-	// `byte % 36` overweights the first few chars (values 252-255 would all
-	// map onto them). Draw a fresh byte until it lands in [0, 252) — the
-	// largest multiple of 36 below 256 — so every char is exactly as likely
-	// as every other. The bias was negligible for job ids, but the correct
-	// shape costs nothing.
-	const limit = byte(256 - 256%len(chars)) // 252
-	b := make([]byte, 6)
-	for i := range b {
-		for {
-			if _, err := rand.Read(b[i : i+1]); err != nil {
-				return "", err
-			}
-			if b[i] < limit {
-				break
-			}
+// wordID picks a uniformly random word from jobWords via crypto/rand. The
+// 6-char a-z0-9 id it replaces had ~2.2e9 combinations; a single word from
+// the ~2,300-word list is a far smaller space, so CreateJob couples this
+// with the uniqueness retry loop in uniqueJobID — collisions are absorbed
+// by re-drawing, never by failing.
+func wordID() (string, error) {
+	// Rejection sampling on a uint16: 65536 is not a multiple of
+	// len(jobWords), so a naive `v % len` would overweight the first few
+	// words. Draw two random bytes, treat them as a 16-bit integer, and
+	// accept only values below the largest multiple of len(jobWords) below
+	// 65536, so every word is exactly as likely as every other.
+	const max = 1 << 16
+	limit := max - max%len(jobWords)
+	b := make([]byte, 2)
+	for {
+		if _, err := rand.Read(b); err != nil {
+			return "", err
 		}
-		b[i] = chars[int(b[i])%len(chars)]
+		v := int(b[0])<<8 | int(b[1])
+		if v < limit {
+			return jobWords[v%len(jobWords)], nil
+		}
 	}
-	return string(b), nil
 }
 
 // writeScaffold writes the four job files with content byte-identical to
