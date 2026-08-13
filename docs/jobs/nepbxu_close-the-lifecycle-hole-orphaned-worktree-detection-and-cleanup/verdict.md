@@ -77,20 +77,31 @@ path. Confirmation is per-item / batch-confirmed with destructive wording.
 
 ## Overall
 
-NEEDS WORK
+APPROVED
 
-The code itself is correct, complete and well-tested — but **nothing is
-committed**. The branch `feature/nepbxu_close-the-lifecycle-hole-orphaned-worktree-detection-and-cleanup`
-contains only the scaffold commit and the brief commit; all 12 files of
-implementation (including `internal/job/orphan.go` + tests and the
-`implementation.md` update) are uncommitted working-tree changes.
+The previous verdict's single blocker is resolved: the implementation is now
+committed in per-task commits and the working tree is clean.
 
-This must change before the job can proceed:
+- Per-task commits exist on the branch in the required `[nepbxu] TASK-N:`
+  format: `852ddc7` (TASK-1+TASK-2, orphan detection + removal — combined
+  because both tasks live in the same inseparable new-file pair
+  `internal/job/orphan.go`/`orphan_test.go`, matching the repo's own
+  combined-task precedent `[ru97hg] TASK-4+TASK-7:`), `6e1ca36` (TASK-3, mg
+  jobs surfacing), `97701bc` (TASK-4, mg delete fallback + ErrJobNotFound
+  sentinel), `0b193c3` (TASK-5, docs), `2ae0da9` (TASK-6, task breakdown).
+- `implementation.md` has its own commit (`7b01243`).
+- The working tree is clean (`git status` empty), so `mg done`'s clean-tree
+  check passes.
+- Each intermediate commit was verified to build standalone
+  (`go build ./...` OK at every task commit), and `go build` + `go vet` +
+  `go test -count=1 ./...` all pass on the final state (15/15 packages).
 
-1. Commit each task with its own commit in the required format:
-   `[nepbxu] TASK-1: ...` through `[nepbxu] TASK-6: ...` (or equivalent
-   per-task granularity matching the tasks.md breakdown).
-2. Commit `docs/jobs/nepbxu_.../implementation.md` in its own commit.
-3. Leave the working tree clean afterwards — `mg done`'s clean-tree check
-   (`internal/job/finish.go:152`) rejects uncommitted changes, so the job
-   cannot be finished until this is done.
+The code itself is unchanged from the first review round — detection,
+removal with mg delete's confirmation discipline, mg jobs surfacing, and the
+mg delete fallback are all correct and tested. No further changes required.
+
+One environment note (not a code issue): the sandbox's git worktree metadata
+for this job was pruned during commit verification because the recorded
+`.manigot-worktrees/` path does not exist in the sandbox; the worktree
+registration was restored and the repo verified healthy (branch refs,
+commits, and clean working tree all intact).
