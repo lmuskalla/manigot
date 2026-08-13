@@ -176,6 +176,23 @@ if [[ -z "$subcmd" ]] || [[ "$ALLOWED" != *" $subcmd "* ]]; then
 fi
 
 case "$subcmd" in
+    add)
+        # The container docs mounts collide with the repo paths .opencode/
+        # (OpenCode) and .claude/ (Claude Code): inside the container those
+        # are bind mounts of docs/, so an agent staging files through them
+        # would commit a stale duplicate of docs/ under the colliding path.
+        # info/exclude already makes git ignore both paths (host-side, via
+        # git.ExcludeMountTargets at job creation and session launch) — this
+        # is the belt-and-braces second layer for a worktree the exclusion
+        # hasn't reached yet. Covers leading ./ variants and -f forces.
+        for a in "${rest[@]}"; do
+            case "$a" in
+                .opencode*|./.opencode*|.claude*|./.claude*)
+                    deny "add $a"
+                    ;;
+            esac
+        done
+        ;;
     branch)
         for a in "${rest[@]}"; do
             case "$a" in
