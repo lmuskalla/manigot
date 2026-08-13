@@ -21,8 +21,8 @@ import (
 
 // Options carries the parsed session flag set.
 type Options struct {
-	Agent   string // --agent
-	Job     string // --job
+	Agent   string // --agent (or -a)
+	Job     string // --job (or -j)
 	Prompt  string // --prompt
 	Tool    string // --tool (legacy alias)
 	Profile string // --profile
@@ -30,9 +30,10 @@ type Options struct {
 	Pass    []string
 }
 
-// ParseArgs parses the session flags: known --flags consume their value,
-// --print is a bare flag, anything else — an unknown flag or a bare word — is
-// passthrough, handed verbatim to the container CLI (run.sh's semantics).
+// ParseArgs parses the session flags: known --flags (and the -a/-j short
+// forms of --agent/--job) consume their value, --print is a bare flag,
+// anything else — an unknown flag or a bare word — is passthrough, handed
+// verbatim to the container CLI (run.sh's semantics).
 //
 // The passthrough rule is why the known flags are extracted first (splitFlags)
 // and parsed with a flag.FlagSet, rather than feeding flag the raw args:
@@ -44,6 +45,8 @@ func ParseArgs(args []string) Options {
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&o.Agent, "agent", "", "")
 	fs.StringVar(&o.Job, "job", "", "")
+	fs.StringVar(&o.Agent, "a", "", "") // short form of --agent
+	fs.StringVar(&o.Job, "j", "", "")   // short form of --job
 	fs.StringVar(&o.Prompt, "prompt", "", "")
 	fs.StringVar(&o.Tool, "tool", "", "")
 	fs.StringVar(&o.Profile, "profile", "", "")
@@ -60,9 +63,10 @@ func ParseArgs(args []string) Options {
 }
 
 // sessionValueFlags / sessionBareFlags name the session's own flags for
-// ParseArgs's splitFlags extraction.
+// ParseArgs's splitFlags extraction. The short forms -a/-j are aliases of
+// --agent/--job and are registered in the flag.FlagSet the same way.
 var (
-	sessionValueFlags = map[string]bool{"--agent": true, "--job": true, "--prompt": true, "--tool": true, "--profile": true}
+	sessionValueFlags = map[string]bool{"--agent": true, "--job": true, "--prompt": true, "--tool": true, "--profile": true, "-a": true, "-j": true}
 	sessionBareFlags  = map[string]bool{"--print": true}
 )
 

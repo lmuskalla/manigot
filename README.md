@@ -293,7 +293,9 @@ mg --help
 
 # Start straight in an agent, or on a job
 mg --agent analyst
+mg -a analyst                      # same as --agent analyst
 mg --profile zai --job a3f9k2
+mg -j a3f9k2                       # same as --job a3f9k2
 
 # Start an agent with an ad-hoc initial prompt, outside the job workflow
 mg --agent prompter --prompt "help me write a good project prompt"
@@ -308,6 +310,7 @@ mg done a3f9k2
 
 # Drive a job unattended: @analyst -> @developer -> @reviewer, end to end
 mg jdi --job a3f9k2
+mg jdi -j a3f9k2                     # same as --job a3f9k2
 
 # Run a session on the host — no docker container (work that must touch the host)
 mg host
@@ -319,7 +322,8 @@ Three ways to seed a session's initial prompt: `--job <id>` (the job's
 `brief.md`, for the job workflow), `--agent <name>` (starts the CLI directly
 in that agent, with no prompt text of its own), and `--prompt "…"` (a
 free-form initial prompt for an ad-hoc, non-job session — what `mg init` uses
-to hand off to `@prompter`). All three are tool-neutral: the session launcher
+to hand off to `@prompter`). `--job` and `--agent` also accept the short forms
+`-j <id>` and `-a <name>`. All three are tool-neutral: the session launcher
 routes the prompt to the right place per tool (positional for Claude Code,
 `--prompt` for OpenCode) regardless of which of `--job`/`--prompt` you used to
 set it. `--job` and `--prompt` can't both be honored at once — if you pass
@@ -380,10 +384,10 @@ alias: `mg wild`) is the deliberate exception: it launches the profile's
 agent CLI directly on the host — no container, no image, no mounts — as a
 launcher for work that must touch the host itself.
 
-- It reuses the same session machinery: `--profile`, `--agent`, `--job`,
-  `--prompt` and passthrough behave exactly as in a docker session, and the
-  credentials resolve the same way — the profile's keys go into the CLI's
-  environment, nothing is written to your config.
+- It reuses the same session machinery: `--profile`, `--agent` (`-a`),
+  `--job` (`-j`), `--prompt` and passthrough behave exactly as in a docker
+  session, and the credentials resolve the same way — the profile's keys go
+  into the CLI's environment, nothing is written to your config.
 - The CLI runs from the resolved project root (the job's worktree with
   `--job`), and the job prompt names the job's **host** path.
 - The CLI must be installed on the host — the docker path has both CLIs in

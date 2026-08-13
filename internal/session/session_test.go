@@ -54,6 +54,52 @@ func TestParseArgsBarePrint(t *testing.T) {
 	}
 }
 
+func TestParseArgsShortFlags(t *testing.T) {
+	o := ParseArgs([]string{"-a", "analyst", "-j", "abc123_x", "--prompt", "hello", "extra"})
+	if o.Agent != "analyst" || o.Job != "abc123_x" || o.Prompt != "hello" {
+		t.Errorf("ParseArgs = %+v", o)
+	}
+	if len(o.Pass) != 1 || o.Pass[0] != "extra" {
+		t.Errorf("passthrough = %v, want [extra]", o.Pass)
+	}
+}
+
+func TestParseArgsShortAndLongLastWins(t *testing.T) {
+	o := ParseArgs([]string{"--job", "long_id", "-j", "short_id"})
+	if o.Job != "short_id" {
+		t.Errorf("--job then -j: Job = %q, want short_id (last wins)", o.Job)
+	}
+	o = ParseArgs([]string{"-a", "first", "--agent", "second"})
+	if o.Agent != "second" {
+		t.Errorf("-a then --agent: Agent = %q, want second (last wins)", o.Agent)
+	}
+}
+
+func TestParseArgsShortFlagWithoutValue(t *testing.T) {
+	// A known flag left without its value at the end leaves the field unset —
+	// the same silent-ignore behavior as a bare "--agent".
+	o := ParseArgs([]string{"-a"})
+	if o.Agent != "" {
+		t.Errorf("-a without a value: Agent = %q, want empty", o.Agent)
+	}
+	o = ParseArgs([]string{"-j"})
+	if o.Job != "" {
+		t.Errorf("-j without a value: Job = %q, want empty", o.Job)
+	}
+}
+
+func TestParseArgsShortFlagsDoNotSwallowPassthrough(t *testing.T) {
+	// Unknown flags and bare words still go through verbatim — the -a/-j
+	// aliases must not change the passthrough rule.
+	o := ParseArgs([]string{"-x", "foo", "-a", "analyst"})
+	if o.Agent != "analyst" {
+		t.Errorf("Agent = %q, want analyst", o.Agent)
+	}
+	if len(o.Pass) != 2 || o.Pass[0] != "-x" || o.Pass[1] != "foo" {
+		t.Errorf("passthrough = %v, want [-x foo]", o.Pass)
+	}
+}
+
 func TestResolveProfileExplicitWins(t *testing.T) {
 	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=k\nCLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_ACCOUNT_UUID=u\nCLAUDE_EMAIL=e\nCLAUDE_ORG_UUID=o\n")
 	info, err := ResolveProfile(Options{Profile: "claude-pro"})

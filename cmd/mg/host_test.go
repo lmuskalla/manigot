@@ -99,7 +99,7 @@ func TestPrintHelpListsHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	help := string(out)
-	for _, want := range []string{"mg host", "mg wild"} {
+	for _, want := range []string{"mg host", "mg wild", "mg --agent/-a <name>", "mg --job/-j <id>"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help missing %q", want)
 		}

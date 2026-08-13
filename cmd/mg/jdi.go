@@ -16,7 +16,7 @@
 //
 // Run from anywhere inside a project that has a docs/ directory:
 //
-//	mg jdi --job <id-or-name>
+//	mg jdi --job/-j <id-or-name>
 package main
 
 import (
@@ -51,13 +51,15 @@ var jdiVersion = "0.1.0-dev"
 func runJDI(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("mg jdi", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	jobArg := fs.String("job", "", "job ID or directory name to drive (required)")
+	var jobArg string
+	fs.StringVar(&jobArg, "job", "", "job ID or directory name to drive (required)")
+	fs.StringVar(&jobArg, "j", "", "short form of --job")
 	profileArg := fs.String("profile", "", "subscription profile to run agents under: claude-pro, zai, or opencode-go (default claude-pro)")
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "mg jdi %s\n\n", jdiVersion)
 		fmt.Fprintf(stderr, "Drives a job's @analyst -> @developer -> @reviewer sequence end to end.\n\n")
 		fmt.Fprintf(stderr, "Usage:\n")
-		fmt.Fprintf(stderr, "  mg jdi --job <id-or-name> [--profile <profile>]\n\n")
+		fmt.Fprintf(stderr, "  mg jdi --job/-j <id-or-name> [--profile <profile>]\n\n")
 		fmt.Fprintf(stderr, "Run from anywhere inside a project that has a docs/ directory.\n\n")
 		fmt.Fprintf(stderr, "Flags:\n")
 		fs.PrintDefaults()
@@ -66,7 +68,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 		return 2 // the flag package already printed the error + usage
 	}
 
-	if strings.TrimSpace(*jobArg) == "" {
+	if strings.TrimSpace(jobArg) == "" {
 		fmt.Fprintln(stderr, "mg jdi: --job is required")
 		fs.Usage()
 		return 2
@@ -93,7 +95,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	j, err := resolveJob(root, *jobArg)
+	j, err := resolveJob(root, jobArg)
 	if err != nil {
 		fmt.Fprintf(stderr, "mg jdi: %v\n", err)
 		return 1

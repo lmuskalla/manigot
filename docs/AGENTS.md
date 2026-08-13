@@ -77,14 +77,14 @@ The seam between the orchestrator (host-side Go) and the agent environment
 
 ### Session launch (bare `mg`)
 
-Bare `mg` (and `--agent`/`--job`/`--prompt`/`--tool`/`--profile`/`--print`
-with passthrough) resolves the profile and project root, validates
-credentials, builds the docker invocation, and runs it with stdio wired
-through — Ctrl+C reaches the container and `mg` exits with the agent's exit
-code. `docs/` is optional: when found (walked up from `$PWD`), the project is
-"initialized" and its context is mounted; when absent, the container boundary
-falls back to the git root, else `$PWD` — a plain isolated session with no
-project context or job workflow.
+Bare `mg` (and `--agent`/`-a`, `--job`/`-j`, `--prompt`, `--tool`,
+`--profile`, `--print` with passthrough) resolves the profile and project
+root, validates credentials, builds the docker invocation, and runs it with
+stdio wired through — Ctrl+C reaches the container and `mg` exits with the
+agent's exit code. `docs/` is optional: when found (walked up from `$PWD`),
+the project is "initialized" and its context is mounted; when absent, the
+container boundary falls back to the git root, else `$PWD` — a plain isolated
+session with no project context or job workflow.
 
 When `--job <id>` is passed, the mount root is the job's own git worktree,
 not the project root: the job is resolved by matching its id_slug against
@@ -261,7 +261,7 @@ either way.
   falling back to the remote default branch when unset)
 - `mg delete <id>` — permanently delete a job (worktree + branch, no merge)
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
-- `mg jdi --job <id> [--profile <name>]` — drive a job's `@analyst` →
+- `mg jdi --job/-j <id> [--profile <name>]` — drive a job's `@analyst` →
   `@developer` → `@reviewer` sequence end to end, unattended, under the given
   subscription profile (default `claude-pro`)
   (thematic alias: `mg made-man`, same command/behavior)

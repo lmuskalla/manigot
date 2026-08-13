@@ -75,8 +75,8 @@ Profiles bundle an agent CLI with one of your subscriptions:
 Usage:
   mg                              Start a session in the current project
   mg --profile <name>             ...with the given profile (claude-pro|zai|opencode-go)
-  mg --agent <name>               Start straight in an agent (e.g. analyst)
-  mg --job <id>                   Start with a job's brief.md as the prompt
+  mg --agent/-a <name>            Start straight in an agent (e.g. analyst)
+  mg --job/-j <id>                Start with a job's brief.md as the prompt
   mg --agent <name> --job <id>    Combine the two
 
 Commands:
@@ -96,7 +96,7 @@ Commands:
   mg done <id>                    Archive a finished job (merge + remove worktree)
   mg delete <id>                  Permanently delete a job (worktree + branch, no merge)
   mg tui                          Terminal UI for browsing jobs and firing agents
-  mg jdi --job <id> [--profile <name>]
+  mg jdi --job/-j <id> [--profile <name>]
                                    Drive a job's analyst -> developer ->
                                    reviewer sequence unattended
                                    (thematic alias: mg made-man)

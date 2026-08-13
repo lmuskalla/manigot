@@ -105,6 +105,28 @@ func (f *fakeRunner) Run(agent string, j job.Job) ([]byte, error) {
 	return f.fn(f.t, f.root, j, agent, len(f.calls)), nil
 }
 
+// TestRunJDIJobShortFlagAccepted pins that `-j` is a recognized alias of
+// `--job` in runJDI's own flag set: with no docs/ directory anywhere above
+// the working dir, the run must get past flag parsing (an unknown flag would
+// exit 2) and fail cleanly at project resolution instead.
+func TestRunJDIJobShortFlagAccepted(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out, errOut strings.Builder
+	if code := runJDI([]string{"-j", "somejob"}, &out, &errOut); code != 1 {
+		t.Errorf("-j exit code = %d, want 1 (no docs/ dir); stderr:\n%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "could not find a docs/ directory") {
+		t.Errorf("expected the no-docs error, got:\n%s", errOut.String())
+	}
+}
+
+func TestRunJDIUnknownFlagRejected(t *testing.T) {
+	var out, errOut strings.Builder
+	if code := runJDI([]string{"-x", "somejob"}, &out, &errOut); code != 2 {
+		t.Errorf("unknown flag exit code = %d, want 2", code)
+	}
+}
+
 func TestRunHappyPath(t *testing.T) {
 	root, j := initTestRepo(t)
 	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
