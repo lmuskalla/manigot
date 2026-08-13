@@ -173,7 +173,7 @@ func deleteNonGit(root, jobArg string, confirm ConfirmFunc, out io.Writer) (Dele
 	} else {
 		match := PrefixJobDirName(root, jobArg)
 		if match == "" {
-			return DeleteResult{}, fmt.Errorf("job '%s' not found under %s/", jobArg, JobsRelDir)
+			return DeleteResult{}, &jobNotFoundErr{msg: fmt.Sprintf("job '%s' not found under %s/", jobArg, JobsRelDir)}
 		}
 		jobDir = filepath.Join(root, JobsRelDir, match)
 		jobName = match

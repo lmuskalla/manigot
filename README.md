@@ -209,9 +209,9 @@ its first argument:
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job: directory + branch, checked out in the job's own worktree (off `main`); needs `docs/` |
-| `mg jobs` | list open jobs with state and pick one to start a session in; needs `docs/` |
+| `mg jobs` | list open jobs with state and pick one to start a session in; also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
-| `mg delete` | permanently delete a job (worktree + branch, no merge); needs `docs/` |
+| `mg delete` | permanently delete a job (worktree + branch, no merge), or an orphaned worktree by its name; needs `docs/` |
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
 | `mg host` | run a session directly on the host, without the docker container — the profile's CLI runs as-is from the project root, so the agent can touch the host itself (thematic alias: `mg wild`, same command/behavior) |
@@ -504,6 +504,12 @@ job workflow.
    write the verdict.
 8. **Clean up loose ends.** Fix what's blocking, run it past them again.
 9. **Close it out.** Merge once the verdict's APPROVED, mark the brief done.
+
+A job scaffolded and then abandoned leaves a **dead worktree directory**
+behind — a `.manigot-worktrees/` dir whose git registration is gone, with no
+branch and no entry in `mg jobs`. `mg jobs` surfaces these orphans and offers
+to remove them, and `mg delete <name>` removes one by name — both with the
+same "This cannot be undone." confirmation as a normal delete.
 
 Don't feel like babysitting the whole thing? Send `mg made-man --job <id>`
 instead — it runs the analyst, the developer, and the reviewer back to back,

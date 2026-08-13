@@ -149,6 +149,19 @@ warning when dirty) and branch (`-D` — no merge). A non-git project's job is
 a plain directory delete. Same confirmations, including "This cannot be
 undone."
 
+Orphaned worktrees — leftover directories under `.manigot-worktrees/` whose
+git registration is gone (a `.git` file pointing at a gitdir that no longer
+exists, the shape a job scaffolded and then abandoned leaves behind) — are
+surfaced by `mg jobs` (`job.DiscoverOrphans`) after the job list, and removed
+through either `mg jobs`' interactive "Remove orphaned worktrees?" offer or
+`mg delete <name>` (which resolves orphan names the way it resolves job
+ids). Removal (`job.RemoveOrphans`) mirrors `git worktree prune` semantics —
+it also prunes stale worktree metadata — but applies `mg delete`'s
+confirmation discipline, including "This cannot be undone." Detection scans
+both the sibling and nested `.manigot-worktrees` layouts and never reports a
+live worktree (its `.git` file names an existing gitdir) or a standalone
+repository (a `.git` directory).
+
 ### `mg init`, `mg profiles`, `mg setup`, `mg agents`
 
 - `mg init` bootstraps a project for the job workflow: the only command that
@@ -255,11 +268,14 @@ either way.
 - `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
   dir + branch + worktree (the branch is cut from the configured base branch;
   `--base-branch` overrides it for one invocation)
-- `mg jobs` — list open jobs with state and pick one to start a session in
+- `mg jobs` — list open jobs with state and pick one to start a session in;
+  also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with
+  no git registration) and offers to remove them
 - `mg done <id>` — archive a finished job (squash-merge into the base branch
   and remove its worktree; the merge target is the configured `baseBranch`,
   falling back to the remote default branch when unset)
-- `mg delete <id>` — permanently delete a job (worktree + branch, no merge)
+- `mg delete <id>` — permanently delete a job (worktree + branch, no merge),
+  or an orphaned worktree by its name
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
 - `mg jdi --job/-j <id> [--profile <name>]` — drive a job's `@analyst` →
   `@developer` → `@reviewer` sequence end to end, unattended, under the given
