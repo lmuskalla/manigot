@@ -37,6 +37,13 @@ type CreateOptions struct {
 	// uniqueness retry loop (uniqueJobID). Injectable so tests get a
 	// deterministic id.
 	RandomID func() (string, error)
+
+	// ExistingIDs returns the set of job ids already in use in the project,
+	// which the default uniqueness retry loop consults so a word id is never
+	// re-used — including against archived jobs. nil uses the real scan
+	// (existingJobIDs), covering open and archived jobs. Injectable so tests
+	// can simulate collisions without a git repo.
+	ExistingIDs func() (map[string]bool, error)
 }
 
 // CreateResult is the outcome of a successful CreateJob.
