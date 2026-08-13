@@ -132,7 +132,13 @@ subcommands (`add`, `commit`, `log`, `diff`, `show`, `status`, `rev-parse`,
 `worktree`, `branch -d/-D`, `reset`, `clean`, `gc`, `prune`, `reflog`, `push`,
 `fetch`, `pull`, `checkout`, `switch`, `restore`, `stash`, `remote`,
 `update-ref`, `tag` writes, `merge`, `rebase`, ... — with a clear message, so
-an agent can "read the git log and make commits" and nothing more. It parses
+an agent can "read the git log and make commits" and nothing more. `git add`
+of a pathspec under `.opencode/` or `.claude/` is refused too: the container
+mounts `docs/` at those repo-relative paths (see "Session launch" below), and
+staging through the mount would commit a stale duplicate of the job — the
+host side additionally excludes both paths from git in every manigot-managed
+worktree (`git.ExcludeMountTargets`, at job creation and session launch), so
+the shim rule is a belt-and-braces second layer. It parses
 leading `git -C <dir>`-style global options before deciding and execs the
 real git by absolute path (no recursion). It is deliberately a *soft* layer:
 a determined agent can exec the real git directly or write the mounted gitdir
