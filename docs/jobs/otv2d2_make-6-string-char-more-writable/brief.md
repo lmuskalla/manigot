@@ -9,7 +9,7 @@ author: Leander Muskalla
 
 ## What
 
-<!-- What needs to be done? Be specific. -->
+Instead of completely randomizing the 6 character ID, can we use english words? Of course, the same should not already exist. But it'd be way easier to type something like mg --job flower instead of mg --job sd9yxa.
 
 ## Why
 
