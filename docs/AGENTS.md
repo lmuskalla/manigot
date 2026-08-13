@@ -36,7 +36,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
   resolution, docker argv/mount/env construction, and the run itself.
   The TUI and mg-jdi call it directly. For OpenCode sessions it also converts
   project-level `docs/agents/*.md` to OpenCode's schema at launch (the same
-  `name`/`tools` strip the Dockerfile applies to the built-in agents), writing
+  `name`/`tools` strip the Dockerfile applies to the built-in agents — a
+  `permission:` block passes through untouched, which is how the read-only
+  agents express their restriction under OpenCode), writing
   the converted copies to a temp dir shadow-mounted over the docs mount's
   `agents/` subpath — the host's `docs/agents/` is never modified, and the
   temp dir is cleaned up after the run.
@@ -67,7 +69,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
 - `Dockerfile` — builds the image; installs both agent CLIs, bakes the global
   `agents/` in (twice: verbatim for Claude Code, and for OpenCode with the
   `name`/`tools` frontmatter keys stripped — the same strip the session
-  launcher applies at launch to project `docs/agents/` overrides), and
+  launcher applies at launch to project `docs/agents/` overrides; a
+  `permission:` block passes through, carrying the read-only agents'
+  restriction into OpenCode's schema), and
   pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
   `GOTOOLCHAIN=local` a stale path breaks the build).
 

@@ -24,8 +24,10 @@ import (
 // from the OpenCode copies of agents/*.md): `name:` is dropped because
 // OpenCode derives the agent name from the filename, and `tools:` is dropped
 // because OpenCode requires tools as a map and would hard-error on the list
-// form ("Expected object | undefined, got ...") — see README's caveat on
-// tools being unrestricted under OpenCode. The strip also handles multi-line
+// form ("Expected object | undefined, got ..."). A `permission:` block — the
+// OpenCode schema the read-only agents (reviewer/security/analyst/owner) use
+// to express their restriction — passes through untouched. The strip also
+// handles multi-line
 // map-form `tools:` blocks, so a custom agent written as an object today
 // converts cleanly instead of leaving orphaned indented keys.
 //

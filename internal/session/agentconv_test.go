@@ -58,6 +58,84 @@ Body.
 	}
 }
 
+// A permission: block (the OpenCode read-only restriction — see the
+// read-only agents' files) must survive the strip untouched: name:/tools:
+// are dropped, permission: and its indented rules are preserved verbatim,
+// so the OpenCode copy enforces the same read-only restriction under
+// OpenCode's own schema that tools: expresses under Claude Code.
+func TestConvertAgentFilePreservesPermissionBlock(t *testing.T) {
+	src := `---
+name: reviewer
+description: Reviews changes against the original task requirements.
+tools: Read, Write, Grep, Glob, Bash
+permission:
+  edit:
+    "*": deny
+    "docs/jobs/**/verdict.md": allow
+  bash:
+    "*": deny
+    "git add *": allow
+  task: deny
+  webfetch: deny
+  websearch: deny
+  question: deny
+---
+
+You are read-only.
+`
+	want := `---
+description: Reviews changes against the original task requirements.
+permission:
+  edit:
+    "*": deny
+    "docs/jobs/**/verdict.md": allow
+  bash:
+    "*": deny
+    "git add *": allow
+  task: deny
+  webfetch: deny
+  websearch: deny
+  question: deny
+---
+
+You are read-only.
+`
+	if got := string(convertAgentFile([]byte(src))); got != want {
+		t.Errorf("convertAgentFile dropped or mangled the permission block:\n got: %q\nwant: %q", got, want)
+	}
+}
+
+// A permission: block that directly follows a multi-line map-form tools:
+// block must also survive: the drop-block state machine (droppingToolsBlock)
+// has to end at the permission: line — its first non-indented line — rather
+// than eating the whole permission block as a tools continuation.
+func TestConvertAgentFilePermissionAfterMapFormTools(t *testing.T) {
+	src := `---
+name: custom
+description: A custom read-only agent.
+tools:
+  read: true
+permission:
+  edit: deny
+  bash: deny
+---
+
+Body.
+`
+	want := `---
+description: A custom read-only agent.
+permission:
+  edit: deny
+  bash: deny
+---
+
+Body.
+`
+	if got := string(convertAgentFile([]byte(src))); got != want {
+		t.Errorf("convertAgentFile mangled permission: following a map-form tools: block:\n got: %q\nwant: %q", got, want)
+	}
+}
+
 func TestConvertAgentFileNoFrontmatterPassthrough(t *testing.T) {
 	src := "Just a body, no frontmatter.\n"
 	if got := string(convertAgentFile([]byte(src))); got != src {

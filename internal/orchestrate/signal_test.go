@@ -183,3 +183,62 @@ func TestDetectSignalOpenCodeJSONLFallsBackOnMalformedLine(t *testing.T) {
 		t.Errorf("ResultText = %q, want raw returned unchanged (not valid JSONL)", got)
 	}
 }
+
+// --- real `opencode run --format json` output (captured live, 63quv2) ------
+
+// realOpenCodeJSONL is verbatim stdout from a real `opencode run "List the
+// files in the current directory with the bash ls command..." --format json`
+// invocation — opencode-ai 1.18.16, the version the Dockerfile installs
+// unpinned. It pins the parser against the actual event shape, not an
+// approximation: step_start events carry part.type "step-start" (no text),
+// tool_use events carry part.type "tool" with the tool's own output inside
+// part.state.output rather than part.text, step_finish events carry
+// part.type "step-finish" with tokens/cost, and the agent's response prose
+// appears only in a "text"-typed event's part.text (here "DONE").
+const realOpenCodeJSONL = `{"type":"step_start","timestamp":1786618464127,"sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","part":{"id":"prt_ffac2477c0014ppVfdepkHU94l","messageID":"msg_ffac240b4001K6GGOCvL5ukQzJ","sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","snapshot":"e5125c9478968a4a4526711ea47879c76b5c0a08","type":"step-start"}}
+{"type":"tool_use","timestamp":1786618465184,"sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","part":{"type":"tool","tool":"bash","callID":"call_00_ET_TZxYVSgG65xbQXy2xoET3952","state":{"status":"completed","input":{"command":"ls"},"output":"AGENTS.md\nCONSOLIDATION-BRIEF.md\nDockerfile\nMakefile\nREADME.md\nagents\nassets\ncmd\ndocs\ngo.mod\ngo.sum\ninternal\nproject-template\nscripts\n","metadata":{"output":"AGENTS.md\nCONSOLIDATION-BRIEF.md\nDockerfile\nMakefile\nREADME.md\nagents\nassets\ncmd\ndocs\ngo.mod\ngo.sum\ninternal\nproject-template\nscripts\n","exit":0,"truncated":false},"title":"ls","time":{"start":1786618465099,"end":1786618465176}},"id":"prt_ffac24ad60013uXEiPO8j0pfhM","sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","messageID":"msg_ffac240b4001K6GGOCvL5ukQzJ"}}
+{"type":"step_finish","timestamp":1786618465205,"sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","part":{"id":"prt_ffac24baf001mY1uWfvIJGFLWQ","reason":"tool-calls","snapshot":"e5125c9478968a4a4526711ea47879c76b5c0a08","messageID":"msg_ffac240b4001K6GGOCvL5ukQzJ","sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","type":"step-finish","tokens":{"total":13325,"input":98,"output":43,"reasoning":0,"cache":{"write":0,"read":13184}},"cost":0.0000313376}}
+{"type":"step_start","timestamp":1786618466385,"sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","part":{"id":"prt_ffac2504e001Wm9GQ3LLN4MgnM","messageID":"msg_ffac24bc600122PO0yr6sPGZVh","sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","snapshot":"e5125c9478968a4a4526711ea47879c76b5c0a08","type":"step-start"}}
+{"type":"text","timestamp":1786618467248,"sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","part":{"id":"prt_ffac25351001mv18y7YW5IPaOC","messageID":"msg_ffac24bc600122PO0yr6sPGZVh","sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","type":"text","text":"DONE","time":{"start":1786618467153,"end":1786618467240}}}
+{"type":"step_finish","timestamp":1786618467269,"sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","part":{"id":"prt_ffac253c1001fEYHCFYfTxbx2z","reason":"stop","snapshot":"e5125c9478968a4a4526711ea47879c76b5c0a08","messageID":"msg_ffac24bc600122PO0yr6sPGZVh","sessionID":"ses_0053dc0a6ffeLfOVWup0QCNjl2","type":"step-finish","tokens":{"total":13384,"input":69,"output":3,"reasoning":0,"cache":{"write":0,"read":13312}},"cost":0.0000238868}}
+`
+
+// The real output shape must extract to just the agent's response prose and
+// must not false-positive on the tool_use event (whose bash output carries
+// plenty of non-text payload, e.g. the `ls` listing).
+func TestResultTextRealOpenCodeOutput(t *testing.T) {
+	got := ResultText([]byte(realOpenCodeJSONL))
+	if got != "DONE" {
+		t.Errorf("ResultText(real opencode output) = %q, want %q", got, "DONE")
+	}
+	if _, ok := DetectSignal([]byte(realOpenCodeJSONL)); ok {
+		t.Error("DetectSignal: expected no match on a clean real opencode run, got one")
+	}
+}
+
+// The marker printed by the agent inside the final "text" event (the only
+// place its response prose lives) must be detected, exactly as it is in the
+// Claude-JSON "result" field.
+func TestDetectSignalRealOpenCodeTextEvent(t *testing.T) {
+	raw := strings.Replace(realOpenCodeJSONL, `"text":"DONE"`, `"text":"Done reviewing.\nNEEDS-HUMAN-INPUT: TASK-3 contradicts TASK-5, need a call."`, 1)
+	got, ok := DetectSignal([]byte(raw))
+	if !ok {
+		t.Fatal("DetectSignal: expected a match on the marker in the real-shape text event, got none")
+	}
+	want := "TASK-3 contradicts TASK-5, need a call."
+	if got.Reason != want {
+		t.Errorf("DetectSignal.Reason = %q, want %q", got.Reason, want)
+	}
+}
+
+// A tool_use event's own output (part.state.output — the bash tool's stdout)
+// must not be scanned for the marker, even when it contains the literal
+// string — only "text" events carry the agent talking, mirroring the
+// Claude-JSON path's "result"-field-only scan.
+func TestDetectSignalRealOpenCodeToolOutputIgnored(t *testing.T) {
+	raw := strings.Replace(realOpenCodeJSONL, `"command":"ls"`, `"command":"grep -r NEEDS-HUMAN-INPUT: ."`, 1)
+	raw = strings.Replace(raw, `"output":"AGENTS.md`, `"output":"NEEDS-HUMAN-INPUT: this is inside a grep result, not the agent talking\nAGENTS.md`, 1)
+	if _, ok := DetectSignal([]byte(raw)); ok {
+		t.Error("DetectSignal: matched inside a tool_use event's state.output, want no match")
+	}
+}

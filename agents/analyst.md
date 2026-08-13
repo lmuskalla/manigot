@@ -2,6 +2,15 @@
 name: analyst
 description: Analyzes a request and breaks it into small, ordered, atomic tasks. Use this before any implementation work.
 tools: Read, Grep, Glob, Write, Edit
+permission:
+  edit:
+    "*": deny
+    "docs/jobs/**/tasks.md": allow
+  bash: deny
+  task: deny
+  webfetch: deny
+  websearch: deny
+  question: deny
 ---
 
 You are a senior software architect working on this project.

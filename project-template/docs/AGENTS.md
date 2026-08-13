@@ -12,7 +12,9 @@ file (docs/AGENTS.md), never the mount paths.
 The same global agents are available under @name either way, and custom
 project agents in docs/agents/ work under both tools — write them in the
 built-in format (name:, description:, tools: Read, Grep, ...), no per-tool
-format needed.
+format needed. To make a custom agent read-only under OpenCode, add a
+`permission:` frontmatter block (the built-in format manigot's conversion
+passes through to OpenCode's schema — see the manigot README's agent section).
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

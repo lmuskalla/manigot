@@ -335,6 +335,48 @@ func TestRunStopsOnNeedsHumanMarker(t *testing.T) {
 	}
 }
 
+// TestRunStopsOnNeedsHumanMarkerInOpenCodeJSONL proves the marker detection
+// holds at the loop level against the real `opencode run --format json`
+// JSONL shape — a stream of typed events whose response prose lives in a
+// "text"-event's part.text (see orchestrate.realOpenCodeJSONL) — not just
+// against the plain-text / Claude-JSON shapes the other marker tests use.
+// It also pins the run.log contract for an opencode-driven run: the log must
+// show the extracted prose (ResultText), never the raw JSONL blob.
+func TestRunStopsOnNeedsHumanMarkerInOpenCodeJSONL(t *testing.T) {
+	root, j := initTestRepo(t)
+
+	// A minimal but real `opencode run --format json` output (the 3-line
+	// step_start/text/step_finish shape captured live in the 63quv2
+	// verification), with the marker inside the text event's part.text.
+	const realShape = `{"type":"step_start","part":{"type":"step-start"}}
+{"type":"text","part":{"type":"text","text":"Looked at tasks.md.\nNEEDS-HUMAN-INPUT: which auth provider should this use?"}}
+{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}
+`
+
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		return []byte(realShape)
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopNeedsHuman {
+		t.Fatalf("Run.Kind = %v, want StopNeedsHuman", got.Kind)
+	}
+	if !strings.Contains(got.Reason, "which auth provider should this use?") {
+		t.Errorf("Reason = %q, want it to contain the marker's reason text", got.Reason)
+	}
+	if len(r.calls) != 1 {
+		t.Errorf("calls = %v, want exactly one invocation (stopped immediately)", r.calls)
+	}
+	out := log.String()
+	if strings.Contains(out, `"type":"step_start"`) || strings.Contains(out, `{"type":"text"`) {
+		t.Errorf("run.log contains raw JSONL, want the extracted prose (ResultText):\n%s", out)
+	}
+	if !strings.Contains(out, "which auth provider should this use?") {
+		t.Errorf("run.log missing the marker reason prose, got:\n%s", out)
+	}
+}
+
 func TestRunStopsOnStall(t *testing.T) {
 	root, j := initTestRepo(t)
 

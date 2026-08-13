@@ -8,7 +8,9 @@ project. Your docs/ directory is
 mounted at /workspace/.claude for Claude Code and /workspace/.opencode for
 OpenCode, and the same global agents are available under @name either way —
 custom project agents in docs/agents/ work under both tools too, written in
-the built-in format (name:, description:, tools: Read, Grep, ...).
+the built-in format (name:, description:, tools: Read, Grep, ...). To make a
+custom agent read-only under OpenCode, add a `permission:` frontmatter block
+(see the manigot README's agent section).
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

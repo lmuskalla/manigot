@@ -357,18 +357,19 @@ the mounted copies before an OpenCode session sees them (OpenCode hard-errors
 on the list form, so this is what keeps one file working under both CLIs).
 Your `docs/agents/` source files are never modified.
 
-Both CLIs start with all permissions auto-approved — no per-tool confirmation
-prompts (e.g. "can I run this python script?") appear in either tool. The
+The read-only agents — `@reviewer`, `@security`, `@analyst` and `@owner` —
+express their restriction in both tools' schemas: the Claude-Code `tools:`
+list under Claude Code, and an OpenCode `permission:` frontmatter block that
+the strip leaves intact, so the same `agents/*.md` source file enforces
+read-only under OpenCode too. Under OpenCode the reviewer/security/analyst
+can edit only their own report file (`verdict.md`/`tasks.md`) and run only
+read-only git commands; `task`, `webfetch`, `websearch` and `question` are
+denied. Everything is auto-approved except these explicit denies — the
 container is isolated and ephemeral, so this is safe: Claude Code runs with
 `--dangerously-skip-permissions`, OpenCode with `--auto` (which auto-approves
 anything not explicitly denied; the container's opencode config defines no
 denies). `mg host` runs without the container and therefore without these
 flags — see [Host mode](#host-mode-mg-host).
-
-One caveat: because `tools:` is dropped, the read-only agents are **not**
-restricted under OpenCode — `@reviewer`, `@security`, `@analyst` and
-`@owner` can write files there. Under Claude Code the restriction is
-enforced. Expressing it as OpenCode `permission:` frontmatter is a follow-up.
 
 ---
 
@@ -424,8 +425,9 @@ start straight into.
 | `@architect` | Plans how to best build a system — stack, components, deployment | read-only |
 | `@devops` | Expert for pipelines and getting things running — CI/CD, builds | read + write |
 
-The Tools column is enforced under Claude Code only — see the caveat under
-[Choosing a profile](#choosing-a-profile).
+The Tools column is enforced under Claude Code; the read-only agents are
+enforced under OpenCode too, via the `permission:` frontmatter they carry —
+see [Choosing a profile](#choosing-a-profile).
 
 To override an agent for a specific project, create a file with the same name
 in `your-project/docs/agents/`. Project agents take precedence over global ones.

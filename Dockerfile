@@ -66,7 +66,9 @@ COPY --chown=claude:claude agents/ /home/claude/.claude/agents/
 # Same agents for OpenCode, which reads global agents from ~/.config/opencode/agents/.
 # The markdown body is identical; only the frontmatter differs — OpenCode takes the
 # agent name from the filename and expects `tools` to be a map, not a list, and passes
-# unknown keys through to the provider. So drop `name:` and `tools:` from this copy.
+# unknown keys through to the provider. So drop `name:` and `tools:` from this copy —
+# a `permission:` block passes through untouched, which is how the read-only agents
+# (reviewer/security/analyst/owner) express their restriction under OpenCode.
 RUN mkdir -p /home/claude/.config/opencode/agents \
     && for f in /home/claude/.claude/agents/*.md; do \
         awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools):/{next} {print}' "$f" \
