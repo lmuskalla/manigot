@@ -2,16 +2,39 @@
 name: security
 description: Reviews code for security vulnerabilities, misconfigurations, and exposure risks. Read-only. Use after implementation or when auditing existing code.
 tools: Read, Grep, Glob, Bash, Write, Edit
+commit: false
 permission:
   edit: deny
   bash:
     "*": deny
-    "git branch *": allow
+    "git branch --show-current": allow
+    "git branch --show-current *": allow
     "git diff *": allow
     "git log *": allow
     "git status *": allow
     "git show *": allow
     "git rev-parse *": allow
+    "git worktree*": deny
+    "git branch -d*": deny
+    "git branch -D*": deny
+    "git branch --delete*": deny
+    "git branch --move*": deny
+    "git branch --copy*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git gc*": deny
+    "git prune*": deny
+    "git reflog*": deny
+    "git push*": deny
+    "git fetch*": deny
+    "git pull*": deny
+    "git checkout*": deny
+    "git switch*": deny
+    "git restore*": deny
+    "git stash*": deny
+    "git remote*": deny
+    "git tag -d*": deny
+    "git update-ref*": deny
   task: deny
   webfetch: deny
   websearch: deny

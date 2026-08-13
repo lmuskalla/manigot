@@ -469,6 +469,97 @@ func WorktreeForBranch(root, branch string) (path string, ok bool, err error) {
 	return "", false, nil
 }
 
+// WorktreeGitDirs returns the absolute gitdir paths of every linked worktree
+// in the repository at root, excluding the worktree at currentPath (the
+// caller's own worktree — its gitdir must stay writable for commits) and the
+// main worktree (whose gitdir is the common dir itself, already mounted by
+// the session launcher). Derived from `git worktree list --porcelain` — the
+// same listing WorktreeForBranch parses — plus a per-worktree
+// `git rev-parse --git-dir` to resolve each linked worktree's gitdir (the
+// porcelain format carries the working-tree path, not the gitdir).
+//
+// A worktree whose gitdir cannot be resolved (e.g. a prunable entry whose
+// working tree was deleted, or a missing path) is skipped, not an error —
+// the session launcher must skip missing sources anyway (docker would
+// otherwise create an empty, root-owned directory at the mount target). A
+// non-repo / missing git binary returns ErrNotARepo.
+func WorktreeGitDirs(root, currentPath string) ([]string, error) {
+	out, stderr, err := run(root, "worktree", "list", "--porcelain")
+	if err != nil {
+		if notARepo(stderr, err) {
+			return nil, ErrNotARepo
+		}
+		return nil, wrapErr("git worktree list", err, stderr)
+	}
+
+	currentPath = filepath.Clean(currentPath)
+	commonDir := GitCommonDir(root)
+
+	var dirs []string
+	var current string
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			// A new block: resolve the previous worktree's gitdir first.
+			if current != "" {
+				if dir := linkedWorktreeGitDir(current, currentPath, commonDir); dir != "" {
+					dirs = append(dirs, dir)
+				}
+			}
+			current = strings.TrimPrefix(line, "worktree ")
+		}
+	}
+	// The porcelain output's last block may not end with a blank line.
+	if current != "" {
+		if dir := linkedWorktreeGitDir(current, currentPath, commonDir); dir != "" {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs, nil
+}
+
+// linkedWorktreeGitDir resolves the gitdir for one worktree path from a
+// porcelain listing: "" when it is the caller's own worktree, the main
+// worktree (its gitdir is the common dir itself), or a worktree whose gitdir
+// cannot be resolved (missing/prunable — a source that must be skipped).
+func linkedWorktreeGitDir(path, currentPath, commonDir string) string {
+	if filepath.Clean(path) == currentPath {
+		return ""
+	}
+	dir := gitDir(path)
+	if dir == "" {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+	if commonDir != "" && dir == filepath.Clean(commonDir) {
+		return ""
+	}
+	return dir
+}
+
+// gitDir resolves the repository's git dir for the repo at root — the
+// worktree-specific gitdir for a linked worktree, the common git dir for the
+// main one — via `git rev-parse --path-format=absolute --git-dir`, with the
+// pre-2.31 fallback (a relative path, joined against root). "" when it cannot
+// be determined.
+func gitDir(root string) string {
+	out, _, err := run(root, "rev-parse", "--path-format=absolute", "--git-dir")
+	if err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	out, _, err = run(root, "rev-parse", "--git-dir")
+	if err != nil {
+		return ""
+	}
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		return ""
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(root, dir)
+	}
+	return filepath.Clean(dir)
+}
+
 // Push pushes branch (short name from LocalBranches) to origin, via
 // `git push -u origin <branch>`. It is the host-side mutation behind the
 // TUI detail view's "P" push-to-origin action: a quick way to make a job's

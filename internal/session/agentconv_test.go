@@ -62,12 +62,15 @@ Body.
 // read-only agents' files) must survive the strip untouched: name:/tools:
 // are dropped, permission: and its indented rules are preserved verbatim,
 // so the OpenCode copy enforces the same read-only restriction under
-// OpenCode's own schema that tools: expresses under Claude Code.
+// OpenCode's own schema that tools: expresses under Claude Code. This
+// includes the deny rules (git worktree*, git branch -D*, ...) and the
+// commit: marker added by the worktree-protection work.
 func TestConvertAgentFilePreservesPermissionBlock(t *testing.T) {
 	src := `---
 name: reviewer
 description: Reviews changes against the original task requirements.
 tools: Read, Write, Grep, Glob, Bash
+commit: true
 permission:
   edit:
     "*": deny
@@ -75,6 +78,8 @@ permission:
   bash:
     "*": deny
     "git add *": allow
+    "git worktree*": deny
+    "git branch -D*": deny
   task: deny
   webfetch: deny
   websearch: deny
@@ -85,6 +90,7 @@ You are read-only.
 `
 	want := `---
 description: Reviews changes against the original task requirements.
+commit: true
 permission:
   edit:
     "*": deny
@@ -92,6 +98,8 @@ permission:
   bash:
     "*": deny
     "git add *": allow
+    "git worktree*": deny
+    "git branch -D*": deny
   task: deny
   webfetch: deny
   websearch: deny
@@ -162,6 +170,31 @@ The tools: key in the body is prose.
 `
 	if got := string(convertAgentFile([]byte(src))); got != want {
 		t.Errorf("convertAgentFile touched the body:\n got: %q\nwant: %q", got, want)
+	}
+}
+
+// The new commit: frontmatter marker (which agents commit — see agentgit.go)
+// must survive the OpenCode strip untouched, exactly like permission: — it is
+// neither name: nor tools:, so it rides through verbatim.
+func TestConvertAgentFilePreservesCommitMarker(t *testing.T) {
+	src := `---
+name: developer
+description: Implements tasks.
+tools: Read, Write, Edit, Bash, Grep, Glob
+commit: true
+---
+
+Body.
+`
+	want := `---
+description: Implements tasks.
+commit: true
+---
+
+Body.
+`
+	if got := string(convertAgentFile([]byte(src))); got != want {
+		t.Errorf("convertAgentFile dropped or mangled the commit: marker:\n got: %q\nwant: %q", got, want)
 	}
 }
 

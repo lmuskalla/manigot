@@ -2,6 +2,33 @@
 name: developer
 description: Implements tasks from a job's tasks.md. One task at a time, one commit per task.
 tools: Read, Write, Edit, Bash, Grep, Glob
+commit: true
+permission:
+  edit:
+    "*": allow
+  bash:
+    "*": allow
+    "git worktree*": deny
+    "git branch -d*": deny
+    "git branch -D*": deny
+    "git branch --delete*": deny
+    "git branch --move*": deny
+    "git branch --copy*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git gc*": deny
+    "git prune*": deny
+    "git reflog*": deny
+    "git push*": deny
+    "git fetch*": deny
+    "git pull*": deny
+    "git checkout*": deny
+    "git switch*": deny
+    "git restore*": deny
+    "git stash*": deny
+    "git remote*": deny
+    "git tag -d*": deny
+    "git update-ref*": deny
 ---
 
 You are a senior developer working on this project.
@@ -66,3 +93,8 @@ git commit -m "[ID] implementation: add summary"
 - Do not merge
 - Do not touch any other branch
 - Do not move to the next task without committing the current one
+- git is restricted in agent sessions: you can read history and make commits
+  (`git add`, `git commit`, `git log`, `git diff`, `git show`, `git status`,
+  ...) — everything else (worktree management, branch -d/-D, reset, clean,
+  push, fetch, pull, checkout, stash, merge, rebase, ...) is refused by the
+  session's git shim.

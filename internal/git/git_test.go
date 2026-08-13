@@ -446,6 +446,71 @@ func TestWorktreeForBranchNotARepo(t *testing.T) {
 	}
 }
 
+func TestWorktreeGitDirsExcludesCurrentAndMain(t *testing.T) {
+	dir, _ := initRepo(t)
+	wtDir := t.TempDir()
+	wtA := filepath.Join(wtDir, "job-a")
+	wtB := filepath.Join(wtDir, "job-b")
+	runGit(t, dir, "worktree", "add", wtA, "-b", "feature/aaaa01_a")
+	runGit(t, dir, "worktree", "add", wtB, "-b", "feature/bbbb02_b")
+
+	common := GitCommonDir(dir)
+	wantA := filepath.Join(common, "worktrees", "job-a")
+	wantB := filepath.Join(common, "worktrees", "job-b")
+
+	// From job a's worktree: only job b's gitdir remains — the caller's own
+	// worktree gitdir and the main worktree's common dir are both excluded.
+	dirs, err := WorktreeGitDirs(wtA, wtA)
+	if err != nil {
+		t.Fatalf("WorktreeGitDirs: %v", err)
+	}
+	if len(dirs) != 1 || filepath.Clean(dirs[0]) != filepath.Clean(wantB) {
+		t.Errorf("WorktreeGitDirs(wtA, wtA) = %v, want [%s]", dirs, wantB)
+	}
+
+	// From the main worktree: both linked gitdirs — the common dir itself is
+	// excluded (it is the main worktree's gitdir).
+	dirs, err = WorktreeGitDirs(dir, dir)
+	if err != nil {
+		t.Fatalf("WorktreeGitDirs: %v", err)
+	}
+	got := map[string]bool{}
+	for _, d := range dirs {
+		got[filepath.Clean(d)] = true
+	}
+	if len(dirs) != 2 || !got[filepath.Clean(wantA)] || !got[filepath.Clean(wantB)] {
+		t.Errorf("WorktreeGitDirs(dir, dir) = %v, want [%s %s]", dirs, wantA, wantB)
+	}
+}
+
+func TestWorktreeGitDirsSkipsPrunableWorktree(t *testing.T) {
+	dir, _ := initRepo(t)
+	wtDir := t.TempDir()
+	wtA := filepath.Join(wtDir, "job-a")
+	wtB := filepath.Join(wtDir, "job-b")
+	runGit(t, dir, "worktree", "add", wtA, "-b", "feature/aaaa01_a")
+	runGit(t, dir, "worktree", "add", wtB, "-b", "feature/bbbb02_b")
+	// Delete job b's working tree — its gitdir becomes unresolvable and the
+	// entry prunable; it must be skipped, not reported or errored.
+	if err := os.RemoveAll(wtB); err != nil {
+		t.Fatal(err)
+	}
+	dirs, err := WorktreeGitDirs(wtA, wtA)
+	if err != nil {
+		t.Fatalf("WorktreeGitDirs: %v", err)
+	}
+	if len(dirs) != 0 {
+		t.Errorf("WorktreeGitDirs with a prunable worktree = %v, want []", dirs)
+	}
+}
+
+func TestWorktreeGitDirsNotARepo(t *testing.T) {
+	_, err := WorktreeGitDirs(t.TempDir(), "")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("WorktreeGitDirs on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
 func TestCheckoutFailureSurfacesGitError(t *testing.T) {
 	dir, _ := initRepo(t)
 	// Uncommitted changes that conflict with the target branch's file.

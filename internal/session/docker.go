@@ -206,9 +206,47 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		ttyFlags = []string{"-it"}
 	}
 
+	// ── Git common-dir mount ────────────────────────────────────────────────
+	// Committing agents need the gitdir writable (they commit their work);
+	// non-committing agents get it read-only so they physically cannot touch
+	// git metadata — the hard filesystem boundary behind the soft git shim —
+	// with GIT_OPTIONAL_LOCKS=0 so read commands that would refresh the index
+	// (git status, git diff) don't fail on the ro mount.
 	var gitDirMount []string
+	var gitDirEnv []string
 	if root.GitCommonDir != "" {
-		gitDirMount = []string{"-v", root.GitCommonDir + ":" + root.GitCommonDir + ":z"}
+		mode := "z"
+		if !agentCommits(opts, root) {
+			mode = "ro"
+			gitDirEnv = []string{"-e", "GIT_OPTIONAL_LOCKS=0"}
+		}
+		gitDirMount = []string{"-v", root.GitCommonDir + ":" + root.GitCommonDir + ":" + mode}
+	}
+
+	// ── Gitdir overlay mounts (job-worktree sessions) ───────────────────────
+	// The gitdir mount exposes the whole repository's git metadata; read-only
+	// overlay mounts shadow the sensitive subpaths so an agent cannot corrupt
+	// them. Each overlay skips a missing source — docker would otherwise
+	// create an empty, root-owned directory at the target path.
+	var gitOverlayMounts []string
+	if root.GitCommonDir != "" {
+		// hooks/: an agent must not plant a hook that would later execute on
+		// host-side git operations (mg done, mg delete) with host privileges.
+		if hooksDir := filepath.Join(root.GitCommonDir, "hooks"); fs.IsDir(hooksDir) {
+			gitOverlayMounts = append(gitOverlayMounts, "-v", hooksDir+":"+hooksDir+":ro")
+		}
+		// worktrees/: every OTHER job's worktree gitdir, so a misbehaving
+		// agent cannot delete or corrupt another job's worktree registration.
+		// The current job's own worktree gitdir is excluded by the helper —
+		// it must stay writable for commits.
+		if wtDirs, err := git.WorktreeGitDirs(root.ProjectRoot, root.ProjectRoot); err == nil {
+			for _, wtDir := range wtDirs {
+				if !fs.IsDir(wtDir) {
+					continue
+				}
+				gitOverlayMounts = append(gitOverlayMounts, "-v", wtDir+":"+wtDir+":ro")
+			}
+		}
 	}
 
 	argv := []string{"run"}
@@ -218,10 +256,12 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
 	argv = append(argv, "-v", root.ProjectRoot+":/workspace:z")
 	argv = append(argv, gitDirMount...)
+	argv = append(argv, gitOverlayMounts...)
 	argv = append(argv, docsMount...)
 	argv = append(argv, agentMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
+	argv = append(argv, gitDirEnv...)
 	argv = append(argv, info.KeyEnv...)
 	argv = append(argv, "-e", "GIT_AUTHOR_NAME_CFG="+gitName)
 	argv = append(argv, "-e", "GIT_AUTHOR_EMAIL_CFG="+gitEmail)

@@ -107,6 +107,124 @@ git config --global user.email "$GIT_EMAIL"
 
 git config --global --add safe.directory /workspace
 
+# ── Git shim ──────────────────────────────────────────────────────────────────
+# Agents may read git history and make commits, nothing more. A PATH-first git
+# shim allowlists the read + commit subcommands and refuses everything else
+# (worktree management, branch -d/-D, reset, clean, gc, prune, reflog, push,
+# fetch, pull, checkout, switch, restore, stash, remote, tag writes,
+# update-ref, merge, rebase, ...) with a clear message. It is a soft layer — a
+# determined agent can exec the real git at its absolute path or write the
+# mounted gitdir directly; the hard filesystem boundary for non-committing
+# agents is the read-only git-common-dir mount the session launcher sets up.
+# Installed after the git config --global calls above, so the shim never sees
+# (and never blocks) the entrypoint's own configuration writes.
+MANIGOT_BIN="$HOME/.manigot/bin"
+mkdir -p "$MANIGOT_BIN"
+REAL_GIT="$(command -v git)"
+
+cat > "$MANIGOT_BIN/git" <<'SHIM'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# manigot git shim — agents may read git history and make commits, nothing
+# more. See docs/AGENTS.md ("Session git shim").
+REAL_GIT="@REAL_GIT@"
+
+# Subcommands allowed: the read surface (history, index, refs, objects) plus
+# add/commit. Everything else is refused below. The destructive forms of the
+# allowed commands (branch -d/-D/-m/-M/-c/-C, config writes, symbolic-ref
+# writes) are refused per-command.
+ALLOWED=" add commit diff log show status rev-parse rev-list merge-base branch config grep ls-files ls-tree cat-file for-each-ref show-ref describe blame shortlog whatchanged name-rev check-ignore check-attr check-mailmap count-objects diff-index diff-tree diff-files symbolic-ref "
+
+deny() {
+    echo "manigot: git '$1' is not allowed in agent sessions." >&2
+    echo "manigot: agents may only read git history and make commits (git add, git commit, git log, git diff, git show, git status, ...)." >&2
+    exit 1
+}
+
+# Locate the subcommand, skipping leading git global options and their values
+# (git -C <dir>, git -c key=value, --git-dir, --work-tree, ...). Everything
+# after the subcommand is collected in rest for the per-command checks below.
+subcmd=""
+rest=()
+skip_next=0
+for arg in "$@"; do
+    if [[ -n "$subcmd" ]]; then
+        rest+=("$arg")
+        continue
+    fi
+    if [[ "$skip_next" -eq 1 ]]; then
+        skip_next=0
+        continue
+    fi
+    case "$arg" in
+        -C|-c|--git-dir|--work-tree|--namespace|--config-env)
+            skip_next=1
+            ;;
+        --git-dir=*|--work-tree=*|--namespace=*|--config-env=*|-c?*)
+            ;;
+        -*)
+            ;;
+        *)
+            subcmd="$arg"
+            ;;
+    esac
+done
+
+if [[ -z "$subcmd" ]] || [[ "$ALLOWED" != *" $subcmd "* ]]; then
+    deny "${subcmd:-<no subcommand>}"
+fi
+
+case "$subcmd" in
+    branch)
+        for a in "${rest[@]}"; do
+            case "$a" in
+                -d*|-D*|-m*|-M*|-c*|-C*|-f*|--delete*|--move*|--copy*|--track*|--no-track*|--set-upstream*|--unset-upstream*|--edit-description*)
+                    deny "branch $a"
+                    ;;
+            esac
+        done
+        ;;
+    config)
+        positional=0
+        write=0
+        for a in "${rest[@]}"; do
+            case "$a" in
+                --add|--unset|--unset-all|--rename-section|--remove-section|--edit|--replace-all)
+                    write=1
+                    ;;
+                -*)
+                    ;;
+                *)
+                    positional=$((positional + 1))
+                    ;;
+            esac
+        done
+        if [[ "$write" -eq 1 || "$positional" -ge 2 ]]; then
+            deny "config write"
+        fi
+        ;;
+    symbolic-ref)
+        positional=0
+        for a in "${rest[@]}"; do
+            case "$a" in
+                -*) ;;
+                *) positional=$((positional + 1)) ;;
+            esac
+        done
+        if [[ "$positional" -ge 2 ]]; then
+            deny "symbolic-ref write"
+        fi
+        ;;
+esac
+
+exec "$REAL_GIT" "$@"
+SHIM
+
+sed -i "s|@REAL_GIT@|$REAL_GIT|g" "$MANIGOT_BIN/git"
+chmod +x "$MANIGOT_BIN/git"
+export PATH="$MANIGOT_BIN:$PATH"
+
 # --print mode expects a clean stdout stream (see run.sh and the
 # --output-format json branch below) — this quote is purely cosmetic, so
 # it's skipped there rather than risking a caller mis-parsing it as part

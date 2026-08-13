@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lmuskalla/manigot/internal/fs"
 )
 
 // docProject builds a docs-initialized scratch project (with an AGENTS.md) and
@@ -285,6 +287,254 @@ func TestBuildJobWorktreeGitCommonDirMount(t *testing.T) {
 		"-v", filepath.Clean(wtPath)+":/workspace:z",
 		"-v", r.GitCommonDir+":"+r.GitCommonDir+":z",
 	)
+}
+
+// TestBuildJobWorktreeReadOnlyGitdirForNonCommittingAgent: an agent whose
+// file carries commit: false gets the git-common-dir mount read-only plus
+// GIT_OPTIONAL_LOCKS=0 (read commands that would refresh the index must not
+// fail on the ro mount) — the hard filesystem boundary behind the git shim.
+func TestBuildJobWorktreeReadOnlyGitdirForNonCommittingAgent(t *testing.T) {
+	_, home := docProject(t)
+	writeAgent(t, home, "analyst.md", "---\nname: analyst\ndescription: Analyst.\ntools: Read, Grep, Glob, Write, Edit\ncommit: false\n---\n\nBody.\n")
+
+	root, jobName, _ := worktreeProject(t)
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Job: jobName, Agent: "analyst"}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", r.GitCommonDir+":"+r.GitCommonDir+":ro",
+		"-e", "GIT_OPTIONAL_LOCKS=0",
+	)
+	if strings.Contains(strings.Join(inv.Argv, "\n"), r.GitCommonDir+":"+r.GitCommonDir+":z") {
+		t.Errorf("non-committing agent must not get a writable gitdir mount:\n%s", strings.Join(inv.Argv, "\n"))
+	}
+}
+
+// TestBuildJobWorktreeWritableGitdirForCommittingAgent: a committing agent
+// (commit: true) keeps the writable mount and no GIT_OPTIONAL_LOCKS — its
+// add/commit flow needs the rw gitdir.
+func TestBuildJobWorktreeWritableGitdirForCommittingAgent(t *testing.T) {
+	_, home := docProject(t)
+	writeAgent(t, home, "developer.md", "---\nname: developer\ndescription: Developer.\ntools: Read, Write, Edit, Bash, Grep, Glob\ncommit: true\n---\n\nBody.\n")
+
+	root, jobName, _ := worktreeProject(t)
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Job: jobName, Agent: "developer"}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv, "-v", r.GitCommonDir+":"+r.GitCommonDir+":z")
+	if strings.Contains(strings.Join(inv.Argv, "\n"), "GIT_OPTIONAL_LOCKS") {
+		t.Errorf("committing agent must not get GIT_OPTIONAL_LOCKS:\n%s", strings.Join(inv.Argv, "\n"))
+	}
+}
+
+// TestBuildJobWorktreeProjectOverrideCommitMarker: a docs/agents/<name>.md
+// override replaces the global file wholesale (agentlist's override logic),
+// so its own commit: marker decides — here a non-committing override of a
+// committing global agent must yield the ro mount.
+func TestBuildJobWorktreeProjectOverrideCommitMarker(t *testing.T) {
+	_, home := docProject(t)
+	// Global reviewer commits.
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Reviewer.\ntools: Read, Write, Grep, Glob, Bash\ncommit: true\n---\n\nBody.\n")
+
+	root, jobName, wtPath := worktreeProject(t)
+	// Project override of reviewer that does NOT commit (e.g. a restricted
+	// project-specific variant) — it must win over the global marker.
+	writeAgent(t, filepath.Join(wtPath, "docs"), "reviewer.md", "---\nname: reviewer\ndescription: Project reviewer.\ntools: Read\ncommit: false\n---\n\nBody.\n")
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Job: jobName, Agent: "reviewer"}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", r.GitCommonDir+":"+r.GitCommonDir+":ro",
+		"-e", "GIT_OPTIONAL_LOCKS=0",
+	)
+}
+
+// TestBuildJobWorktreeUnknownAgentDefaultsToWritable: an agent name with no
+// file anywhere (or a file without a commit: marker) defaults to committing —
+// never break an agent that commits because its marker is missing/stale.
+func TestBuildJobWorktreeUnknownAgentDefaultsToWritable(t *testing.T) {
+	_, _ = docProject(t)
+	root, jobName, _ := worktreeProject(t)
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	// No agents/ dir in the fake home at all.
+	inv, err := BuildDockerInvocation(Options{Job: jobName, Agent: "ghost"}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv, "-v", r.GitCommonDir+":"+r.GitCommonDir+":z")
+	if strings.Contains(strings.Join(inv.Argv, "\n"), "GIT_OPTIONAL_LOCKS") {
+		t.Errorf("unknown agent must default to the writable mount:\n%s", strings.Join(inv.Argv, "\n"))
+	}
+}
+
+// writeAgent writes an agent file under dir/agents/, creating the dir.
+func writeAgent(t *testing.T, dir, name, content string) {
+	t.Helper()
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestBuildJobWorktreeHooksOverlayMount: job-worktree sessions get a read-only
+// overlay mount for <GitCommonDir>/hooks so an agent cannot plant a hook that
+// would later execute on host-side git operations with host privileges.
+func TestBuildJobWorktreeHooksOverlayMount(t *testing.T) {
+	_, _ = docProject(t)
+	root, jobName, _ := worktreeProject(t)
+	// git init creates the hooks dir with samples — confirm and mount it ro.
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if !fs.IsDir(hooksDir) {
+		t.Fatalf("expected hooks dir at %s", hooksDir)
+	}
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Job: jobName}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv, "-v", hooksDir+":"+hooksDir+":ro")
+}
+
+// TestBuildJobWorktreeHooksOverlaySkippedWhenMissing: a repository without a
+// hooks dir must not get the overlay — docker would otherwise create an empty,
+// root-owned directory at the mount target.
+func TestBuildJobWorktreeHooksOverlaySkippedWhenMissing(t *testing.T) {
+	_, _ = docProject(t)
+	root, jobName, _ := worktreeProject(t)
+	if err := os.RemoveAll(filepath.Join(root, ".git", "hooks")); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Job: jobName}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	if strings.Contains(strings.Join(inv.Argv, "\n"), "hooks:") {
+		t.Errorf("missing hooks dir must not produce a hooks mount:\n%s", strings.Join(inv.Argv, "\n"))
+	}
+}
+
+// TestBuildPlainSessionNoGitdirOverlays: a plain (non-job) session has no
+// gitdir mount, so no overlays either.
+func TestBuildPlainSessionNoGitdirOverlays(t *testing.T) {
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "hooks:") || strings.Contains(joined, "worktrees:") {
+		t.Errorf("plain session must not carry gitdir overlay mounts:\n%s", joined)
+	}
+}
+
+// TestBuildJobWorktreeOtherJobGitdirOverlays: every OTHER job's worktree
+// gitdir gets a read-only overlay mount, so a misbehaving agent cannot delete
+// or corrupt another job's worktree registration. The current job's own
+// gitdir gets no overlay (it must stay writable for commits) and the main
+// worktree's common dir is never overlaid.
+func TestBuildJobWorktreeOtherJobGitdirOverlays(t *testing.T) {
+	root, jobName, _ := worktreeProject(t)
+	// Add a second job worktree — the "other job" whose gitdir must be
+	// overlaid read-only.
+	otherBranch := "feature/zzz999_other"
+	otherWt := filepath.Join(filepath.Dir(root), ".manigot-worktrees", filepath.Base(root), "zzz999_other")
+	if err := os.MkdirAll(filepath.Dir(otherWt), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, root, "worktree", "add", "-q", "-b", otherBranch, otherWt)
+
+	commonDir := gitCmd(t, root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	otherGitdir := filepath.Join(commonDir, "worktrees", "zzz999_other")
+	currentGitdir := filepath.Join(commonDir, "worktrees", jobName)
+
+	_, _ = docProject(t)
+	t.Chdir(root)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{Job: jobName})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Job: jobName}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv, "-v", otherGitdir+":"+otherGitdir+":ro")
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, currentGitdir+":"+currentGitdir+":ro") {
+		t.Errorf("current job's own gitdir must not be overlaid ro (it must stay writable for commits):\n%s", joined)
+	}
+	if strings.Contains(joined, commonDir+":"+commonDir+":ro") {
+		t.Errorf("main worktree's common dir must not be overlaid:\n%s", joined)
+	}
 }
 
 func TestBuildJobPromptAndPrintMarker(t *testing.T) {

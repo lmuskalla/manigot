@@ -14,7 +14,17 @@ project agents in docs/agents/ work under both tools — write them in the
 built-in format (name:, description:, tools: Read, Grep, ...), no per-tool
 format needed. To make a custom agent read-only under OpenCode, add a
 `permission:` frontmatter block (the built-in format manigot's conversion
-passes through to OpenCode's schema — see the manigot README's agent section).
+passes through to OpenCode's schema — see the manigot README's agent section);
+the read-only built-in agents' blocks deny the destructive git commands
+(worktree management, branch -d/-D, reset, checkout, push, ...).
+Custom agents that must commit (like the built-in developer/reviewer/quality)
+declare `commit: true` in their frontmatter; agents that never commit declare
+`commit: false` and get a read-only git mount. The default — no agent named,
+file missing, or marker absent/unknown — is a writable git mount, so a
+committing agent is never broken by a missing marker.
+Agent sessions also restrict git to reading history and making commits (the
+session git shim): worktree management, branch deletes, resets, checkouts,
+pushes, and the other destructive subcommands are refused.
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

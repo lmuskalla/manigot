@@ -2,6 +2,7 @@
 name: analyst
 description: Analyzes a request and breaks it into small, ordered, atomic tasks. Use this before any implementation work.
 tools: Read, Grep, Glob, Write, Edit
+commit: false
 permission:
   edit:
     "*": deny

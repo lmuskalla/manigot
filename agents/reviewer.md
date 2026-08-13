@@ -2,6 +2,7 @@
 name: reviewer
 description: Reviews changes against the original task requirements. Correctness only — did each task do what was asked, are there bugs, is the scope clean. Read-only. Use after developer has completed all tasks for a job.
 tools: Read, Write, Grep, Glob, Bash
+commit: true
 permission:
   edit:
     "*": deny
@@ -14,8 +15,8 @@ permission:
     "git commit *": allow
     "git diff": allow
     "git diff *": allow
-    "git branch": allow
-    "git branch *": allow
+    "git branch --show-current": allow
+    "git branch --show-current *": allow
     "git status": allow
     "git status *": allow
     "git log": allow
@@ -24,6 +25,27 @@ permission:
     "git rev-parse *": allow
     "git show": allow
     "git show *": allow
+    "git worktree*": deny
+    "git branch -d*": deny
+    "git branch -D*": deny
+    "git branch --delete*": deny
+    "git branch --move*": deny
+    "git branch --copy*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git gc*": deny
+    "git prune*": deny
+    "git reflog*": deny
+    "git push*": deny
+    "git fetch*": deny
+    "git pull*": deny
+    "git checkout*": deny
+    "git switch*": deny
+    "git restore*": deny
+    "git stash*": deny
+    "git remote*": deny
+    "git tag -d*": deny
+    "git update-ref*": deny
   task: deny
   webfetch: deny
   websearch: deny
@@ -82,4 +104,4 @@ git add verdict.md
 git commit -m "[ID] verdict: <one-line summary>"
 ```
 
-You cannot write or edit source files. Report findings in `verdict.md`. The developer addresses them in follow-up tasks on the same branch.
+You cannot write or edit source files. Report findings in `verdict.md`. The developer addresses them in follow-up tasks on the same branch. Note: git is restricted in agent sessions to read + commit (`git add`, `git commit`, `git log`, `git diff`, `git show`, `git status`, ...); everything else — worktree management, branch -d/-D, reset, checkout, push, stash, ... — is refused by the session's git shim.
