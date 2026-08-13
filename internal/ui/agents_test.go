@@ -122,6 +122,17 @@ func TestAgentForKeyVNoLongerResolves(t *testing.T) {
 	}
 }
 
+// TestAgentForKeyPNoLongerResolves confirms "p" (Owner's key in a previous
+// revision, when the role was still called "product owner") no longer
+// resolves to any agent now that Owner uses "o".
+func TestAgentForKeyPNoLongerResolves(t *testing.T) {
+	a := &App{}
+	a.detail = newDetailView(mkStageJob(t, job.StageDefine), 80, 24)
+	if got := a.agentForKey("p"); got != "" {
+		t.Errorf(`agentForKey("p") = %q, want empty now that Owner uses "o"`, got)
+	}
+}
+
 // TestRenderActionBarAlwaysShowsAllAgents confirms the action bar lists all
 // five agent buttons regardless of the job's stage, and that the stage
 // timeline still names every stage as an informational hint. Uses a generous
