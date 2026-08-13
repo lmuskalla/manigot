@@ -1,5 +1,5 @@
 // Package main is the single manigot host-side entry point: one `mg` binary
-// implements every command (session, profiles, setup, agents, job, done,
+// implements every command (session, profiles, setup, agents, job, jobs, done,
 // delete, init, tui, jdi) in-process. The only bash left in the project is
 // scripts/entrypoint.sh, which runs inside the container image.
 package main
@@ -40,6 +40,8 @@ func main() {
 		os.Exit(runAgents(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
 	case "job":
 		os.Exit(runJob(args[1:], os.Stdout, os.Stderr))
+	case "jobs":
+		os.Exit(runJobs(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
 	case "tui":
 		os.Exit(runTUI(args[1:], os.Stdout, os.Stderr))
 	case "jdi", "made-man":
@@ -88,6 +90,7 @@ Commands:
   mg job "<title>" [--type feature|fix|chore]
                                    Create a job directory + branch + worktree
                                    (off main)
+  mg jobs                         List jobs and pick one to start a session in
   mg done <id>                    Archive a finished job (merge + remove worktree)
   mg delete <id>                  Permanently delete a job (worktree + branch, no merge)
   mg tui                          Terminal UI for browsing jobs and firing agents

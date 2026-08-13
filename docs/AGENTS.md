@@ -28,9 +28,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
 
 - `cmd/mg/main.go` — the single binary's dispatcher. Every command is a
   subcommand run in-process: bare `mg` (session), `profiles`, `setup`,
-  `agents`/`crew`, `job`, `done`, `delete`, `init`, `tui`, `jdi`/`made-man`,
-  `help`. `make mg` builds it to `bin/mg`; `make install` symlinks one `mg`
-  onto `PATH`.
+  `agents`/`crew`, `job`, `jobs`, `done`, `delete`, `init`, `tui`,
+  `jdi`/`made-man`, `help`. `make mg` builds it to `bin/mg`; `make install`
+  symlinks one `mg` onto `PATH`.
 - `internal/session` — the docker session launcher (was `scripts/run.sh`):
   profile/tool resolution, auth validation, project-root + `--job` worktree
   resolution, docker argv/mount/env construction, and the run itself.
@@ -234,6 +234,7 @@ rings the bell itself on its next poll.
 - `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
   dir + branch + worktree (the branch is cut from the configured base branch;
   `--base-branch` overrides it for one invocation)
+- `mg jobs` — list open jobs with state and pick one to start a session in
 - `mg done <id>` — archive a finished job (squash-merge into the base branch
   and remove its worktree; the merge target is the configured `baseBranch`,
   falling back to the remote default branch when unset)
