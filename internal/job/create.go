@@ -98,11 +98,19 @@ func CreateJob(root, title string, opts CreateOptions, out io.Writer) (CreateRes
 	}
 
 	// ── Generate id, slug, date, author ─────────────────────────────────────
-	id := opts.RandomID
-	if id == nil {
-		id = wordID
+	// The default path wraps the word picker in a uniqueness retry loop so a
+	// word id is never re-used (existingJobIDs covers open + archived jobs);
+	// an injected RandomID bypasses the check, matching its test-only role.
+	var jobID string
+	if opts.RandomID != nil {
+		jobID, err = opts.RandomID()
+	} else {
+		existing := opts.ExistingIDs
+		if existing == nil {
+			existing = func() (map[string]bool, error) { return existingJobIDs(root) }
+		}
+		jobID, err = uniqueJobID(wordID, existing)
 	}
-	jobID, err := id()
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("generating job id: %w", err)
 	}
@@ -264,6 +272,54 @@ var (
 	regexpNonAlnum     = regexp.MustCompile(`[^a-z0-9]`)
 	regexpCollapseDash = regexp.MustCompile(`-+`)
 )
+
+// maxIDAttempts caps the uniqueness retry loop in uniqueJobID. With a
+// ~2,300-word list the expected number of attempts stays near 1 until a
+// project has hundreds of jobs, so the cap is a sanity guard against an
+// exhausted word list, not a realistic limit.
+const maxIDAttempts = 100
+
+// uniqueJobID returns a job id that is guaranteed not to collide with any
+// existing id in the project — the never-reuse policy (including against
+// archived jobs). It re-draws from jobWords (via pick) until the candidate
+// is acceptable: not an exact existing id, not a prefix of one, and not
+// prefixed by one. The prefix rules matter because --job / mg done /
+// mg delete resolve jobs by prefix-matching on branch tails: two
+// prefix-related ids (e.g. "flower" and "flowerbed") would make
+// `mg --job flower` ambiguous, so they must never coexist in the same
+// project. A failed scan of existing ids fails the create rather than
+// proceeding blind and risking a duplicate word.
+func uniqueJobID(pick func() (string, error), existing func() (map[string]bool, error)) (string, error) {
+	ids, err := existing()
+	if err != nil {
+		return "", fmt.Errorf("scanning existing job ids: %w", err)
+	}
+	for range maxIDAttempts {
+		candidate, err := pick()
+		if err != nil {
+			return "", err
+		}
+		if idAvailable(candidate, ids) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate a unique job id after %d attempts — the word list is exhausted. Add words to internal/job/words.go.", maxIDAttempts)
+}
+
+// idAvailable reports whether candidate is free to use given the set of
+// existing ids: it must not equal one, must not be a prefix of one, and must
+// not have one as a prefix (see uniqueJobID for why the prefix rules exist).
+func idAvailable(candidate string, existing map[string]bool) bool {
+	if existing[candidate] {
+		return false
+	}
+	for id := range existing {
+		if strings.HasPrefix(candidate, id) || strings.HasPrefix(id, candidate) {
+			return false
+		}
+	}
+	return true
+}
 
 // wordID picks a uniformly random word from jobWords via crypto/rand. The
 // 6-char a-z0-9 id it replaces had ~2.2e9 combinations; a single word from
