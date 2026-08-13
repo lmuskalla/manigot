@@ -244,6 +244,15 @@ rings the bell itself on its next poll.
   `@developer` → `@reviewer` sequence end to end, unattended, under the given
   subscription profile (default `claude-pro`)
   (thematic alias: `mg made-man`, same command/behavior)
+- `mg host` — run a session directly on the host, without the docker
+  container: the profile's agent CLI (`claude`/`opencode`) runs as-is from
+  the resolved project root (the job's worktree with `--job`), with the
+  profile's credentials in its environment and the job prompt naming the
+  job's host path. The CLI must be installed on the host, and it keeps its
+  normal per-tool confirmation prompts — the container path's auto-approval
+  flags (`--dangerously-skip-permissions`/`--auto`) are deliberately not
+  passed, since host sessions have no isolation. For work that must touch
+  the host itself (thematic alias: `mg wild`, same command/behavior)
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:
