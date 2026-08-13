@@ -175,6 +175,15 @@ func CreateJob(root, title string, opts CreateOptions, out io.Writer) (CreateRes
 		if err := git.WorktreeAdd(root, wtPath, branch, baseBranch); err != nil {
 			return CreateResult{}, err
 		}
+		// Keep git from ever tracking the container's docs mount target path
+		// (.opencode for OpenCode, .claude for Claude Code) in this worktree:
+		// an agent staging job files through the mount would otherwise commit
+		// a stale duplicate of the job under the colliding path, which later
+		// trips FinishJob's clean-tree check. info/exclude is the repository's
+		// common git dir, so this covers every worktree of the repo.
+		if err := git.ExcludeMountTargets(wtPath); err != nil {
+			return CreateResult{}, err
+		}
 		fmt.Fprintf(out, "  Branch   : %s (based on %s)\n", branch, baseBranch)
 		fmt.Fprintf(out, "  Worktree : %s\n", wtPath)
 

@@ -103,6 +103,20 @@ func TestCreateJobFullRoundtrip(t *testing.T) {
 		t.Errorf("scaffold commit subject = %q", subject)
 	}
 
+	// The container docs-mount target paths (.opencode/.claude) are excluded
+	// from git via info/exclude — the repository's common git dir, shared by
+	// every worktree, so the main repo's file carries the patterns. Git must
+	// never track the mounted docs under the colliding path.
+	excludeData, err := os.ReadFile(filepath.Join(dir, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatalf("read info/exclude: %v", err)
+	}
+	for _, pattern := range []string{".opencode/", ".claude/"} {
+		if !strings.Contains(string(excludeData), pattern) {
+			t.Errorf("info/exclude missing %q: %q", pattern, excludeData)
+		}
+	}
+
 	// Summary block.
 	if !strings.Contains(out.String(), "✓ Job created: ab12cd_add-gallery-block") {
 		t.Errorf("summary missing creation line:\n%s", out.String())
