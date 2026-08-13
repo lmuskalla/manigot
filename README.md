@@ -208,10 +208,10 @@ its first argument:
 | `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
 | `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg`, or pick it interactively on a TTY; the TUI's settings screen shares the same default |
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
-| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one interactively to start a session in (thematic alias: `mg crew`, same command/behavior) |
+| `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose; thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job: directory + branch, checked out in the job's own worktree (off `main`); needs `docs/` |
-| `mg jobs` | list open jobs with state and pick one to start a session in; also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
+| `mg jobs` | list open jobs with state and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose); also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
 | `mg delete` | permanently delete a job (worktree + branch, no merge), or an orphaned worktree by its name; needs `docs/` |
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
@@ -414,8 +414,8 @@ launcher for work that must touch the host itself.
 
 Thirteen agents are available globally in every project. Call them with `@name`
 in your session, or run `mg agents` (or its thematic alias, `mg crew`) from
-the host to list them (with any `docs/agents/` overrides) and pick one to
-start straight into.
+the host to list them (with any `docs/agents/` overrides) and pick one —
+via the interactive picker on a TTY — to start straight into.
 
 | Agent | Role | Tools (Claude Code) |
 |---|---|---|

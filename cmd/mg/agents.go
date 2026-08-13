@@ -7,17 +7,23 @@ import (
 	"path/filepath"
 
 	"github.com/lmuskalla/manigot/internal/agentlist"
-	"github.com/lmuskalla/manigot/internal/cli"
 	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/home"
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/lmuskalla/manigot/internal/ui"
 )
 
 // runAgents implements `mg agents` (thematic alias `mg crew`) — the port of
 // scripts/agents.sh with identical output wording. passthrough holds the args
 // after the subcommand (e.g. --profile zai), which the session launch re-execs
 // the binary with, mirroring the script's `exec run.sh --agent "$CHOSEN" "$@"`.
-func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bool) int {
+//
+// On a TTY the selection is the interactive picker (ui.Picker) — the same
+// seam as runJobs, with rows showing name, description and the
+// "(project)"/"(project override)" source tag — instead of the old numbered
+// prompt; a cancelled picker exits 0 quietly. Off a TTY the listing and the
+// "needs an interactive terminal" refusal are byte-identical to before.
+func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bool, pick pickerRunFunc) int {
 	home := home.Root()
 	if home == "" {
 		fmt.Fprintln(stderr, "Error: cannot locate the manigot checkout.")
@@ -57,12 +63,24 @@ func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty 
 		return 1
 	}
 
-	choice, err := cli.Select(fmt.Sprintf("Select an agent [1-%d]: ", len(agents)), len(agents), false, r, stdout)
+	rows := make([]ui.PickerRow, 0, len(agents))
+	for _, a := range agents {
+		rows = append(rows, ui.PickerRow{
+			ID:        a.Name,
+			SearchKey: a.Name + " " + a.Description,
+			Label:     fmt.Sprintf("%-14s %s%s", a.Name, a.Description, agentSource(home, projectAgentsDir, a.Name)),
+		})
+	}
+
+	chosen, ok, err := pick("Select an agent", rows)
 	if err != nil {
 		fmt.Fprintf(stderr, "mg agents: %v\n", err)
 		return 1
 	}
-	chosen := agents[choice-1].Name
+	if !ok {
+		// Cancelled (esc/q) — a quiet exit 0, not the old "quit" error.
+		return 0
+	}
 	fmt.Fprintln(stdout, "")
 	fmt.Fprintf(stdout, "→ Starting a session in @%s...\n", chosen)
 	fmt.Fprintln(stdout, "")

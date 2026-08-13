@@ -7,6 +7,7 @@ import (
 
 	"github.com/lmuskalla/manigot/internal/cli"
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/lmuskalla/manigot/internal/ui"
 )
 
 // runJobs implements `mg jobs` — list every open job with its state
@@ -16,16 +17,22 @@ import (
 // chosen job's worktree and prompts with its brief.md. Done jobs
 // (docs/jobs/archive/) are excluded by job.Discover, same as the TUI.
 //
+// On a TTY the selection is an interactive picker (ui.Picker) instead of the
+// old numbered prompt — pick runs the injected seam so tests never start a
+// real Bubble Tea program. The picker is a TTY-only enhancement: the plain
+// listing and the "needs an interactive terminal" refusal are byte-identical
+// to before off a TTY, and cancelling the picker (esc/q) exits 0 quietly.
+//
 // Orphaned worktrees — leftover directories under .manigot-worktrees/ whose
 // git registration is gone (see job.DiscoverOrphans) — are surfaced after the
 // job list, and on a TTY the user is offered to remove them with mg delete's
 // confirmation discipline. They have no branch and no worktree registration,
-// so they are not jobs and never appear in the numbered selection; the removal
+// so they are not jobs and never appear in the picker; the removal
 // offer is the tool's only path to clean them up.
 //
 // passthrough holds the args after the subcommand (e.g. --agent/--profile),
 // which the session launch re-execs the binary with — exactly like runAgents.
-func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bool) int {
+func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bool, pick pickerRunFunc) int {
 	root, err := job.FindProjectRoot()
 	if err != nil {
 		cliError(stderr, err)
@@ -47,12 +54,6 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 		return 1
 	}
 
-	// One bufio.Reader for the whole interactive flow — the orphan-removal
-	// confirm and the job selection share it, so nothing the first prompt
-	// buffered past its newline is lost to the second (the exact pitfall the
-	// cli package doc warns about).
-	br := bufio.NewReader(r)
-
 	if len(jobs) == 0 {
 		fmt.Fprintln(stdout, `No jobs yet — run 'mg job "<title>"' to create one.`)
 	} else {
@@ -69,6 +70,9 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 	}
 
 	// ── Orphaned-worktree surfacing + removal offer ─────────────────────────
+	// The bufio.Reader exists only for the removal confirm: the picker (on a
+	// TTY) reads stdin itself, so no shared reader should sit on stdin before
+	// it — the only prompt in this command is the orphan one.
 	if len(orphans) > 0 {
 		fmt.Fprintln(stdout, "Orphaned worktrees (no branch or worktree registration):")
 		for i, o := range orphans {
@@ -79,7 +83,7 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 			fmt.Fprintln(stdout, "  Remove them with: mg delete <name>")
 		} else {
 			confirm := func(prompt string) (bool, error) {
-				return cli.Confirm(prompt, br, stdout)
+				return cli.Confirm(prompt, bufio.NewReader(r), stdout)
 			}
 			fmt.Fprintln(stdout, "This cannot be undone.")
 			if err := askOrphanRemoval(root, orphans, confirm, stdout); err != nil {
@@ -98,20 +102,36 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 		return 1
 	}
 
-	choice, err := cli.Select(fmt.Sprintf("Select a job [1-%d]: ", len(jobs)), len(jobs), false, br, stdout)
+	rows := make([]ui.PickerRow, 0, len(jobs))
+	for _, j := range jobs {
+		label := fmt.Sprintf("%-8s %-6s %-8s %-12s %s", j.ID, j.Status, j.Type, j.Date, j.Title)
+		if badge := jobsBadge(root, j); badge != "" {
+			label += "  " + badge
+		}
+		rows = append(rows, ui.PickerRow{
+			ID:        j.ID,
+			SearchKey: j.ID + " " + j.Title,
+			Label:     label,
+		})
+	}
+
+	id, ok, err := pick("Select a job", rows)
 	if err != nil {
 		fmt.Fprintf(stderr, "mg jobs: %v\n", err)
 		return 1
 	}
-	chosen := jobs[choice-1]
+	if !ok {
+		// Cancelled (esc/q) — a quiet exit 0, not the old "quit" error.
+		return 0
+	}
 	fmt.Fprintln(stdout, "")
-	fmt.Fprintf(stdout, "→ Starting a session in %s...\n", chosen.ID)
+	fmt.Fprintf(stdout, "→ Starting a session in %s...\n", id)
 	fmt.Fprintln(stdout, "")
 
 	// Re-exec the same binary's session path — the launch is in-process, so
 	// this just re-runs `mg --job <id> <passthrough>`, mounting the job's
 	// worktree via the session launcher.
-	launchArgs := append([]string{"--job", chosen.ID}, passthrough...)
+	launchArgs := append([]string{"--job", id}, passthrough...)
 	return reexec(launchArgs, stderr)
 }
 

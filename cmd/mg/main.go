@@ -37,11 +37,11 @@ func main() {
 	case "setup":
 		os.Exit(runSetup(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
 	case "agents", "crew":
-		os.Exit(runAgents(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
+		os.Exit(runAgents(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin), ttyPicker))
 	case "job":
 		os.Exit(runJob(args[1:], os.Stdout, os.Stderr))
 	case "jobs":
-		os.Exit(runJobs(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
+		os.Exit(runJobs(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin), ttyPicker))
 	case "tui":
 		os.Exit(runTUI(args[1:], os.Stdout, os.Stderr))
 	case "jdi", "made-man":
@@ -86,13 +86,17 @@ Commands:
                                    one interactively (no name, on a TTY)
   mg setup [name] [--check]       Configure credentials for your subscriptions,
                                    interactively, or report status with --check
-  mg agents                       List available agents and pick one to start
-                                   (thematic alias: mg crew)
+  mg agents                       List available agents and pick one to start,
+                                   via an interactive picker on a TTY
+                                   (type to filter, enter to choose;
+                                   thematic alias: mg crew)
   mg init [--profile <name>]      Bootstrap this project for the job workflow
   mg job "<title>" [--type feature|fix|chore]
                                    Create a job directory + branch + worktree
                                    (off main)
-  mg jobs                         List jobs and pick one to start a session in
+  mg jobs                         List jobs and pick one to start a session
+                                   in, via an interactive picker on a TTY
+                                   (type to filter, enter to choose)
   mg done <id>                    Archive a finished job (merge + remove worktree)
   mg delete <id>                  Permanently delete a job (worktree + branch, no merge)
   mg tui                          Terminal UI for browsing jobs and firing agents

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/lmuskalla/manigot/internal/ui"
 )
 
 // jobsBrief builds a brief.md body with frontmatter for a hermetic fixture.
@@ -43,6 +44,25 @@ func jobsJDIStatus(t *testing.T, root, jobName string, state job.JDIState, agent
 	}
 }
 
+// pickerStub returns a pickerRunFunc that fails the test if invoked — for
+// tests that must never reach the selection step (non-TTY paths, empty job
+// lists, orphan-only flows).
+func pickerStub(t *testing.T) pickerRunFunc {
+	t.Helper()
+	return func(title string, rows []ui.PickerRow) (string, bool, error) {
+		t.Fatalf("picker unexpectedly run (title %q)", title)
+		return "", false, nil
+	}
+}
+
+// pickerChoice returns a pickerRunFunc that reports the given result without
+// touching a terminal — the fake the wiring tests inject.
+func pickerChoice(id string, ok bool) pickerRunFunc {
+	return func(title string, rows []ui.PickerRow) (string, bool, error) {
+		return id, ok, nil
+	}
+}
+
 func TestJobsListsWithStateAndBadge(t *testing.T) {
 	root := jobsCheckout(t, map[string]string{
 		"aaa01_alpha": jobsBrief("Alpha Job", "aaa01", "feature", "2026-01-01"),
@@ -52,7 +72,7 @@ func TestJobsListsWithStateAndBadge(t *testing.T) {
 	jobsJDIStatus(t, root, "def02_beta", job.JDIRunning, "developer")
 
 	var out strings.Builder
-	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false)
+	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
 	// Non-TTY: after listing it must refuse to pick, like mg agents.
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (non-TTY refusal)", code)
@@ -77,7 +97,7 @@ func TestJobsListsWithStateAndBadge(t *testing.T) {
 func TestJobsNonTTYRefusal(t *testing.T) {
 	jobsCheckout(t, map[string]string{"aaa01_alpha": jobsBrief("Alpha Job", "aaa01", "feature", "2026-01-01")})
 	var out, errOut strings.Builder
-	code := runJobs(nil, strings.NewReader(""), &out, &errOut, false)
+	code := runJobs(nil, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -86,10 +106,14 @@ func TestJobsNonTTYRefusal(t *testing.T) {
 	}
 }
 
+// TestJobsSelectWritesChosenAndLaunches covers the TTY submit path with an
+// injected picker (the seam — no real Bubble Tea program): the chosen job's
+// ID is passed through to the launch line and the re-exec of
+// os.Executable().
 func TestJobsSelectWritesChosenAndLaunches(t *testing.T) {
 	jobsCheckout(t, map[string]string{"aaa01_alpha": jobsBrief("Alpha Job", "aaa01", "feature", "2026-01-01")})
 	var out strings.Builder
-	code := runJobs([]string{"--profile", "zai"}, strings.NewReader("1\n"), &out, &strings.Builder{}, true)
+	code := runJobs([]string{"--profile", "zai"}, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("aaa01", true))
 	// The launch re-execs os.Executable() — the go test binary — with
 	// --job aaa01 --profile zai, which it rejects as unknown flags and exits
 	// non-zero. What matters here is the menu output up to the launch.
@@ -101,6 +125,45 @@ func TestJobsSelectWritesChosenAndLaunches(t *testing.T) {
 	}
 }
 
+// TestJobsPickerGetsJobRows pins the picker wiring: on a TTY the picker is
+// fed a title plus one pre-rendered row per job (ID/status/type/date/title +
+// jdi badge, search key id + title), and a cancelled picker exits 0 quietly.
+func TestJobsPickerGetsJobRows(t *testing.T) {
+	root := jobsCheckout(t, map[string]string{
+		"aaa01_alpha": jobsBrief("Alpha Job", "aaa01", "feature", "2026-01-01"),
+		"def02_beta":  jobsBrief("Beta Job", "def02", "fix", "2026-02-02"),
+	})
+	jobsJDIStatus(t, root, "def02_beta", job.JDIRunning, "developer")
+
+	var gotTitle string
+	var gotRows []ui.PickerRow
+	pick := func(title string, rows []ui.PickerRow) (string, bool, error) {
+		gotTitle, gotRows = title, rows
+		return "", false, nil // cancelled
+	}
+	var out strings.Builder
+	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, true, pick)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (cancel exits quietly)", code)
+	}
+	if gotTitle != "Select a job" {
+		t.Errorf("picker title = %q, want %q", gotTitle, "Select a job")
+	}
+	if len(gotRows) != 2 {
+		t.Fatalf("picker rows = %d, want 2", len(gotRows))
+	}
+	if gotRows[0].ID != "def02" || gotRows[0].SearchKey != "def02 Beta Job" {
+		t.Errorf("row 0 = %+v, want def02 with id+title search key", gotRows[0])
+	}
+	if !strings.Contains(gotRows[0].Label, "def02") || !strings.Contains(gotRows[0].Label, "fix") ||
+		!strings.Contains(gotRows[0].Label, "2026-02-02") || !strings.Contains(gotRows[0].Label, "Beta Job") {
+		t.Errorf("row 0 label missing listing columns: %q", gotRows[0].Label)
+	}
+	if !strings.Contains(gotRows[0].Label, "[running @developer]") {
+		t.Errorf("row 0 label missing jdi badge: %q", gotRows[0].Label)
+	}
+}
+
 func TestJobsEmptyList(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
@@ -108,7 +171,7 @@ func TestJobsEmptyList(t *testing.T) {
 	}
 	t.Chdir(root)
 	var out strings.Builder
-	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false)
+	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (empty list is not an error)", code)
 	}
@@ -120,7 +183,7 @@ func TestJobsEmptyList(t *testing.T) {
 func TestJobsNoProjectRoot(t *testing.T) {
 	t.Chdir(t.TempDir()) // no docs/ anywhere up the tree
 	var out, errOut strings.Builder
-	code := runJobs(nil, strings.NewReader(""), &out, &errOut, false)
+	code := runJobs(nil, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -189,7 +252,7 @@ func TestJobsListsOrphans(t *testing.T) {
 	t.Chdir(root)
 
 	var out strings.Builder
-	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false)
+	code := runJobs(nil, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
 	// No jobs, so nothing to pick — the listing + orphan surfacing is the
 	// whole command, and an empty job list is not an error (exit 0).
 	if code != 0 {
@@ -213,7 +276,7 @@ func TestJobsOrphanRemovalOffer(t *testing.T) {
 	t.Chdir(root)
 
 	var out strings.Builder
-	code := runJobs(nil, strings.NewReader("y\n"), &out, &strings.Builder{}, true)
+	code := runJobs(nil, strings.NewReader("y\n"), &out, &strings.Builder{}, true, pickerStub(t))
 	// No jobs, so after removing the orphan the command ends cleanly (exit 0).
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
@@ -236,7 +299,7 @@ func TestJobsOrphanRemovalDeclined(t *testing.T) {
 	t.Chdir(root)
 
 	var out strings.Builder
-	code := runJobs(nil, strings.NewReader("n\n"), &out, &strings.Builder{}, true)
+	code := runJobs(nil, strings.NewReader("n\n"), &out, &strings.Builder{}, true, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (declined removal is not an error)", code)
 	}

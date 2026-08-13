@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lmuskalla/manigot/internal/ui"
 )
 
 // agentsCheckout builds a fake manigot checkout with an agents/ dir (plus an
@@ -48,7 +50,7 @@ func TestAgentsListsWithTags(t *testing.T) {
 	)
 	t.Chdir(proj)
 	var out strings.Builder
-	code := runAgents(nil, strings.NewReader(""), &out, &strings.Builder{}, false)
+	code := runAgents(nil, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
 	// Non-TTY: after listing it must refuse to pick, like agents.sh.
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (non-TTY refusal)", code)
@@ -69,7 +71,7 @@ func TestAgentsListsWithTags(t *testing.T) {
 func TestAgentsNonTTYRefusal(t *testing.T) {
 	agentsCheckout(t, map[string]string{"analyst": "x"}, "", nil)
 	var out, errOut strings.Builder
-	code := runAgents(nil, strings.NewReader(""), &out, &errOut, false)
+	code := runAgents(nil, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -88,7 +90,7 @@ func TestAgentsNoGlobalDir(t *testing.T) {
 	}
 	t.Setenv("MANIGOT_HOME", home)
 	var errOut strings.Builder
-	code := runAgents(nil, strings.NewReader(""), &strings.Builder{}, &errOut, false)
+	code := runAgents(nil, strings.NewReader(""), &strings.Builder{}, &errOut, false, pickerStub(t))
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -97,10 +99,13 @@ func TestAgentsNoGlobalDir(t *testing.T) {
 	}
 }
 
+// TestAgentsSelectWritesChosenAndLaunches covers the TTY submit path with an
+// injected picker (the seam — no real Bubble Tea program): the chosen agent
+// is passed through to the launch line and the re-exec of os.Executable().
 func TestAgentsSelectWritesChosenAndLaunches(t *testing.T) {
 	agentsCheckout(t, map[string]string{"analyst": "a", "reviewer": "r"}, "", nil)
 	var out strings.Builder
-	code := runAgents([]string{"--profile", "zai"}, strings.NewReader("2\n"), &out, &strings.Builder{}, true)
+	code := runAgents([]string{"--profile", "zai"}, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("reviewer", true))
 	// The launch re-execs os.Executable() — the go test binary — with
 	// --agent reviewer --profile zai, which it rejects as unknown flags and
 	// exits non-zero. What matters here is the menu output up to the launch.
@@ -109,5 +114,50 @@ func TestAgentsSelectWritesChosenAndLaunches(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "→ Starting a session in @reviewer...") {
 		t.Errorf("missing launch line:\n%s", out.String())
+	}
+}
+
+// TestAgentsPickerGetsAgentRows pins the picker wiring: on a TTY the picker
+// is fed a title plus one pre-rendered row per agent (name/description +
+// source tag, search key name + description), and a cancelled picker exits 0
+// quietly.
+func TestAgentsPickerGetsAgentRows(t *testing.T) {
+	proj := t.TempDir()
+	agentsCheckout(t,
+		map[string]string{"analyst": "breaks work down", "reviewer": "checks work"},
+		proj,
+		map[string]string{"analyst": "project version", "custom": "project only"},
+	)
+	t.Chdir(proj)
+
+	var gotTitle string
+	var gotRows []ui.PickerRow
+	pick := func(title string, rows []ui.PickerRow) (string, bool, error) {
+		gotTitle, gotRows = title, rows
+		return "", false, nil // cancelled
+	}
+	var out strings.Builder
+	code := runAgents(nil, strings.NewReader(""), &out, &strings.Builder{}, true, pick)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (cancel exits quietly)", code)
+	}
+	if gotTitle != "Select an agent" {
+		t.Errorf("picker title = %q, want %q", gotTitle, "Select an agent")
+	}
+	if len(gotRows) != 3 {
+		t.Fatalf("picker rows = %d, want 3", len(gotRows))
+	}
+	if gotRows[0].ID != "analyst" || gotRows[0].SearchKey != "analyst project version" {
+		t.Errorf("row 0 = %+v, want analyst with name+description search key", gotRows[0])
+	}
+	if !strings.Contains(gotRows[0].Label, "analyst") || !strings.Contains(gotRows[0].Label, "project version") ||
+		!strings.Contains(gotRows[0].Label, "(project override)") {
+		t.Errorf("row 0 label missing name/description/tag: %q", gotRows[0].Label)
+	}
+	if !strings.Contains(gotRows[1].Label, "reviewer") || strings.Contains(gotRows[1].Label, "(project") {
+		t.Errorf("row 1 (global) label should carry no source tag: %q", gotRows[1].Label)
+	}
+	if !strings.Contains(gotRows[2].Label, "custom") || !strings.Contains(gotRows[2].Label, "(project)") {
+		t.Errorf("row 2 label missing project-only tag: %q", gotRows[2].Label)
 	}
 }

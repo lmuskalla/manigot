@@ -53,7 +53,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
   create/remove, squash merge, branch delete, dirty checks, branch lookup,
   and worktree-gitdir enumeration (`WorktreeGitDirs`, used by the session
   launcher's gitdir overlay mounts).
-- `internal/ui` — the Bubble Tea TUI, reached as `mg tui`.
+- `internal/ui` — the Bubble Tea UI: the TUI, reached as `mg tui`, plus the
+  reusable single-select picker (`Picker`, run with the alt screen) behind
+  `mg jobs`'/`mg agents`' interactive selection on a TTY.
 - `internal/orchestrate` — the `mg jdi` state machine (`@analyst` →
   `@developer` → `@reviewer`).
 - `internal/config` — the profiles table, `config/tui-settings.json`
@@ -246,7 +248,9 @@ repository (a `.git` directory).
 - `mg agents` (alias `mg crew`) lists every agent available to the current
   project — the global `agents/*.md` files, each swapped for its
   `docs/agents/` override when one exists, plus any project-only additions —
-  and prompts for a numbered selection before launching the session.
+  and on a TTY opens an interactive picker (↑/↓/k/j navigate, type to filter,
+  enter to choose, esc/q cancel) before launching the session; off a TTY it
+  prints the plain list and refuses to pick.
 
 ### TUI and `mg jdi`
 
@@ -325,15 +329,17 @@ either way.
 - `mg setup [name] [--check]` — configure credentials for the profiles,
   interactively, or report status with `--check`
 - `mg agents` — list available agents (global + any `docs/agents/`
-  overrides/additions) and pick one interactively to start a session in
-  (thematic alias: `mg crew`, same command/behavior)
+  overrides/additions) and pick one to start a session in, via an interactive
+  picker on a TTY (type to filter, enter to choose; thematic alias:
+  `mg crew`, same command/behavior)
 - `mg init [--profile <name>]` — bootstrap a project for the job workflow
   (creates `docs/` if absent, optionally hands off to `@prompter`); the only
   job-workflow command that works without an existing `docs/`
 - `mg job "<title>" [--type fix|chore] [--base-branch <name>]` — create a job
   dir + branch + worktree (the branch is cut from the configured base branch;
   `--base-branch` overrides it for one invocation)
-- `mg jobs` — list open jobs with state and pick one to start a session in;
+- `mg jobs` — list open jobs with state and pick one to start a session in,
+  via an interactive picker on a TTY (type to filter, enter to choose);
   also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with
   no git registration) and offers to remove them
 - `mg done <id>` — archive a finished job (squash-merge into the base branch
