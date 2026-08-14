@@ -296,7 +296,7 @@ func (v *listView) renderJobRow(j job.Job, cols columnWidths, selected bool, spi
 // alongside it rather than replacing it — a status message must never leave
 // the user not knowing what keys exist.
 func listFooter(status string) string {
-	hint := "↑/↓ navigate · enter view · j mg-jdi · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
+	hint := "↑/↓ navigate · enter view · j just do it · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
 	if status != "" {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(status)
 	}
