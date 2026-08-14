@@ -122,6 +122,14 @@ func TestRunDiffOutput(t *testing.T) {
 		t.Errorf("default output missing stat entry for %s:\n%s", briefStat, out1.String())
 	}
 
+	// The brief's "might also apply to the cli one" — pinned, not fixed: the
+	// CLI prints the raw git strings with no markdown step, so it already
+	// shows one change per line. Each commit subject must be on its own
+	// output line, and each diff --stat entry on its own line.
+	lines := strings.Split(out1.String(), "\n")
+	assertEachEntryOnOwnLine(t, lines, []string{"Scaffold job", "[job] TASK-1: add the gallery"})
+	assertEachEntryOnOwnLine(t, lines, []string{briefStat, "implementation.md"})
+
 	// --name-only: filenames, no stat line counts. Flag after the id here.
 	var out2, err2 strings.Builder
 	if code := runDiff([]string{jobName, "--name-only"}, &out2, &err2); code != 0 {
@@ -199,6 +207,35 @@ func TestRunDiffNotARepo(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "not a git repository") {
 		t.Errorf("missing not-a-repo error:\n%s", errOut.String())
+	}
+}
+
+// assertEachEntryOnOwnLine fails when any entry is missing from the given
+// lines, or when any two entries share one line — the CLI `mg diff`'s
+// "one change per line" guarantee, pinned by TestRunDiffOutput.
+func assertEachEntryOnOwnLine(t *testing.T, lines, entries []string) {
+	t.Helper()
+	seen := make([]bool, len(entries))
+	shared := map[string][]string{} // line -> the entries sharing it
+	for _, l := range lines {
+		var on []string
+		for i, e := range entries {
+			if strings.Contains(l, e) {
+				seen[i] = true
+				on = append(on, e)
+			}
+		}
+		if len(on) > 1 {
+			shared[l] = on
+		}
+	}
+	for i, e := range entries {
+		if !seen[i] {
+			t.Errorf("entry %q missing from the output:\n%s", e, strings.Join(lines, "\n"))
+		}
+	}
+	for l, on := range shared {
+		t.Errorf("output line holds %d entries on one line (%s):\n%q\nfull output:\n%s", len(on), strings.Join(on, ", "), l, strings.Join(lines, "\n"))
 	}
 }
 

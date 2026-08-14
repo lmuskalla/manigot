@@ -120,11 +120,18 @@ func newDetailView(j job.Job, width, height int) *detailView {
 		isLog:  true,
 		viewer: markdown.NewViewer(d.bodyWidth(), d.bodyHeight()),
 	})
-	d.tabs = append(d.tabs, fileTab{
+	// The diff tab's content is git plain text (log/stat output), not
+	// markdown: render it verbatim so glamour's paragraph reflow can't merge
+	// several commits or stat entries onto one rendered line. Strictly
+	// per-tab — the four job-file tabs and the log tab keep the markdown
+	// path (the log tab's latent reflow is a known follow-up, out of scope).
+	diffTab := fileTab{
 		label:  "diff",
 		isDiff: true,
 		viewer: markdown.NewViewer(d.bodyWidth(), d.bodyHeight()),
-	})
+	}
+	diffTab.viewer.SetRaw(true)
+	d.tabs = append(d.tabs, diffTab)
 	d.loadTabs()
 	return d
 }

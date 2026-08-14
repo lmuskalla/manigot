@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -674,6 +675,92 @@ func TestDetailDiffTabShowsLogAndStatForDivergedBranch(t *testing.T) {
 	// And the rendered detail view shows it once the tab is active.
 	if out := d.render(); !strings.Contains(out, "ZZDIFFCOMMIT") {
 		t.Errorf("rendered detail view missing the diff tab's log content:\n%s", out)
+	}
+}
+
+// TestDetailDiffTabOneChangePerLine is the regression test for the "diff on
+// new lines" job: the rendered diff tab must show each commit subject on its
+// own rendered line and each diff --stat entry on its own line. Today the
+// glamour paragraph reflow joins consecutive non-blank lines into one
+// paragraph, so on a wide terminal several commits — and several stat
+// entries — land on the same rendered line. A wide viewport is exactly what
+// exposes the merge (a narrow one wraps the joined paragraph apart, masking
+// it), so this renders wide and asserts per-line structure.
+func TestDetailDiffTabOneChangePerLine(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/df06_l", "df06_l", "# Brief: L\n\nstatus: open\nid: df06\nbranch: feature/df06_l\ndate: 2026-01-01\n")
+	// Two commits touching two different files: two log subjects and two
+	// stat entries — the shape the paragraph reflow used to merge.
+	for _, f := range []string{"one.txt", "two.txt"} {
+		if err := os.WriteFile(filepath.Join(wtPath, f), []byte(f+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitRun(t, wtPath, "add", f)
+		gitRun(t, wtPath, "commit", "-q", "-m", "ZZCHANGE "+f)
+	}
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 160, 40) // wide + tall
+	d.cur = 5
+	d.ensureCurrentSized()
+
+	lines := strings.Split(d.tabs[5].viewer.View(), "\n")
+	// Each commit subject on its own rendered line.
+	assertEachEntryOnOwnLine(t, lines, []string{"ZZCHANGE one.txt", "ZZCHANGE two.txt"})
+	// Each diff --stat entry on its own rendered line. git pads the path
+	// column ("one.txt                   | 1 +"), so match the path followed
+	// by the line-count pipe with flexible whitespace; the pipe never
+	// appears in the log half, so it identifies stat lines unambiguously.
+	for i, a := range []string{"one.txt", "two.txt"} {
+		for _, b := range []string{"one.txt", "two.txt"}[i+1:] {
+			reA := regexp.MustCompile(regexp.QuoteMeta(a) + `\s+\|`)
+			reB := regexp.MustCompile(regexp.QuoteMeta(b) + `\s+\|`)
+			for _, l := range lines {
+				if reA.MatchString(l) && reB.MatchString(l) {
+					t.Errorf("stat entries %q and %q share one rendered line:\n%q\nfull view:\n%s", a, b, l, strings.Join(lines, "\n"))
+				}
+			}
+		}
+	}
+	// And each stat entry must actually be present.
+	for _, f := range []string{"one.txt", "two.txt"} {
+		re := regexp.MustCompile(regexp.QuoteMeta(f) + `\s+\|`)
+		if !re.MatchString(strings.Join(lines, "\n")) {
+			t.Errorf("stat entry for %q missing from the rendered view:\n%s", f, strings.Join(lines, "\n"))
+		}
+	}
+}
+
+// assertEachEntryOnOwnLine fails when any entry is missing from the given
+// lines, or when any two entries share one line — the "one change per line"
+// guarantee the diff tab must provide.
+func assertEachEntryOnOwnLine(t *testing.T, lines, entries []string) {
+	t.Helper()
+	seen := make([]bool, len(entries))
+	shared := map[string][]string{} // line -> the entries sharing it
+	for _, l := range lines {
+		var on []string
+		for i, e := range entries {
+			if strings.Contains(l, e) {
+				seen[i] = true
+				on = append(on, e)
+			}
+		}
+		if len(on) > 1 {
+			shared[l] = on
+		}
+	}
+	for i, e := range entries {
+		if !seen[i] {
+			t.Errorf("entry %q missing from the rendered view:\n%s", e, strings.Join(lines, "\n"))
+		}
+	}
+	for l, on := range shared {
+		t.Errorf("rendered line holds %d entries on one line (%s):\n%q\nfull view:\n%s", len(on), strings.Join(on, ", "), l, strings.Join(lines, "\n"))
 	}
 }
 

@@ -127,6 +127,37 @@ func Render(src string, width int) string {
 	return strings.TrimRight(out, "\n")
 }
 
+// RenderPlain converts plain text — not markdown — to verbatim, width-wrapped
+// output: every source line is preserved exactly, and only lines longer than
+// the width are wrapped at word boundaries. It exists for content that is
+// plain text in spirit (the diff tab's git log/stat output) and must never be
+// reflowed as markdown, where glamour joins consecutive non-blank lines into
+// one paragraph — the "diff on new lines" bug.
+//
+// It is built on lipgloss's width wrap (lipgloss v1.0.0's WordWrap: Width
+// alone already wraps at render time via ansi.Wrap), which preserves existing
+// newlines and leading spaces — so the column alignment of `git diff --stat`
+// survives — and wraps only lines exceeding the width. Unlike glamour there
+// is no markdown interpretation, no paragraph merging, and no document
+// margin.
+func RenderPlain(src string, width int) string {
+	if src == "" {
+		return ""
+	}
+	if width < minWidth {
+		width = minWidth
+	}
+	out := lipgloss.NewStyle().Width(width).Render(src)
+	// Drop trailing whitespace-only lines: a trailing "\n" in the source
+	// renders as one last padded blank line, which would otherwise show up
+	// as a phantom row in the viewer.
+	lines := strings.Split(out, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Viewer is a scrollable buffer over one rendered markdown file. It has no
 // dependency on Bubble Tea so it is straightforward to unit-test; the detail
 // view drives it with key events and calls View() each frame.
@@ -136,11 +167,36 @@ type Viewer struct {
 	height int
 	lines  []string // rendered, line-split
 	offset int      // index of the top visible line
+
+	// raw renders src verbatim via RenderPlain instead of markdown via
+	// Render: for content that is plain text (the computed diff tab's git
+	// log/stat output), so glamour's paragraph reflow can't merge several
+	// changes onto one rendered line. The four job-file tabs and the log
+	// tab keep the markdown path.
+	raw bool
 }
 
 // NewViewer returns a viewer with the given viewport size and no content.
 func NewViewer(width, height int) *Viewer {
 	return &Viewer{width: width, height: height}
+}
+
+// SetRaw toggles the viewer between markdown rendering (the default) and
+// plain-text verbatim rendering (RenderPlain), re-rendering the current
+// content at the new mode. Deliberately a setter rather than a NewViewer
+// option so existing call sites — and the markdown tabs they serve — stay
+// untouched; only callers that opt in change behavior. A viewer with no
+// content yet (src empty) just records the mode — there is nothing to
+// re-render, and the later SetContent renders at the new mode; rebuilding
+// now would fabricate a phantom empty line.
+func (v *Viewer) SetRaw(raw bool) {
+	if v.raw == raw {
+		return
+	}
+	v.raw = raw
+	if v.src != "" {
+		v.rebuild()
+	}
 }
 
 // SetContent renders src at the current width and stores the result.
@@ -168,7 +224,11 @@ func (v *Viewer) SetSize(width, height int) {
 }
 
 func (v *Viewer) rebuild() {
-	v.lines = strings.Split(Render(v.src, v.width), "\n")
+	if v.raw {
+		v.lines = strings.Split(RenderPlain(v.src, v.width), "\n")
+	} else {
+		v.lines = strings.Split(Render(v.src, v.width), "\n")
+	}
 	v.clamp()
 }
 

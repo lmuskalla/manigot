@@ -186,3 +186,180 @@ func TestViewerViewHonoursHeight(t *testing.T) {
 		t.Errorf("View returned %d lines, want at most 5", lines)
 	}
 }
+
+// --- plain-text (verbatim) rendering (TASK-2 of the "diff on new lines"
+// job) ----------------------------------------------------------------
+
+// TestRenderPlainOneChangePerLine is the core verbatim guarantee: consecutive
+// non-blank lines must NOT be merged into one paragraph (what glamour does —
+// the reported bug). Each source line stays its own rendered line.
+func TestRenderPlainOneChangePerLine(t *testing.T) {
+	src := "abc1234 Add gallery\ndef5678 Fix bug\n\n docs/jobs/x/brief.md | 2 ++\n docs/jobs/x/impl.md | 1 +"
+	// Wide width: narrow widths would wrap the merged paragraph apart and
+	// mask the bug.
+	out := RenderPlain(src, 160)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 5 {
+		t.Fatalf("RenderPlain produced %d lines, want 5 (one per source line):\n%q", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], "abc1234 Add gallery") || strings.Contains(lines[0], "def5678") {
+		t.Errorf("line 0 should hold only the first commit:\n%q", lines[0])
+	}
+	if !strings.Contains(lines[1], "def5678 Fix bug") {
+		t.Errorf("line 1 should hold only the second commit:\n%q", lines[1])
+	}
+	if !strings.Contains(lines[3], "docs/jobs/x/brief.md | 2 ++") || strings.Contains(lines[3], "impl.md") {
+		t.Errorf("line 3 should hold only the first stat entry:\n%q", lines[3])
+	}
+	if !strings.Contains(lines[4], "docs/jobs/x/impl.md | 1 +") {
+		t.Errorf("line 4 should hold only the second stat entry:\n%q", lines[4])
+	}
+}
+
+// TestRenderPlainPreservesLeadingSpaces pins the other half of what makes
+// verbatim rendering readable: `git diff --stat`'s column alignment (leading
+// spaces) must survive, unlike glamour's paragraph rendering which strips
+// leading whitespace.
+func TestRenderPlainPreservesLeadingSpaces(t *testing.T) {
+	out := RenderPlain(" docs/jobs/x/brief.md | 2 ++\n docs/jobs/x/impl.md | 1 +", 60)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("RenderPlain produced %d lines, want 2:\n%q", len(lines), lines)
+	}
+	for i, l := range lines {
+		if !strings.HasPrefix(l, " ") {
+			t.Errorf("line %d lost its leading space: %q", i, l)
+		}
+	}
+}
+
+// TestRenderPlainWrapsLongLines verifies the "wraps only lines exceeding the
+// width" half: a line longer than the width is wrapped at word boundaries
+// (with the wrap column aligned), while short lines stay untouched.
+func TestRenderPlainWrapsLongLines(t *testing.T) {
+	long := strings.Repeat("word ", 40) // 200 chars, wraps at width 30
+	out := RenderPlain(long, 30)
+	lines := strings.Split(out, "\n")
+	if len(lines) < 3 {
+		t.Errorf("RenderPlain should wrap a 200-char line at width 30 into multiple lines, got %d:\n%q", len(lines), lines)
+	}
+	for i, l := range lines {
+		if l == "" {
+			t.Errorf("unexpected empty wrapped line at index %d", i)
+		}
+		if len([]rune(l)) > 30 {
+			t.Errorf("wrapped line %d exceeds the width: %d > 30", i, len([]rune(l)))
+		}
+	}
+	// The words themselves must all survive, in order.
+	if !strings.HasPrefix(strings.Join(lines, "\n"), long[:len("word")]) {
+		t.Errorf("wrapped output lost the original text start:\n%q", lines)
+	}
+	if !strings.Contains(strings.Join(lines, " "), "word") {
+		t.Errorf("wrapped output lost words:\n%q", lines)
+	}
+}
+
+// TestRenderPlainEmptyAndWhitespace pins the degenerate cases: empty source
+// renders to nothing (no padded blank line), and trailing newlines don't
+// produce phantom empty lines.
+func TestRenderPlainEmptyAndWhitespace(t *testing.T) {
+	if got := RenderPlain("", 40); got != "" {
+		t.Errorf("RenderPlain(\"\") = %q, want empty", got)
+	}
+	out := RenderPlain("abc\ndef\n", 40)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 2 || lines[1] == "" {
+		t.Errorf("trailing newline produced a phantom line: %q", lines)
+	}
+}
+
+// TestViewerRawModeOneChangePerLine exercises the Viewer's raw mode end to
+// end: the same content that glamour merges onto one line stays one line per
+// entry once SetRaw(true) is applied, and the same viewer toggled back to
+// markdown shows the merged behavior — proving the mode is a per-viewer
+// switch, not a global.
+func TestViewerRawModeOneChangePerLine(t *testing.T) {
+	src := "abc1234 Add gallery\ndef5678 Fix bug\n\n docs/jobs/x/brief.md | 2 ++\n docs/jobs/x/impl.md | 1 +"
+
+	raw := NewViewer(160, 40)
+	raw.SetRaw(true)
+	raw.SetContent(src)
+	rawLines := strings.Split(raw.View(), "\n")
+	if len(rawLines) != 5 {
+		t.Fatalf("raw viewer rendered %d lines, want 5 (one per source line):\n%q", len(rawLines), rawLines)
+	}
+
+	md := NewViewer(160, 40)
+	md.SetContent(src)
+	mdLines := strings.Split(md.View(), "\n")
+	merged := false
+	for _, l := range mdLines {
+		if strings.Contains(l, "Add gallery") && strings.Contains(l, "Fix bug") {
+			merged = true
+		}
+	}
+	if !merged {
+		t.Errorf("markdown viewer should still merge the paragraph at a wide width (proving raw is opt-in):\n%q", mdLines)
+	}
+}
+
+// TestViewerSetRawBeforeContent pins the construction-order case: setting raw
+// mode on a viewer that has no content yet must not fabricate a rendered
+// line — the later SetContent renders at the new mode. (A rebuild on empty
+// src produced a phantom line that made the diff tab look pre-rendered.)
+func TestViewerSetRawBeforeContent(t *testing.T) {
+	v := NewViewer(160, 40)
+	v.SetRaw(true)
+	if v.LineCount() != 0 {
+		t.Errorf("SetRaw(true) on a content-less viewer fabricated %d lines, want 0", v.LineCount())
+	}
+
+	v.SetContent("abc1234 Add gallery\ndef5678 Fix bug")
+	if len(v.lines) != 2 {
+		t.Errorf("SetContent after SetRaw rendered %d lines, want 2 (raw mode):\n%q", len(v.lines), v.lines)
+	}
+}
+
+// TestViewerSetRawReRenders pins that SetRaw re-renders the current content
+// immediately (a no-op when the mode is unchanged), and that the markdown
+// mode keeps glamour's merged-paragraph behavior for the same content.
+func TestViewerSetRawReRenders(t *testing.T) {
+	src := "abc1234 Add gallery\ndef5678 Fix bug"
+
+	merged := func(lines []string) bool {
+		for _, l := range lines {
+			if strings.Contains(l, "Add gallery") && strings.Contains(l, "Fix bug") {
+				return true
+			}
+		}
+		return false
+	}
+
+	v := NewViewer(160, 40)
+	v.SetContent(src)
+	if !merged(v.lines) {
+		t.Fatalf("markdown-mode viewer at a wide width should merge the paragraph, got:\n%q", v.lines)
+	}
+
+	v.SetRaw(true)
+	if merged(v.lines) {
+		t.Errorf("SetRaw(true) still shows the merged line:\n%q", v.lines)
+	}
+	if len(v.lines) != 2 {
+		t.Errorf("SetRaw(true) rendered %d lines, want 2 (one per commit):\n%q", len(v.lines), v.lines)
+	}
+
+	// Toggling back restores the markdown rendering.
+	v.SetRaw(false)
+	if !merged(v.lines) {
+		t.Errorf("SetRaw(false) did not restore the merged markdown rendering:\n%q", v.lines)
+	}
+
+	// A no-op SetRaw must not disturb anything.
+	before := append([]string(nil), v.lines...)
+	v.SetRaw(false)
+	if len(v.lines) != len(before) || v.lines[0] != before[0] {
+		t.Errorf("no-op SetRaw changed the rendered lines")
+	}
+}
