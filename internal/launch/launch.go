@@ -3,18 +3,22 @@
 //
 // Spawn order (macOS + Linux; no Windows v1):
 //  1. Inside tmux — when the TUI is itself running inside tmux (detected via
-//     the $TMUX env var), this works the same on every platform. The session
-//     is opened as a split pane in the TUI's current window (`tmux
-//     split-window), replacing the pane manigot opened last so at
-//     most one manigot pane exists at a time (the replace policy).
-//  2. macOS Terminal.app via osascript.
-//  3. A Linux terminal emulator, tried in order: gnome-terminal, ptyxis
+//     the $TMUX env var, with a tmux binary on PATH), this works the same on
+//     every platform. The session is opened as a split pane in the TUI's
+//     current window (`tmux split-window), replacing the pane manigot opened
+//     last so at most one manigot pane exists at a time (the replace policy).
+//     Inside tmux this branch always wins — even when
+//     config.Settings.Terminal is set — so a session launched from a TUI
+//     that is itself inside tmux lands in a tmux pane, never in a separate
+//     window.
+//  2. config.Settings.Terminal, when set: the explicit user-chosen terminal
+//     (e.g. "kitty") is invoked directly — see buildOverrideCmd. It applies
+//     only when the TUI is NOT inside tmux (or tmux is not available there);
+//     inside tmux the split pane above wins.
+//  3. macOS Terminal.app via osascript.
+//  4. A Linux terminal emulator, tried in order: gnome-terminal, ptyxis
 //     (Fedora's default GNOME terminal since Fedora 41), x-terminal-emulator
 //     (Debian), konsole, xterm.
-//
-// config.Settings.Terminal overrides this whole spawn order
-// unconditionally, including the tmux branch: when set, every launch path
-// below invokes it directly instead — see buildOverrideCmd.
 //
 // The command opened is always `<mg-binary> --agent <agent> --job <jobID>` run
 // from the project root, matching the session launcher's invocation contract.
@@ -40,12 +44,13 @@ import (
 // --agent <agent> --job <jobID>` in projectRoot. profile is one of the
 // subscription profiles in config.Profiles; an empty value defaults to
 // config.ProfileClaudePro, matching the session launcher's own default. terminal is
-// config.Settings.Terminal: when non-empty it overrides the entire spawn
-// order below (including the tmux branch) and that terminal is invoked
-// directly instead — see buildOverrideCmd; empty reproduces today's
-// auto-detect behavior unchanged. It returns a short human description of
-// where it opened (e.g. "tmux pane", "Terminal.app", "gnome-terminal", or the
-// override's own binary name) so the caller can surface it in a status line.
+// config.Settings.Terminal: when non-empty and the TUI is NOT inside tmux, that
+// terminal is invoked directly instead of the auto-detect chain below — see
+// buildOverrideCmd; inside tmux the split pane wins regardless of this setting.
+// Empty reproduces today's auto-detect behavior unchanged. It returns a short
+// human description of where it opened (e.g. "tmux pane", "Terminal.app",
+// "gnome-terminal", or the override's own binary name) so the caller can surface
+// it in a status line.
 //
 // The launcher runs from projectRoot (the main worktree) even though the job
 // lives in its own worktree: the session launcher
@@ -318,24 +323,27 @@ func killPreviousTmuxPane() error {
 // asynchronously so it doesn't zombie (the actual terminal/pane outlives it).
 // It returns the short "where it opened" description buildCmd produces.
 //
-// terminal is config.Settings.Terminal: when non-empty it
-// takes over unconditionally, bypassing the tmux-detection branch below
-// entirely (not just the macOS/Linux auto-detect chain) — a user who both
-// runs the TUI inside tmux and sets an override loses the split-pane behavior
-// in favor of a plain spawn of their chosen terminal, a deliberate trade-off
-
-// Inside tmux, with no override set, the launch is handled by launchTmuxPane
-// instead: it implements the replace policy (killing the previously
-// manigot-opened pane before splitting a new one) and needs the split-window
-// client's stdout (the new pane's id), so it runs synchronously rather than
-// through the detached tail below. The same tmux detection ($TMUX set and a
-// tmux binary on PATH) is used here and in buildCmd.
+// terminal is config.Settings.Terminal: when non-empty it is used in place of
+// the macOS/Linux auto-detect chain (branch 3/4 below) — but only when the TUI
+// is NOT inside tmux. Inside tmux (with a tmux binary on PATH) the launch is
+// handled by launchTmuxPane instead, regardless of the override: a user who
+// runs the TUI inside tmux always gets the split-pane behavior, and the
+// override applies only outside tmux.
+//
+// Inside tmux, the launch is handled by launchTmuxPane: it implements the
+// replace policy (killing the previously manigot-opened pane before splitting
+// a new one) and needs the split-window client's stdout (the new pane's id),
+// so it runs synchronously rather than through the detached tail below. The
+// same tmux detection ($TMUX set and a tmux binary on PATH) is used here and
+// in buildCmd.
 //
 // See Agent's doc comment for why a launcher that starts successfully but then
 // fails on its own (e.g. no display server) is not surfaced here — holdOnFailure
 // covers the inner command's own fast failures instead.
 func launchDetached(inner, terminal string) (string, error) {
-	if terminal == "" && os.Getenv("TMUX") != "" {
+	// Inside tmux with a tmux binary on PATH, the tmux split pane always wins —
+	// even when an override is set. The override applies only outside tmux.
+	if os.Getenv("TMUX") != "" {
 		if _, err := exec.LookPath("tmux"); err == nil {
 			return launchTmuxPane(inner)
 		}
@@ -468,7 +476,7 @@ func shellQuote(s string) string {
 }
 
 // terminalCandidates is the Linux terminal-emulator candidate table used both
-// by buildCmd's auto-detect chain (branch 3) and, by name lookup, by
+// by buildCmd's auto-detect chain (branch 4) and, by name lookup, by
 // buildOverrideCmd's known-name-vs-"-e"-fallback flag-convention choice:
 // an override whose binary matches one of these names
 // (case-insensitively) reuses that name's own flag convention instead of the
@@ -485,9 +493,11 @@ var terminalCandidates = []struct {
 }
 
 // buildOverrideCmd constructs the *exec.Cmd for an explicit user-chosen
-// terminal override (config.Settings.Terminal): it takes
-// over the entire spawn order — no tmux/macOS/Linux auto-detect is
-// considered at all once a caller has decided to use it (see launchDetached).
+// terminal override (config.Settings.Terminal): it takes over the auto-detect
+// spawn order — the tmux branch is only reachable inside tmux, where
+// launchDetached/buildCmd prefer the tmux pane, so an override is invoked when
+// the TUI is NOT inside tmux (or tmux is unavailable there), replacing the
+// macOS/Linux auto-detect chain (see launchDetached).
 //
 // terminal's first whitespace-separated token is the binary to run; any
 // remaining tokens are passed as leading arguments before the flag that hands
@@ -532,19 +542,19 @@ func buildOverrideCmd(inner, terminal string) (*exec.Cmd, string, error) {
 }
 
 // buildCmd constructs the *exec.Cmd for the detected environment, or — when
-// terminal (config.Settings.Terminal) is non-empty — for the explicit
-// override instead (see buildOverrideCmd), bypassing every branch below
-// entirely. The tmux branch (1) is also the command launchTmuxPane runs
-// synchronously; branches 2 and 3 run detached via launchDetached's
-// spawn/reap tail.
+// terminal (config.Settings.Terminal) is non-empty and the TUI is not inside
+// tmux — for the explicit override instead (see buildOverrideCmd). The tmux
+// branch (1) is checked first and always wins when the TUI is inside tmux and
+// a tmux binary is on PATH, even over an override; branches 2–4 (override,
+// macOS Terminal.app, Linux emulators) run detached via launchDetached's
+// spawn/reap tail. The tmux branch is also the command launchTmuxPane runs
+// synchronously.
 func buildCmd(inner, terminal string) (*exec.Cmd, string, error) {
-	if terminal != "" {
-		return buildOverrideCmd(inner, terminal)
-	}
-
 	// 1. Inside tmux (works on every OS that has tmux): split a pane off the
 	// TUI's current window, replacing the previously manigot-opened
-	// pane.
+	// pane. Checked before the override so a session launched from a TUI
+	// inside tmux always lands in a tmux pane, regardless of
+	// config.Settings.Terminal.
 	if os.Getenv("TMUX") != "" {
 		if _, err := exec.LookPath("tmux"); err == nil {
 			// -h splits side by side (vertical divider); -l 35% sizes the new
@@ -580,13 +590,19 @@ func buildCmd(inner, terminal string) (*exec.Cmd, string, error) {
 		}
 	}
 
-	// 2. macOS Terminal.app.
+	// 2. The explicit terminal override (config.Settings.Terminal), when the
+	// TUI is not inside tmux (or tmux is unavailable there).
+	if terminal != "" {
+		return buildOverrideCmd(inner, terminal)
+	}
+
+	// 3. macOS Terminal.app.
 	if runtime.GOOS == "darwin" {
 		script := fmt.Sprintf(`tell application "Terminal" to do script %q`, inner)
 		return exec.Command("osascript", "-e", script), "Terminal.app", nil
 	}
 
-	// 3. Linux terminal emulators, in order of preference.
+	// 4. Linux terminal emulators, in order of preference.
 	shellArgs := []string{"bash", "-lc", inner}
 	for _, c := range terminalCandidates {
 		if _, err := exec.LookPath(c.name); err == nil {

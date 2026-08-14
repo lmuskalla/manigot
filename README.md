@@ -622,16 +622,20 @@ below), picked in this order:
 
 1. a **tmux** split pane in the TUI's own window, if the TUI is itself running
    inside tmux (`$TMUX` set) — each new launch replaces the pane manigot opened
-   before, so at most one agent pane exists at a time
-2. **Terminal.app** via `osascript` on macOS
-3. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
+   before, so at most one agent pane exists at a time. Inside tmux this always
+   wins, even when a **Terminal** is set (see below): the session opens in a
+   tmux pane, never in a separate window.
+2. the **Terminal** from the settings screen (`s` from the job list), when
+   set — applied only when the TUI is NOT inside tmux
+3. **Terminal.app** via `osascript` on macOS
+4. a Linux terminal emulator — `gnome-terminal`, `x-terminal-emulator`,
    `konsole`, or `xterm`, whichever is found first on `PATH`
 
 Setting a **Terminal** in the settings screen (`s` from the job list)
-overrides that whole spawn order unconditionally — including the tmux
-split-pane behavior above, so a session opens in the chosen terminal even
-when the TUI itself is running inside tmux. Leave it blank to keep today's
-auto-detect behavior.
+replaces the macOS/Linux auto-detect chain above (steps 3–4). It only applies
+when the TUI is not running inside tmux: inside tmux the split-pane behavior
+wins, so a session launched from a TUI inside tmux always opens in a tmux
+pane. Leave it blank to keep auto-detect behavior.
 
 The list view's `o` shortcut (see Keybindings) opens a bare `mg --profile
 <profile>` instead — same spawn paths, but with no agent and no job, for a quick ad-hoc

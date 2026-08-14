@@ -312,7 +312,9 @@ either way.
   `config.GetEnv`/`EnvValue`. Never committed.
 - `config/tui-settings.json` (gitignored) — the TUI's personal preferences:
   which editor opens `brief.md`, the recent-activity count, and which
-  terminal spawns a session. Missing is not an error — every reader falls
+  terminal spawns a session (used only when the TUI is not inside tmux —
+  inside tmux the launch is always a tmux split pane, regardless of the
+  setting). Missing is not an error — every reader falls
   back to defaults.
 - `.manigot/manigot.json` (in the target project, committable) — project
   conventions: `baseBranch` (the ref new job branches are cut from and

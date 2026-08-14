@@ -380,7 +380,8 @@ func (v *settingsView) render() string {
 	b.WriteString("\n\n")
 
 	// Terminal row (global): the command used to spawn an agent session's
-	// terminal, overriding launch's auto-detect spawn order when set.
+	// terminal, replacing launch's auto-detect spawn order when set. Inside
+	// tmux the split pane always wins, regardless of this setting.
 	terminalLabel := "  Terminal: "
 	if v.focus == stFocusTerminal {
 		b.WriteString(terminalLabel + v.terminal.View())
@@ -388,7 +389,7 @@ func (v *settingsView) render() string {
 		b.WriteString(dimStyle.Render(terminalLabel) + dimStyle.Render(v.terminal.View()))
 	}
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = auto-detect (tmux / Terminal.app / gnome-terminal / ...) · stored in config/tui-settings.json"))
+	b.WriteString(dimStyle.Render("           blank = auto-detect (tmux / Terminal.app / gnome-terminal / ...) · inside tmux the split pane always wins · stored in config/tui-settings.json"))
 	b.WriteString("\n\n")
 
 	// Footer: status or a focus-aware hint.

@@ -127,9 +127,10 @@ type Settings struct {
 
 	// Terminal is the command used to spawn an agent session's terminal
 	// (launch.Agent/Quick/AgentQuick), e.g. "kitty" or "alacritty -e". Empty
-	// means fall back to today's auto-detect spawn order (tmux split pane,
-	// macOS Terminal.app, then a Linux emulator list) — see
-	// internal/launch's buildCmd.
+	// means fall back to auto-detect (macOS Terminal.app, then a Linux
+	// emulator list). When set, it applies only when the TUI is not inside
+	// tmux: inside tmux the launch is always a tmux split pane, regardless of
+	// this setting — see internal/launch's buildCmd.
 	Terminal string `json:"terminal,omitempty"`
 }
 

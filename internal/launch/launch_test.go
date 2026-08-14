@@ -667,13 +667,15 @@ func stubBinary(t *testing.T, dir, name string) string {
 	return path
 }
 
-// TestBuildCmdOverrideBypassesTmux confirms an override takes over even
-// inside tmux (TASK-1 point 2): with $TMUX set and a tmux binary present,
-// buildCmd must still invoke the override, not the tmux split-pane branch.
-func TestBuildCmdOverrideBypassesTmux(t *testing.T) {
+// TestBuildCmdTmuxWinsOverOverrideInsideTmux confirms the new precedence
+// (TASK-2): with $TMUX set and a tmux binary on PATH, buildCmd must invoke the
+// tmux split-pane branch even when an override is set — the override no longer
+// bypasses tmux, so a session launched from a TUI inside tmux lands in a tmux
+// pane, never in a separate window.
+func TestBuildCmdTmuxWinsOverOverrideInsideTmux(t *testing.T) {
 	dir := t.TempDir()
-	stubBinary(t, dir, "tmux")
-	kitty := stubBinary(t, dir, "kitty")
+	tmuxBin := stubBinary(t, dir, "tmux")
+	stubBinary(t, dir, "kitty")
 	t.Setenv("PATH", dir)
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
 
@@ -681,22 +683,122 @@ func TestBuildCmdOverrideBypassesTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildCmd: %v", err)
 	}
-	if desc != "kitty" {
-		t.Errorf("desc = %q, want %q", desc, "kitty")
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q (tmux pane wins inside tmux)", desc, "tmux pane")
 	}
-	if cmd.Path != kitty {
-		t.Errorf("cmd.Path = %q, want %q", cmd.Path, kitty)
+	if cmd.Path != tmuxBin {
+		t.Errorf("cmd.Path = %q, want %q (resolved tmux binary, not the override)", cmd.Path, tmuxBin)
 	}
 }
 
-// TestLaunchDetachedOverrideBypassesTmuxPane confirms the same at the
+// TestLaunchDetachedTmuxWinsOverOverrideInsideTmux confirms the same at the
 // launchDetached level, which is what actually decides whether to route to
-// launchTmuxPane at all.
-func TestLaunchDetachedOverrideBypassesTmuxPane(t *testing.T) {
+// launchTmuxPane at all: with an override set, $TMUX set and a tmux binary on
+// PATH, the kill/split/tag sequence runs and the override is not invoked.
+func TestLaunchDetachedTmuxWinsOverOverrideInsideTmux(t *testing.T) {
+	stub := newTmuxStub(t)
+	stubBinary(t, filepath.Dir(stub.path), "kitty") // override on the same PATH
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	desc, err := launchDetached("echo hi", "kitty")
+	if err != nil {
+		t.Fatalf("launchDetached: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q (tmux pane wins inside tmux)", desc, "tmux pane")
+	}
+	if tmuxLastPaneID == "" {
+		t.Error("tmux path did not run (no pane id recorded)")
+	}
+	calls := stub.calls()
+	if !strings.Contains(calls, "split-window -h -l 35% -P -F #{pane_id} bash -lc echo hi") {
+		t.Errorf("tmux split-window not invoked via launchDetached:\n%s", calls)
+	}
+	if !strings.Contains(calls, "select-pane -t %100 -T manigot") {
+		t.Errorf("select-pane tagging of the new pane missing:\n%s", calls)
+	}
+	// The override (kitty) must not be invoked at all.
+	if strings.Contains(calls, "kitty") {
+		t.Errorf("override unexpectedly invoked inside tmux:\n%s", calls)
+	}
+}
+
+// TestBuildCmdOverrideWinsOutsideTmux guards the outside-tmux precedence from
+// TASK-2: with an override set but the TUI NOT inside tmux ($TMUX unset),
+// buildCmd must still invoke the override — the r5x2a7 feature is preserved
+// for non-tmux users.
+func TestBuildCmdOverrideWinsOutsideTmux(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "tmux")
+	kitty := stubBinary(t, dir, "kitty")
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "") // NOT inside tmux
+
+	cmd, desc, err := buildCmd("echo hi", "kitty")
+	if err != nil {
+		t.Fatalf("buildCmd: %v", err)
+	}
+	if desc != "kitty" {
+		t.Errorf("desc = %q, want %q (override wins outside tmux)", desc, "kitty")
+	}
+	if cmd.Path != kitty {
+		t.Errorf("cmd.Path = %q, want %q (the override binary)", cmd.Path, kitty)
+	}
+}
+
+// TestLaunchDetachedOverrideWinsOutsideTmux confirms the same at the
+// launchDetached level: with an override set and the TUI NOT inside tmux, the
+// override is invoked and the tmux path does not run.
+func TestLaunchDetachedOverrideWinsOutsideTmux(t *testing.T) {
 	dir := t.TempDir()
 	stubBinary(t, dir, "tmux")
 	stubBinary(t, dir, "kitty")
 	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "") // NOT inside tmux
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	desc, err := launchDetached("echo hi", "kitty")
+	if err != nil {
+		t.Fatalf("launchDetached: %v", err)
+	}
+	if desc != "kitty" {
+		t.Errorf("desc = %q, want %q (override wins outside tmux)", desc, "kitty")
+	}
+	if tmuxLastPaneID != "" {
+		t.Errorf("tmuxLastPaneID = %q, want empty (tmux path must not have run)", tmuxLastPaneID)
+	}
+}
+
+// TestBuildCmdOverrideFallsThroughWhenTmuxMissing: with $TMUX set but no tmux
+// binary on PATH, buildCmd must fall through to the override — inside tmux
+// only wins when tmux is actually available.
+func TestBuildCmdOverrideFallsThroughWhenTmuxMissing(t *testing.T) {
+	dir := t.TempDir()
+	kitty := stubBinary(t, dir, "kitty")
+	t.Setenv("PATH", dir) // no tmux binary on PATH
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
+
+	cmd, desc, err := buildCmd("echo hi", "kitty")
+	if err != nil {
+		t.Fatalf("buildCmd: %v", err)
+	}
+	if desc != "kitty" {
+		t.Errorf("desc = %q, want %q (fall through to the override)", desc, "kitty")
+	}
+	if cmd.Path != kitty {
+		t.Errorf("cmd.Path = %q, want %q (the override binary)", cmd.Path, kitty)
+	}
+}
+
+// TestLaunchDetachedOverrideFallsThroughWhenTmuxMissing confirms the same at
+// the launchDetached level: with $TMUX set but no tmux binary on PATH, the
+// tmux branch cannot win and the override is used instead.
+func TestLaunchDetachedOverrideFallsThroughWhenTmuxMissing(t *testing.T) {
+	dir := t.TempDir()
+	stubBinary(t, dir, "kitty") // the override binary launchDetached will spawn
+	t.Setenv("PATH", dir)       // no tmux binary on PATH
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
 	t.Cleanup(func() { tmuxLastPaneID = "" })
 	tmuxLastPaneID = ""
@@ -706,7 +808,7 @@ func TestLaunchDetachedOverrideBypassesTmuxPane(t *testing.T) {
 		t.Fatalf("launchDetached: %v", err)
 	}
 	if desc != "kitty" {
-		t.Errorf("desc = %q, want %q (tmux must be bypassed)", desc, "kitty")
+		t.Errorf("desc = %q, want %q (fall through to the override)", desc, "kitty")
 	}
 	if tmuxLastPaneID != "" {
 		t.Errorf("tmuxLastPaneID = %q, want empty (tmux path must not have run)", tmuxLastPaneID)
