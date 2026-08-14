@@ -71,6 +71,41 @@ func TestDeleteJobDirtyWorktreeWarning(t *testing.T) {
 	}
 }
 
+func TestDeleteJobRemovesJDISidecar(t *testing.T) {
+	root, res := createWorkedJob(t)
+	// A job mg-jdi previously drove: status sidecar + run.log, both outside
+	// the job dir, under the project's .manigot/jdi-status/.
+	if err := WriteJDIStatus(root, res.Job.Name, JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, JDIRunLogPath(root, res.Job.Name), "=== mg jdi started ===\n")
+
+	var out bytes.Buffer
+	if _, err := DeleteJob(root, "ab12cd", yesConfirm, &out); err != nil {
+		t.Fatalf("DeleteJob: %v\n%s", err, out.String())
+	}
+	// The sidecar is gone with the job.
+	if _, err := os.Stat(JDIStatusDir(root, res.Job.Name)); !os.IsNotExist(err) {
+		t.Errorf("mg-jdi sidecar still exists after delete: %v", err)
+	}
+	if !strings.Contains(out.String(), "→ Removing mg-jdi status for "+res.Job.Name+"...") {
+		t.Errorf("missing sidecar-removal line:\n%s", out.String())
+	}
+}
+
+func TestDeleteJobNoJDISidecarPrintsNothing(t *testing.T) {
+	root, _ := createWorkedJob(t)
+	// The common case: mg-jdi never drove this job, so no sidecar exists and
+	// the output must not claim any sidecar cleanup.
+	var out bytes.Buffer
+	if _, err := DeleteJob(root, "ab12cd", yesConfirm, &out); err != nil {
+		t.Fatalf("DeleteJob: %v\n%s", err, out.String())
+	}
+	if strings.Contains(out.String(), "mg-jdi status") {
+		t.Errorf("sidecar-removal output printed with no sidecar present:\n%s", out.String())
+	}
+}
+
 func TestDeleteJobMainWorktreeCase(t *testing.T) {
 	// A pre-worktree job: the branch is checked out in the main worktree, so
 	// the main worktree is switched onto the base branch and no worktree
@@ -110,6 +145,10 @@ func TestDeleteJobNonGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(root, "docs", "jobs", "jk56lm_plain", "brief.md"), "# Brief: Plain\n\nstatus: open\nid: jk56lm\n")
+	// A sidecar mg-jdi left for the same job, in the project's .manigot/.
+	if err := WriteJDIStatus(root, "jk56lm_plain", JDIStoppedNeedsHuman, "analyst"); err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
 	del, err := DeleteJob(root, "jk56lm", yesConfirm, &out)
 	if err != nil {
@@ -120,6 +159,9 @@ func TestDeleteJobNonGit(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "docs", "jobs", "jk56lm_plain")); !os.IsNotExist(err) {
 		t.Errorf("non-git job dir still exists")
+	}
+	if _, err := os.Stat(JDIStatusDir(root, "jk56lm_plain")); !os.IsNotExist(err) {
+		t.Errorf("mg-jdi sidecar still exists after non-git delete: %v", err)
 	}
 	if !strings.Contains(out.String(), "✓ Job deleted: jk56lm_plain") {
 		t.Errorf("missing delete line:\n%s", out.String())

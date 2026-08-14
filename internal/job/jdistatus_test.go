@@ -39,6 +39,44 @@ func TestReadJDIStatusMissingFile(t *testing.T) {
 	}
 }
 
+func TestRemoveJDIStatus(t *testing.T) {
+	root := t.TempDir()
+	const jobName = "aaaa01_test-job"
+
+	// No sidecar ever existed: nothing to remove, and no error.
+	removed, err := RemoveJDIStatus(root, jobName)
+	if err != nil {
+		t.Fatalf("RemoveJDIStatus (absent): %v", err)
+	}
+	if removed {
+		t.Error("RemoveJDIStatus (absent) reported removed=true")
+	}
+
+	// A real sidecar (status + run.log) is removed wholesale.
+	if err := WriteJDIStatus(root, jobName, JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatalf("WriteJDIStatus: %v", err)
+	}
+	if err := os.WriteFile(JDIRunLogPath(root, jobName), []byte("log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	removed, err = RemoveJDIStatus(root, jobName)
+	if err != nil {
+		t.Fatalf("RemoveJDIStatus: %v", err)
+	}
+	if !removed {
+		t.Error("RemoveJDIStatus (present) reported removed=false")
+	}
+	if _, err := os.Stat(JDIStatusDir(root, jobName)); !os.IsNotExist(err) {
+		t.Errorf("sidecar dir still exists after RemoveJDIStatus: %v", err)
+	}
+
+	// Second removal of an already-gone sidecar: absent, not an error.
+	removed, err = RemoveJDIStatus(root, jobName)
+	if err != nil || removed {
+		t.Errorf("RemoveJDIStatus (after removal) = removed=%v err=%v, want false, nil", removed, err)
+	}
+}
+
 func TestReadJDIStatusUnparseableFile(t *testing.T) {
 	root := t.TempDir()
 	const jobName = "aaaa01_test-job"

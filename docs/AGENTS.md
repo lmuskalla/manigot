@@ -212,14 +212,18 @@ archive move + commit inside the job's own worktree, squash merge onto the
 configured `baseBranch` (from `.manigot/manigot.json`, falling back to
 `origin/HEAD` → `main`), branch delete, and worktree remove — skipped when
 the job's branch is checked out in the main worktree itself (a pre-worktree
-job), which is also switched back to the base branch. Interactive
+job), which is also switched back to the base branch. It also removes the
+job's `.manigot/jdi-status/` sidecar — the archive keeps the job's docs, and
+mg-jdi never runs against an archived job, so the status/run.log sidecar
+would otherwise be dead weight forever. Interactive
 confirmations go through `internal/cli` prompts with the scripts' original
 wording.
 
 `mg delete` (`job.DeleteJob`) permanently deletes a job: worktree
 (force-removed, with an explicit "uncommitted changes will be discarded"
 warning when dirty) and branch (`-D` — no merge). A non-git project's job is
-a plain directory delete. Same confirmations, including "This cannot be
+a plain directory delete. It likewise removes the job's `.manigot/jdi-status/`
+sidecar. Same confirmations, including "This cannot be
 undone."
 
 Orphaned worktrees — leftover directories under `.manigot-worktrees/` whose
@@ -229,7 +233,8 @@ surfaced by `mg jobs` (`job.DiscoverOrphans`) after the job list, and removed
 through either `mg jobs`' interactive "Remove orphaned worktrees?" offer or
 `mg delete <name>` (which resolves orphan names the way it resolves job
 ids). Removal (`job.RemoveOrphans`) mirrors `git worktree prune` semantics —
-it also prunes stale worktree metadata — but applies `mg delete`'s
+it also prunes stale worktree metadata and the abandoned job's
+`.manigot/jdi-status/` sidecar — but applies `mg delete`'s
 confirmation discipline, including "This cannot be undone." Detection scans
 both the sibling and nested `.manigot-worktrees` layouts and never reports a
 live worktree (its `.git` file names an existing gitdir) or a standalone
@@ -316,8 +321,9 @@ either way.
   done`/`mg delete` via `internal/project` and by the TUI.
 - `.manigot/` (in the target project) — host-side tooling state only:
   the committable `manigot.json` settings and the gitignored
-  `.manigot/jdi-status/` mg-jdi run state. Agents must treat it like any
-  other tool-managed state: read the settings file if needed, never edit
+  `.manigot/jdi-status/` mg-jdi run state (removed when a job is finished,
+  deleted, or its orphaned worktree cleaned up). Agents must treat it like
+  any other tool-managed state: read the settings file if needed, never edit
   either path by hand.
 
 ## Commands

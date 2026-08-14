@@ -515,7 +515,11 @@ A job scaffolded and then abandoned leaves a **dead worktree directory**
 behind — a `.manigot-worktrees/` dir whose git registration is gone, with no
 branch and no entry in `mg jobs`. `mg jobs` surfaces these orphans and offers
 to remove them, and `mg delete <name>` removes one by name — both with the
-same "This cannot be undone." confirmation as a normal delete.
+same "This cannot be undone." confirmation as a normal delete. `mg done` and
+`mg delete` (and orphan removal) also clean up the job's `mg jdi` status
+sidecar and `run.log` under `.manigot/jdi-status/` — the archive keeps the
+job's docs, and `mg jdi` never runs against a finished or deleted job, so the
+sidecar would otherwise be dead weight forever.
 
 Don't feel like babysitting the whole thing? Send `mg made-man --job <id>`
 instead — it runs the analyst, the developer, and the reviewer back to back,

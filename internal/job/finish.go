@@ -58,7 +58,9 @@ type FinishResult struct {
 // script's exact warnings and confirmations), move the job directory into
 // docs/jobs/archive/ inside the job's own worktree, commit the archive move,
 // squash-merge the branch onto the configured base branch in the main
-// worktree, remove the job's worktree, and delete the branch.
+// worktree, remove the job's worktree, delete the branch, and finally remove
+// the job's mg-jdi status sidecar (best-effort — the archive itself has
+// already succeeded by then).
 //
 // root is the project root, resolved by the caller (the CLI's docs-walk-up,
 // or the TUI's a.root). confirm answers the script's `read -rp` prompts (a
@@ -224,6 +226,16 @@ func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishR
 	fmt.Fprintf(out, "→ Deleting branch %s...\n", branch)
 	if err := git.BranchDelete(root, branch); err != nil {
 		return FinishResult{}, err
+	}
+
+	// Clean up after mg-jdi: the job is archived and its branch gone, so the
+	// status/run.log sidecar is dead weight — mg-jdi never runs against an
+	// archived job. Best-effort — the archive itself already succeeded, so a
+	// failure here is a warning, not an abort.
+	if removed, err := RemoveJDIStatus(root, jobName); err != nil {
+		fmt.Fprintf(out, "  Warning: could not remove mg-jdi status for %s: %v\n", jobName, err)
+	} else if removed {
+		fmt.Fprintf(out, "→ Removing mg-jdi status for %s...\n", jobName)
 	}
 
 	// ── Done ────────────────────────────────────────────────────────────────

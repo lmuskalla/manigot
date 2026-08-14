@@ -30,7 +30,9 @@ type DeleteResult struct {
 // resolve the job (branch + worktree for a git project, a plain docs/jobs
 // directory otherwise), show the script's confirmation (with the dirty-worktree
 // warning wording), then remove the worktree (--force) and force-delete the
-// branch. A non-git project is a plain directory delete.
+// branch, and finally remove the job's mg-jdi status sidecar (best-effort —
+// the deletion itself has already succeeded by then). A non-git project is a
+// plain directory delete.
 //
 // root is the project root, resolved by the caller (the CLI's docs-walk-up,
 // or the TUI's a.root). confirm answers the script's `read -rp` prompts (a
@@ -156,6 +158,15 @@ func DeleteJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (DeleteR
 		return DeleteResult{}, err
 	}
 
+	// Clean up after mg-jdi too: the job is gone, so its status/run.log
+	// sidecar is dead weight. Best-effort — the deletion itself already
+	// succeeded, so a failure here is a warning, not an abort.
+	if removed, err := RemoveJDIStatus(root, jobName); err != nil {
+		fmt.Fprintf(out, "  Warning: could not remove mg-jdi status for %s: %v\n", jobName, err)
+	} else if removed {
+		fmt.Fprintf(out, "→ Removing mg-jdi status for %s...\n", jobName)
+	}
+
 	fmt.Fprintln(out, "")
 	fmt.Fprintf(out, "✓ Job deleted: %s\n", jobName)
 	fmt.Fprintf(out, "  Branch removed: %s\n", branch)
@@ -193,6 +204,12 @@ func deleteNonGit(root, jobArg string, confirm ConfirmFunc, out io.Writer) (Dele
 	fmt.Fprintf(out, "→ Removing %s/%s...\n", JobsRelDir, jobName)
 	if err := os.RemoveAll(jobDir); err != nil {
 		return DeleteResult{}, err
+	}
+	// Same best-effort sidecar cleanup as the git path above.
+	if removed, err := RemoveJDIStatus(root, jobName); err != nil {
+		fmt.Fprintf(out, "  Warning: could not remove mg-jdi status for %s: %v\n", jobName, err)
+	} else if removed {
+		fmt.Fprintf(out, "→ Removing mg-jdi status for %s...\n", jobName)
 	}
 	fmt.Fprintln(out, "")
 	fmt.Fprintf(out, "✓ Job deleted: %s\n", jobName)

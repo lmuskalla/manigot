@@ -177,6 +177,24 @@ func WriteJDIStatus(root, jobName string, state JDIState, agent string) error {
 	return os.WriteFile(JDIStatusPath(root, jobName), data, 0o644)
 }
 
+// RemoveJDIStatus removes job jobName's mg-jdi sidecar directory under root —
+// the status file and run.log that mg-jdi leaves behind. The job-destruction
+// lifecycle paths (DeleteJob, FinishJob, and the orphan removers) call it so
+// the tool cleans up after itself instead of leaving .manigot/jdi-status/<job>/
+// accumulating forever after the job itself is gone. removed reports whether a
+// sidecar actually existed — a job mg-jdi never drove has no sidecar, and its
+// absence is not an error.
+func RemoveJDIStatus(root, jobName string) (removed bool, err error) {
+	dir := JDIStatusDir(root, jobName)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, os.RemoveAll(dir)
+}
+
 // jdiRunLogTailBytes bounds how much of a job's run.log ReadJDIRunLogTail
 // loads into memory — a tail, not "load everything" (a large/growing
 // file), the same kind of bounded-viewport

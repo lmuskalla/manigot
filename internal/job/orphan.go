@@ -175,6 +175,13 @@ func RemoveOrphans(root string, orphans []Orphan, confirm ConfirmFunc, out io.Wr
 		if err := os.RemoveAll(o.Dir); err != nil {
 			return err
 		}
+		// An abandoned job may also have left its mg-jdi sidecar behind (the
+		// same name as the orphan). Best-effort — the orphan itself is gone.
+		if removed, err := RemoveJDIStatus(root, o.Name); err != nil {
+			fmt.Fprintf(out, "  Warning: could not remove mg-jdi status for %s: %v\n", o.Name, err)
+		} else if removed {
+			fmt.Fprintf(out, "→ Removing mg-jdi status for %s...\n", o.Name)
+		}
 		fmt.Fprintf(out, "✓ Orphan removed: %s\n", o.Name)
 	}
 	_ = git.WorktreePrune(root)
@@ -191,6 +198,12 @@ func RemoveOrphansConfirmed(root string, orphans []Orphan, out io.Writer) error 
 		fmt.Fprintf(out, "→ Removing orphaned worktree %s...\n", o.Dir)
 		if err := os.RemoveAll(o.Dir); err != nil {
 			return err
+		}
+		// Same best-effort sidecar cleanup as RemoveOrphans above.
+		if removed, err := RemoveJDIStatus(root, o.Name); err != nil {
+			fmt.Fprintf(out, "  Warning: could not remove mg-jdi status for %s: %v\n", o.Name, err)
+		} else if removed {
+			fmt.Fprintf(out, "→ Removing mg-jdi status for %s...\n", o.Name)
 		}
 		fmt.Fprintf(out, "✓ Orphan removed: %s\n", o.Name)
 	}

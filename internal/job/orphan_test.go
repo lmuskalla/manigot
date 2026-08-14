@@ -172,6 +172,10 @@ func TestRemoveOrphans(t *testing.T) {
 	root := createCheckout(t, t.TempDir())
 	wtParent := filepath.Join(filepath.Dir(root), ".manigot-worktrees", filepath.Base(root))
 	orphanWorktree(t, root, filepath.Join(wtParent, "o3kk3n_jdi-is-broken"), "feature/o3kk3n_jdi-is-broken")
+	// An abandoned job's mg-jdi sidecar (same name) is stale too.
+	if err := WriteJDIStatus(root, "o3kk3n_jdi-is-broken", JDIStoppedNeedsHuman, "analyst"); err != nil {
+		t.Fatal(err)
+	}
 
 	var out bytes.Buffer
 	err := RemoveOrphans(root, []Orphan{{Name: "o3kk3n_jdi-is-broken", Dir: filepath.Join(wtParent, "o3kk3n_jdi-is-broken")}}, yesConfirm, &out)
@@ -180,6 +184,9 @@ func TestRemoveOrphans(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(wtParent, "o3kk3n_jdi-is-broken")); !os.IsNotExist(err) {
 		t.Errorf("orphan dir still exists after removal: %v", err)
+	}
+	if _, err := os.Stat(JDIStatusDir(root, "o3kk3n_jdi-is-broken")); !os.IsNotExist(err) {
+		t.Errorf("mg-jdi sidecar still exists after orphan removal: %v", err)
 	}
 	if !strings.Contains(out.String(), "✓ Orphan removed: o3kk3n_jdi-is-broken") {
 		t.Errorf("missing removal line:\n%s", out.String())

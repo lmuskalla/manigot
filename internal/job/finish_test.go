@@ -94,6 +94,29 @@ func TestFinishJobFullRoundtrip(t *testing.T) {
 	}
 }
 
+func TestFinishJobRemovesJDISidecar(t *testing.T) {
+	root, res := createWorkedJob(t)
+	// A job mg-jdi previously drove: status sidecar + run.log under the
+	// project's .manigot/jdi-status/.
+	if err := WriteJDIStatus(root, res.Job.Name, JDIStoppedFinished, "reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, JDIRunLogPath(root, res.Job.Name), "=== mg jdi started ===\n")
+
+	var out bytes.Buffer
+	if _, err := FinishJob(root, "ab12cd", yesConfirm, &out); err != nil {
+		t.Fatalf("FinishJob: %v\n%s", err, out.String())
+	}
+	// The sidecar is gone with the finished job — the archive keeps the job's
+	// docs, and mg-jdi never runs against an archived job.
+	if _, err := os.Stat(JDIStatusDir(root, res.Job.Name)); !os.IsNotExist(err) {
+		t.Errorf("mg-jdi sidecar still exists after finish: %v", err)
+	}
+	if !strings.Contains(out.String(), "→ Removing mg-jdi status for "+res.Job.Name+"...") {
+		t.Errorf("missing sidecar-removal line:\n%s", out.String())
+	}
+}
+
 func TestFinishJobDeclinedProceed(t *testing.T) {
 	root, res := createWorkedJob(t)
 	defer os.RemoveAll(res.WorktreePath) // cleanup: nothing was done

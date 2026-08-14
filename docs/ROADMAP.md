@@ -56,13 +56,15 @@ probe timeouts, error-prefix consistency) — with the sole exception of the
 
 ## What's next, in order
 
-### 1. jdi-status sidecar cleanup (small chore, agreed)
+### 1. jdi-status sidecar cleanup — done
 
-`mg delete` leaves `.manigot/jdi-status/<job>/` (status + run.log) behind
-forever — the evidence is the three stale sidecar dirs in this repo's own
-`.manigot/jdi-status/`. `mg done` needs a deliberate keep-vs-remove decision.
-Same family as the orphaned-worktree cleanup: the tool not cleaning up after
-itself quietly erodes trust in the lifecycle.
+`mg delete` and `mg done` now both remove the job's `.manigot/jdi-status/<job>/`
+sidecar (status + run.log), as does orphaned-worktree removal — the
+keep-vs-remove decision for `mg done` is **remove**: the archive keeps the
+job's docs, mg-jdi never runs against an archived job, and the sidecar would
+otherwise be dead weight forever. Best-effort (a removal failure warns, never
+aborts the already-succeeded delete/finish). This repo's own stale sidecar
+dirs were cleaned up as part of the fix.
 
 ### 2. `mg doctor` health check (small, agreed)
 
@@ -135,10 +137,10 @@ must not be designed by the terminal's requirements.
 
 ## Bottom line
 
-The next jobs, in order: **(1) jdi-status sidecar cleanup**, **(2) `mg
-doctor`**, **(3) configurable project toolchains**, **(4) headless/cron
+The next jobs, in order: **(1) jdi-status sidecar cleanup — done**, **(2)
+`mg doctor`**, **(3) configurable project toolchains**, **(4) headless/cron
 execution**, **(5) event-streaming against a real consumer**, **(6) in-TUI
-terminal, smallest slice first**. Items 1–2 are immediate chore/feature jobs.
-Items 3–6 are sequenced as separate jobs, not an omnibus. The autonomy story
+terminal, smallest slice first**. Item 2 is an immediate chore/feature job;
+items 3–6 are sequenced as separate jobs, not an omnibus. The autonomy story
 is now: three agents, on purpose, boring in the right places — and the docs
 say so.
