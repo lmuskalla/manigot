@@ -98,7 +98,10 @@ Commands:
                                    (off main)
   mg jobs                         List jobs and pick one to start a session
                                    in, via an interactive picker on a TTY
-                                   (type to filter, enter to choose)
+                                   (type to filter, enter to choose); the
+                                   session launches in the agent appropriate
+                                   to the job's stage (analyst/developer/
+                                   reviewer)
   mg done <id>                    Archive a finished job (merge + remove worktree)
   mg delete <id>                  Permanently delete a job (worktree + branch, no merge)
   mg diff <id> [--full|--name-only|--tig]

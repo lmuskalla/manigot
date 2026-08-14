@@ -351,8 +351,10 @@ either way.
   dir + branch + worktree (the branch is cut from the configured base branch;
   `--base-branch` overrides it for one invocation)
 - `mg jobs` — list open jobs with state and pick one to start a session in,
-  via an interactive picker on a TTY (type to filter, enter to choose);
-  also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with
+  via an interactive picker on a TTY (type to filter, enter to choose); the
+  session launches in the agent appropriate to the job's stage (analyst /
+  developer / reviewer — an explicit `--agent` in passthrough wins). Also
+  surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with
   no git registration) and offers to remove them
 - `mg done <id>` — archive a finished job (squash-merge into the base branch
   and remove its worktree; the merge target is the configured `baseBranch`,

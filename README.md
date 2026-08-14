@@ -211,7 +211,7 @@ its first argument:
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose; thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
 | `mg job` | create a job: directory + branch, checked out in the job's own worktree (off `main`); needs `docs/` |
-| `mg jobs` | list open jobs with state and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose); also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
+| `mg jobs` | list open jobs with state and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose); the session launches in the agent appropriate to the job's stage (analyst/developer/reviewer); also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
 | `mg delete` | permanently delete a job (worktree + branch, no merge), or an orphaned worktree by its name; needs `docs/` |
 | `mg diff` | show what a job's branch changed, three-dot against the base branch — log + `diff --stat` by default, `--name-only` for filenames, `--full` for the complete patch, `--tig` to browse it in tig on the host; needs `docs/` |
@@ -486,6 +486,11 @@ mg job "add image gallery block"
 ```
 
 **For a bug fix, skip steps 3–4 and go straight to the developer.**
+
+`mg jobs` lists every open job and lets you pick one; the session then starts
+in the agent appropriate to the job's stage — `@analyst` while it's being
+planned, `@developer` while it's being implemented, `@reviewer` once there's
+work to review (an explicit `mg jobs --agent <name>` always wins).
 
 Job types: `feature` (default), `fix`, `chore`.
 Branch naming: `feature/ID_slug`, `fix/ID_slug`, `chore/ID_slug` — or

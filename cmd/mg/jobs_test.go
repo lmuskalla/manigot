@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -43,6 +44,34 @@ func jobsJDIStatus(t *testing.T, root, jobName string, state job.JDIState, agent
 		t.Fatal(err)
 	}
 }
+
+// jobsWriteJobFile writes a job file (name relative to the job dir) into the
+// checkout's docs/jobs/<jobName>/ directory — the extension to jobsCheckout
+// that lets a fixture land on any workflow stage (mirroring the filled-*
+// content shapes in internal/job/stage_test.go).
+func jobsWriteJobFile(t *testing.T, root, jobName, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, "docs", "jobs", jobName, name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// jobsWrittenBrief builds a brief.md with real prose beyond the frontmatter —
+// the same past-scaffold shape the job package's stage tests use, so
+// job.Stage() lands past define (jobsBrief alone is frontmatter-only and
+// counts as unwritten).
+func jobsWrittenBrief(title, id, typ, date string) string {
+	return jobsBrief(title, id, typ, date) + "## What\n\nAdd a widget so users can schedule recurring exports.\n"
+}
+
+// The past-scaffold, real content for each job file — the "written" side of
+// the stage fixtures, mirroring internal/job/stage_test.go's filled-*.
+const (
+	jobsFilledTasks          = "# Tasks: Alpha Job\n\nid: aaa01\n\n## Task breakdown\n\nTASK-1: real work here\n"
+	jobsFilledImplementation = "# Implementation: Alpha Job\n\nid: aaa01\n\n## Summary\n\nReal prose line one here.\nMore real prose line two.\n"
+	jobsApprovedVerdict      = "# Verdict: Alpha Job\n\nid: aaa01\n\n## Review\n\nTASK-1: PASS — matches the brief.\n\n## Overall\n\nAPPROVED — nice work.\n"
+	jobsRejectedVerdict      = "# Verdict: Alpha Job\n\nid: aaa01\n\n## Review\n\nTASK-1: FAIL — off-by-one in the export loop.\n\n## Overall\n\nREJECTED — TASK-1 has a bug.\n"
+)
 
 // pickerStub returns a pickerRunFunc that fails the test if invoked — for
 // tests that must never reach the selection step (non-TTY paths, empty job
@@ -305,5 +334,197 @@ func TestJobsOrphanRemovalDeclined(t *testing.T) {
 	}
 	if _, err := os.Stat(orphanDir); err != nil {
 		t.Errorf("orphan dir removed despite a declined confirmation: %v", err)
+	}
+}
+
+// TestJobsStageAgent pins the stage → agent mapping behind the mg-jdi-less
+// CLI launch: plan → analyst, implement → developer, review → reviewer, and
+// "" for the edge stages with no fitting agent (define, finished).
+func TestJobsStageAgent(t *testing.T) {
+	cases := map[job.Stage]string{
+		job.StageDefine:    "",
+		job.StagePlan:      "analyst",
+		job.StageImplement: "developer",
+		job.StageReview:    "reviewer",
+		job.StageFinished:  "",
+	}
+	for stage, want := range cases {
+		if got := stageAgent(stage); got != want {
+			t.Errorf("stageAgent(%s) = %q, want %q", stage, got, want)
+		}
+	}
+}
+
+// TestJobsStageGuidance pins the edge-stage heads-up lines: define and
+// finished launch agent-less but print a short guidance line naming the
+// situation, while the mapped stages get no guidance at all.
+func TestJobsStageGuidance(t *testing.T) {
+	if got := stageGuidance(job.StageDefine); !strings.Contains(got, "brief.md is not written yet") {
+		t.Errorf("define guidance = %q, want brief-not-written heads-up", got)
+	}
+	if got := stageGuidance(job.StageFinished); !strings.Contains(got, "run mg done to merge") {
+		t.Errorf("finished guidance = %q, want mg-done heads-up", got)
+	}
+	for _, stage := range []job.Stage{job.StagePlan, job.StageImplement, job.StageReview} {
+		if got := stageGuidance(stage); got != "" {
+			t.Errorf("stageGuidance(%s) = %q, want \"\" (mapped stages need no guidance)", stage, got)
+		}
+	}
+}
+
+// TestJobsLaunchLine pins the launch-line wording: with an agent it names it
+// ("→ Starting a session in @analyst for aaa01..."), without one it stays the
+// plain agent-less line.
+func TestJobsLaunchLine(t *testing.T) {
+	if got, want := jobsLaunchLine("aaa01", "analyst"), "→ Starting a session in @analyst for aaa01..."; got != want {
+		t.Errorf("jobsLaunchLine with agent = %q, want %q", got, want)
+	}
+	if got, want := jobsLaunchLine("aaa01", ""), "→ Starting a session in aaa01..."; got != want {
+		t.Errorf("jobsLaunchLine without agent = %q, want %q", got, want)
+	}
+}
+
+// TestJobsLaunchArgsStageDerivesAgent pins the re-exec launch-argument
+// construction for every stage: the mapped stages launch with
+// --agent <name> (plan→analyst, implement→developer, review→reviewer), the
+// edge stages (define, finished) launch agent-less, and an explicit
+// --agent/-a in passthrough wins over the stage-derived default (TASK-3 —
+// the derived flag is skipped entirely, so session.ParseArgs's last-wins
+// semantics can't silently override the user's choice).
+func TestJobsLaunchArgsStageDerivesAgent(t *testing.T) {
+	cases := []struct {
+		name        string
+		stage       job.Stage
+		passthrough []string
+		want        []string
+	}{
+		{"define", job.StageDefine, nil, []string{"--job", "aaa01"}},
+		{"plan", job.StagePlan, nil, []string{"--job", "aaa01", "--agent", "analyst"}},
+		{"implement", job.StageImplement, nil, []string{"--job", "aaa01", "--agent", "developer"}},
+		{"review", job.StageReview, nil, []string{"--job", "aaa01", "--agent", "reviewer"}},
+		{"finished", job.StageFinished, nil, []string{"--job", "aaa01"}},
+		// The derived agent sits between --job and the passthrough — the
+		// `mg --job <id> --agent <name> <passthrough>` shape.
+		{"passthrough preserved", job.StagePlan, []string{"--profile", "zai"}, []string{"--job", "aaa01", "--agent", "analyst", "--profile", "zai"}},
+		// Explicit user agent beats the derived one: the derived flag is
+		// skipped, leaving the user's --agent (in its original position) as
+		// the only one the re-exec parses.
+		{"explicit --agent wins over plan", job.StagePlan, []string{"--agent", "security"}, []string{"--job", "aaa01", "--agent", "security"}},
+		{"explicit -a wins over implement", job.StageImplement, []string{"-a", "owner"}, []string{"--job", "aaa01", "-a", "owner"}},
+		{"explicit --agent wins on edge stage too", job.StageFinished, []string{"--agent", "reviewer"}, []string{"--job", "aaa01", "--agent", "reviewer"}},
+		{"explicit --agent after passthrough flags", job.StagePlan, []string{"--profile", "zai", "--agent", "developer"}, []string{"--job", "aaa01", "--profile", "zai", "--agent", "developer"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := jobsLaunchArgs("aaa01", c.stage, c.passthrough)
+			if !slices.Equal(got, c.want) {
+				t.Errorf("jobsLaunchArgs = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestJobsSelectStageLaunchOutput covers the TTY submit path end to end per
+// stage (the injected picker seam, same as the other wiring tests): the
+// launch line names the stage-derived agent for the mapped stages, and the
+// edge stages (define, finished) stay agent-less and print their guidance
+// line. The re-exec always exits non-zero (the go test binary rejects the
+// launch flags), which is what pins that the launch was reached.
+func TestJobsSelectStageLaunchOutput(t *testing.T) {
+	planFixture := func(t *testing.T, root string) {
+		jobsWriteJobFile(t, root, "aaa01_alpha", "brief.md", jobsWrittenBrief("Alpha Job", "aaa01", "feature", "2026-01-01"))
+	}
+	cases := []struct {
+		name     string
+		setup    func(t *testing.T, root string)
+		wantLine string
+		wantGuid string // "" asserts no guidance line is printed
+	}{
+		{
+			name:     "define stays agent-less with guidance",
+			setup:    func(t *testing.T, root string) {}, // jobsBrief alone is frontmatter-only (unwritten)
+			wantLine: "→ Starting a session in aaa01...",
+			wantGuid: "brief.md is not written yet — write it first",
+		},
+		{
+			name:     "plan launches in analyst",
+			setup:    planFixture,
+			wantLine: "→ Starting a session in @analyst for aaa01...",
+		},
+		{
+			name: "implement launches in developer",
+			setup: func(t *testing.T, root string) {
+				planFixture(t, root)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "tasks.md", jobsFilledTasks)
+			},
+			wantLine: "→ Starting a session in @developer for aaa01...",
+		},
+		{
+			name: "review launches in reviewer",
+			setup: func(t *testing.T, root string) {
+				planFixture(t, root)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "tasks.md", jobsFilledTasks)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "implementation.md", jobsFilledImplementation)
+			},
+			wantLine: "→ Starting a session in @reviewer for aaa01...",
+		},
+		{
+			name: "finished stays agent-less with guidance",
+			setup: func(t *testing.T, root string) {
+				planFixture(t, root)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "tasks.md", jobsFilledTasks)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "implementation.md", jobsFilledImplementation)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "verdict.md", jobsApprovedVerdict)
+			},
+			wantLine: "→ Starting a session in aaa01...",
+			wantGuid: "verdict is APPROVED — run mg done to merge",
+		},
+		{
+			name: "rejected verdict bounces back to developer",
+			setup: func(t *testing.T, root string) {
+				planFixture(t, root)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "tasks.md", jobsFilledTasks)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "implementation.md", jobsFilledImplementation)
+				jobsWriteJobFile(t, root, "aaa01_alpha", "verdict.md", jobsRejectedVerdict)
+			},
+			wantLine: "→ Starting a session in @developer for aaa01...",
+		},
+		{
+			name: "explicit passthrough agent names the launch line",
+			setup: func(t *testing.T, root string) {
+				planFixture(t, root)
+			},
+			wantLine: "→ Starting a session in @security for aaa01...",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := jobsCheckout(t, map[string]string{"aaa01_alpha": jobsBrief("Alpha Job", "aaa01", "feature", "2026-01-01")})
+			c.setup(t, root)
+			var passthrough []string
+			if strings.Contains(c.wantLine, "@security") {
+				passthrough = []string{"--agent", "security"}
+			}
+			var out strings.Builder
+			code := runJobs(passthrough, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("aaa01", true))
+			if code == 0 {
+				t.Fatalf("unexpected success; the re-exec should not accept the launch flags")
+			}
+			got := out.String()
+			if !strings.Contains(got, c.wantLine) {
+				t.Errorf("missing launch line %q:\n%s", c.wantLine, got)
+			}
+			if c.wantGuid != "" {
+				if !strings.Contains(got, c.wantGuid) {
+					t.Errorf("missing guidance line %q:\n%s", c.wantGuid, got)
+				}
+			} else {
+				for _, stray := range []string{"brief.md is not written yet", "run mg done to merge"} {
+					if strings.Contains(got, stray) {
+						t.Errorf("unexpected guidance line %q:\n%s", stray, got)
+					}
+				}
+			}
+		})
 	}
 }
