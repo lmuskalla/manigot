@@ -1071,7 +1071,6 @@ func (a *App) agentForKey(k string) string {
 	return ""
 }
 
-
 // jdiStatusBadge renders a short "[...]" tag for a job's list row
 // when an autonomous run has something to report:
 // running (naming the active agent), or one of the two stop reasons.
@@ -1149,9 +1148,28 @@ func pad(s string, n int) string {
 	return s + strings.Repeat(" ", n-len(s))
 }
 
-func truncate(s string, n int) string {
+// AgentDescriptionWidth is the shared cap for rendering an agent's
+// description in every surface that lists agents — the `mg agents` plain
+// listing, the `mg agents` interactive picker, and the TUI's "a" agents
+// picker — so all three truncate identically (via Truncate's ellipsis)
+// instead of running the full 100–200 char description into a wall of text.
+// The full description is deliberately kept out of the truncation: the
+// pickers' SearchKey still carries it, so type-to-filter keeps matching on
+// the whole description.
+const AgentDescriptionWidth = 60
+
+// Truncate shortens s to at most n characters when it is longer: n-1
+// characters plus an ellipsis ("…"). Strings at or under n characters are
+// returned unchanged, and n <= 0 leaves s untouched. This is the shared
+// truncation used by every agents-list surface (see AgentDescriptionWidth)
+// and the internal building block behind truncate.
+func Truncate(s string, n int) string {
 	if n > 0 && len(s) > n {
 		return s[:n-1] + "…"
 	}
 	return s
+}
+
+func truncate(s string, n int) string {
+	return Truncate(s, n)
 }

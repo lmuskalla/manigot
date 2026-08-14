@@ -95,12 +95,17 @@ func (v *agentsPickerView) render() string {
 
 	for i, ag := range v.agents {
 		name := pad(ag.Name, agentPickerNameWidth)
+		// Cap the description to the shared AgentDescriptionWidth and to the
+		// room left on the row after its fixed prefix (2-col marker + name
+		// column + 2-col gap = 20), so a long description can never push a
+		// row past the terminal edge. Short descriptions pass through whole.
+		desc := Truncate(ag.Description, clamp(v.width-20, 1, AgentDescriptionWidth))
 		if i == v.cursor {
-			line := "▶ " + name + "  " + ag.Description
+			line := "▶ " + name + "  " + desc
 			b.WriteString(selectedStyle.Render(line))
 		} else {
 			line := "  " + name + "  "
-			b.WriteString(dimStyle.Render(line) + dimStyle.Render(ag.Description))
+			b.WriteString(dimStyle.Render(line) + dimStyle.Render(desc))
 		}
 		b.WriteString("\n")
 	}

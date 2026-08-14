@@ -160,4 +160,71 @@ func TestAgentsPickerGetsAgentRows(t *testing.T) {
 	if !strings.Contains(gotRows[2].Label, "custom") || !strings.Contains(gotRows[2].Label, "(project)") {
 		t.Errorf("row 2 label missing project-only tag: %q", gotRows[2].Label)
 	}
+	// Short descriptions pass through whole — no ellipsis anywhere.
+	for i, row := range gotRows {
+		if strings.Contains(row.Label, "…") {
+			t.Errorf("row %d label truncated a short description: %q", i, row.Label)
+		}
+	}
+}
+
+// TestAgentsListingCapsDescription pins the plain non-TTY listing's
+// description capping: a long description renders truncated with an ellipsis,
+// so each row stays one readable line with the name column intact.
+func TestAgentsListingCapsDescription(t *testing.T) {
+	long := strings.Repeat("z", 150)
+	agentsCheckout(t, map[string]string{"analyst": long}, "", nil)
+	var out strings.Builder
+	code := runAgents(nil, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (non-TTY refusal)", code)
+	}
+	got := out.String()
+	if !strings.Contains(got, "1) analyst") {
+		t.Errorf("listing missing the name column:\n%s", got)
+	}
+	if !strings.Contains(got, "…") {
+		t.Errorf("capped listing should show an ellipsis:\n%s", got)
+	}
+	if strings.Contains(got, strings.Repeat("z", 60)) {
+		t.Errorf("listing description not capped to AgentDescriptionWidth:\n%s", got)
+	}
+}
+
+// TestAgentsPickerRowsCapDescription pins the TTY picker row formatting: the
+// label carries name + source tag + truncated description (ellipsis on long
+// ones), and the SearchKey keeps the full description so type-to-filter still
+// matches on it.
+func TestAgentsPickerRowsCapDescription(t *testing.T) {
+	long := strings.Repeat("y", 200)
+	proj := t.TempDir()
+	agentsCheckout(t, map[string]string{"analyst": "global analyst"}, proj, map[string]string{"analyst": long})
+	t.Chdir(proj)
+
+	var gotRows []ui.PickerRow
+	pick := func(title string, rows []ui.PickerRow) (string, bool, error) {
+		gotRows = rows
+		return "", false, nil // cancelled
+	}
+	var out strings.Builder
+	code := runAgents(nil, strings.NewReader(""), &out, &strings.Builder{}, true, pick)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (cancel exits quietly)", code)
+	}
+	if len(gotRows) != 1 {
+		t.Fatalf("picker rows = %d, want 1", len(gotRows))
+	}
+	row := gotRows[0]
+	if row.SearchKey != "analyst "+long {
+		t.Errorf("SearchKey = %q..., want the full description preserved", row.SearchKey[:30])
+	}
+	if !strings.Contains(row.Label, "analyst") || !strings.Contains(row.Label, "(project override)") {
+		t.Errorf("label missing name/source tag: %q", row.Label)
+	}
+	if !strings.Contains(row.Label, "…") {
+		t.Errorf("label should end the long description with an ellipsis: %q", row.Label)
+	}
+	if strings.Contains(row.Label, strings.Repeat("y", 60)) {
+		t.Errorf("label description not capped to AgentDescriptionWidth: %q", row.Label)
+	}
 }

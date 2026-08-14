@@ -54,7 +54,7 @@ func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty 
 	fmt.Fprintln(stdout, "Available agents:")
 	fmt.Fprintln(stdout, "")
 	for i, a := range agents {
-		fmt.Fprintf(stdout, "  %2d) %-14s %s%s\n", i+1, a.Name, a.Description, agentSource(home, projectAgentsDir, a.Name))
+		fmt.Fprintf(stdout, "  %2d) %-14s %s%s\n", i+1, a.Name, ui.Truncate(a.Description, ui.AgentDescriptionWidth), agentSource(home, projectAgentsDir, a.Name))
 	}
 	fmt.Fprintln(stdout, "")
 
@@ -68,7 +68,12 @@ func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty 
 		rows = append(rows, ui.PickerRow{
 			ID:        a.Name,
 			SearchKey: a.Name + " " + a.Description,
-			Label:     fmt.Sprintf("%-14s %s%s", a.Name, a.Description, agentSource(home, projectAgentsDir, a.Name)),
+			// Name + source tag + truncated description: the tag sits before
+			// the description so the shared Picker's whole-label truncation
+			// (which cuts from the end) takes the description, never the tag.
+			// SearchKey above still carries the full description, so
+			// type-to-filter keeps matching on it.
+			Label: fmt.Sprintf("%-14s%s %s", a.Name, agentSource(home, projectAgentsDir, a.Name), ui.Truncate(a.Description, ui.AgentDescriptionWidth)),
 		})
 	}
 

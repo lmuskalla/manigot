@@ -100,6 +100,43 @@ func TestAgentsPickerRender(t *testing.T) {
 	}
 }
 
+func TestAgentsPickerRenderCapsLongDescription(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	v := newAgentsPickerView([]agentlist.Agent{{Name: "sysadmin", Description: long}}, 80, 24)
+	out := v.render()
+	if !strings.Contains(out, "…") {
+		t.Errorf("long description should be truncated with an ellipsis:\n%s", out)
+	}
+	if strings.Contains(out, strings.Repeat("x", 60)) {
+		t.Errorf("description should be capped to AgentDescriptionWidth:\n%s", out)
+	}
+}
+
+func TestAgentsPickerRenderKeepsShortDescriptionWhole(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	out := v.render()
+	for _, want := range []string{"Break a brief into tasks.", "Implement tasks.", "Review implementations."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("short description %q should render untruncated:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "…") {
+		t.Errorf("short descriptions should not be truncated:\n%s", out)
+	}
+}
+
+func TestAgentsPickerRenderCapsToViewWidth(t *testing.T) {
+	// At a narrow width the description is capped to the room left on the
+	// row — 2-col marker + 16-col name + 2-col gap = 20 chars of prefix — not
+	// just to AgentDescriptionWidth, so a row never spills past the edge.
+	long := strings.Repeat("x", 200)
+	v := newAgentsPickerView([]agentlist.Agent{{Name: "a", Description: long}}, 40, 24)
+	out := v.render()
+	if strings.Contains(out, strings.Repeat("x", 21)) {
+		t.Errorf("description should be capped to the remaining row width:\n%s", out)
+	}
+}
+
 // --- App wiring: "a" from the list opens the picker --------------------------
 
 func TestUpdateListAKeyOpensPicker(t *testing.T) {
