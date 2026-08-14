@@ -271,7 +271,12 @@ computed `diff` tab (the `mg diff` quick eyeball — `git log --oneline` +
 `git diff --stat` over `<base>...<branch>`, see the `mg diff` command above),
 edits `brief.md`, launches agents, and runs the job lifecycle directly —
 `mg job`, `mg done` and `mg delete` are function calls, not subprocesses, and
-the done/delete confirmations are in-TUI views with the scripts' wording.
+the done/delete confirmations are in-TUI views with the scripts' wording. Its
+"a" launch-an-agent picker behaves like the CLI's `mg agents` picker:
+↑/↓/k/j navigate, type to filter (case-insensitive substring over the
+agent's name and description, narrowing the list until esc clears it), enter
+launches the highlighted agent, esc clears the filter before cancelling, and
+q cancels.
 
 `mg jdi` drives a job's fixed `@analyst` → `@developer` → `@reviewer`
 sequence end to end via the session launcher's `--print` path, stopping at

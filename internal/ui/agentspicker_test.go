@@ -93,7 +93,7 @@ func TestAgentsPickerSelected(t *testing.T) {
 func TestAgentsPickerRender(t *testing.T) {
 	v := newAgentsPickerView(testAgents(), 80, 24)
 	out := v.render()
-	for _, want := range []string{"Launch an agent", "analyst", "Break a brief into tasks.", "developer", "reviewer", "enter launch", "esc cancel"} {
+	for _, want := range []string{"Launch an agent", "analyst", "Break a brief into tasks.", "developer", "reviewer", "enter launch", "type to filter", "esc/q cancel"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q:\n%s", want, out)
 		}
@@ -134,6 +134,200 @@ func TestAgentsPickerRenderCapsToViewWidth(t *testing.T) {
 	out := v.render()
 	if strings.Contains(out, strings.Repeat("x", 21)) {
 		t.Errorf("description should be capped to the remaining row width:\n%s", out)
+	}
+}
+
+// --- type-to-filter ---------------------------------------------------------
+
+// TestAgentsPickerFilterNarrows covers the core filtering behaviour: typing
+// against an agent's name/description narrows the list, and the cursor is
+// clamped into the filtered list — mirroring TestPickerFilterNarrows.
+func TestAgentsPickerFilterNarrows(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	v.cursor = 2 // start at the bottom so clamping is observable
+	if got := v.update(keyMsg("dev")); got != apNone {
+		t.Fatalf("typing should not return an action, got %v", got)
+	}
+	if v.filter != "dev" {
+		t.Fatalf("filter = %q, want dev", v.filter)
+	}
+	if got := v.filtered(); len(got) != 1 || got[0].Name != "developer" {
+		t.Errorf("filtered = %+v, want just developer", got)
+	}
+	if v.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 (clamped into the filtered list)", v.cursor)
+	}
+	// The filter is case-insensitive.
+	v.update(keyMsg("Z")) // "devZ" — no match
+	if got := v.filtered(); len(got) != 0 {
+		t.Errorf("filter devZ = %+v, want no rows", got)
+	}
+}
+
+// TestAgentsPickerFilterEscClearsBeforeCancel pins the two-stage esc: a first
+// esc clears the filter (restoring the full list) and only a second one
+// cancels — mirroring TestPickerFilterEscClearsBeforeCancel.
+func TestAgentsPickerFilterEscClearsBeforeCancel(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("dev"))
+	v.cursor = 0
+	if got := v.update(keyMsg("esc")); got != apNone {
+		t.Fatalf("esc with an active filter should not cancel, got %v", got)
+	}
+	if v.filter != "" || len(v.agents) != 3 || len(v.filtered()) != 3 {
+		t.Errorf("after esc: filter = %q, filtered = %d, want cleared full list", v.filter, len(v.filtered()))
+	}
+	if got := v.update(keyMsg("esc")); got != apCancel {
+		t.Fatalf("second esc (no filter) should cancel, got %v", got)
+	}
+}
+
+// TestAgentsPickerFilterBackspace covers editing the filter: backspace deletes
+// the last rune, widening the match set again — mirroring
+// TestPickerFilterBackspace.
+func TestAgentsPickerFilterBackspace(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("deve")) // matches developer only
+	if got := v.filtered(); len(got) != 1 || got[0].Name != "developer" {
+		t.Fatalf("filter deve = %+v, want just developer", got)
+	}
+	v.update(keyMsg("backspace")) // "dev" — still just developer
+	if v.filter != "dev" {
+		t.Errorf("filter = %q, want dev", v.filter)
+	}
+	if got := v.filtered(); len(got) != 1 || got[0].Name != "developer" {
+		t.Errorf("filter dev = %+v, want just developer", got)
+	}
+	v.update(keyMsg("backspace")) // "de" — still just developer
+	if v.filter != "de" {
+		t.Errorf("filter = %q, want de", v.filter)
+	}
+	if len(v.filtered()) != 1 {
+		t.Errorf("filtered = %d rows, want 1 (de only matches developer)", len(v.filtered()))
+	}
+	v.update(keyMsg("backspace")) // "d" — still just developer
+	if v.filter != "d" {
+		t.Errorf("filter = %q, want d", v.filter)
+	}
+	if len(v.filtered()) != 1 {
+		t.Errorf("filtered = %d rows, want 1 (d only matches developer)", len(v.filtered()))
+	}
+	v.update(keyMsg("backspace")) // "" — full list back
+	if v.filter != "" {
+		t.Errorf("filter = %q, want empty", v.filter)
+	}
+	if len(v.filtered()) != 3 {
+		t.Errorf("filtered = %d rows, want 3 (full list)", len(v.filtered()))
+	}
+	v.update(keyMsg("backspace")) // empty filter — backspace must be a no-op
+	if v.filter != "" {
+		t.Errorf("filter = %q after backspace on empty filter, want still empty", v.filter)
+	}
+}
+
+// TestAgentsPickerFilterNavInterplay pins the navigation-vs-input resolution:
+// with no filter, j/k navigate and q cancels; once a filter is active the
+// same keys extend it, and navigation moves to the arrows. Clearing the
+// filter (esc) flips the keys back — mirroring TestPickerFilterNavInterplay.
+func TestAgentsPickerFilterNavInterplay(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("j")) // no filter yet — navigates
+	if v.cursor != 1 {
+		t.Errorf("j with no filter should navigate, cursor = %d, want 1", v.cursor)
+	}
+	if got := v.update(keyMsg("q")); got != apCancel {
+		t.Errorf("q with no filter should cancel, got %v", got)
+	}
+
+	// With a filter active the same keys type.
+	v = newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("B")) // start the filter ("Break" — analyst only)
+	if got := v.filtered(); len(got) != 1 || got[0].Name != "analyst" {
+		t.Fatalf("filter B = %+v, want just analyst", got)
+	}
+	v.update(keyMsg("j")) // extends the filter, does not navigate
+	if v.filter != "Bj" {
+		t.Errorf("filter = %q, want Bj (j types while filtering)", v.filter)
+	}
+	if v.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 (j must not navigate while filtering)", v.cursor)
+	}
+	v.update(keyMsg("q")) // q types while filtering, does not cancel
+	if v.filter != "Bjq" {
+		t.Errorf("filter = %q, want Bjq (q types while filtering)", v.filter)
+	}
+	// "Bjq" matches nothing, so arrows have no row to move to.
+	v.update(keyMsg("down"))
+	if v.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 (no matches to navigate)", v.cursor)
+	}
+
+	// esc flips the keys back to navigation; a fresh filter matching two
+	// rows ("v" — developer and reviewer) lets the arrows move within it.
+	v.update(keyMsg("esc"))
+	if v.filter != "" {
+		t.Fatalf("filter = %q, want empty after esc", v.filter)
+	}
+	v.update(keyMsg("down"))
+	if v.cursor != 1 {
+		t.Errorf("cursor = %d, want 1 (keys back after clearing)", v.cursor)
+	}
+	v.update(keyMsg("v"))
+	if len(v.filtered()) != 2 {
+		t.Fatalf("filter v = %+v, want two rows", v.filtered())
+	}
+	v.update(keyMsg("down"))
+	if v.cursor != 1 {
+		t.Errorf("down while filtering = %d, want 1 (arrows navigate the filtered list)", v.cursor)
+	}
+}
+
+// TestAgentsPickerFilterSubmit verifies enter reports the filtered row's
+// agent, and that a filter matching nothing cannot be submitted — mirroring
+// TestPickerFilterSubmit.
+func TestAgentsPickerFilterSubmit(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("w")) // matches reviewer only ("Review")
+	if got := v.filtered(); len(got) != 1 || got[0].Name != "reviewer" {
+		t.Fatalf("filter w = %+v, want just reviewer", got)
+	}
+	if got := v.update(keyMsg("enter")); got != apSubmit {
+		t.Fatalf("enter should submit, got %v", got)
+	}
+	if ag, ok := v.selected(); !ok || ag.Name != "reviewer" {
+		t.Errorf("selected() = %+v, %v, want reviewer", ag, ok)
+	}
+
+	v = newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("z")) // no agent contains z
+	if len(v.filtered()) != 0 {
+		t.Fatalf("filter z = %+v, want no rows", v.filtered())
+	}
+	if got := v.update(keyMsg("enter")); got != apNone {
+		t.Errorf("enter with an empty filtered list should be a no-op, got %v", got)
+	}
+}
+
+// TestAgentsPickerFilterRender pins the filtered render: the filter line and
+// the changed footer appear, and a matching-nothing filter renders "no
+// matches" — mirroring TestPickerFilterRender.
+func TestAgentsPickerFilterRender(t *testing.T) {
+	v := newAgentsPickerView(testAgents(), 80, 24)
+	v.update(keyMsg("impl"))
+	out := v.render()
+	for _, want := range []string{"filter: impl", "developer", "Implement tasks.", "esc clear filter"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "analyst") {
+		t.Errorf("filtered-out row must not render:\n%s", out)
+	}
+
+	v.update(keyMsg("z")) // "implz" — no matches
+	out = v.render()
+	if !strings.Contains(out, "no matches") {
+		t.Errorf("missing no-matches hint:\n%s", out)
 	}
 }
 
