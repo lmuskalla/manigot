@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/lmuskalla/manigot/internal/project"
 )
 
 // keyMsg builds a tea.KeyMsg for a single rune, the standard way these tests
@@ -277,11 +278,18 @@ func gitRun(t *testing.T, dir string, args ...string) {
 func gitInitRepo(t *testing.T) (dir, defaultBranch string) {
 	t.Helper()
 	dir = t.TempDir()
-	gitRun(t, dir, "init", "-q")
+	// -b main pins the default branch: the diff tab resolves the base via
+	// git.SymbolicRefHead (no origin/HEAD in a scratch repo → "main"), so a
+	// "master"-defaulted repo would make every diff-tab test hit the
+	// git-error placeholder instead of the happy path. The helper still reads
+	// the branch back (don't assume), keeping its contract unchanged.
+	gitRun(t, dir, "init", "-q", "-b", "main")
 	gitRun(t, dir, "config", "user.email", "t@example.com")
 	gitRun(t, dir, "config", "user.name", "Test")
 	gitRun(t, dir, "config", "commit.gpgsign", "false")
-	os.WriteFile(filepath.Join(dir, "README"), []byte("init\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("init\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	gitRun(t, dir, "add", "README")
 	gitRun(t, dir, "commit", "-q", "-m", "init")
 	b, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
@@ -534,23 +542,23 @@ func discoverOneJob(t *testing.T, root, name string) job.Job {
 	return jobs[0]
 }
 
-func TestDetailViewHasFiveTabsIncludingLog(t *testing.T) {
+func TestDetailViewHasSixTabsIncludingLogAndDiff(t *testing.T) {
 	root := t.TempDir()
 	j := discoverOneJob(t, root, "aaaa01_x")
 
 	d := newDetailView(j, 80, 24)
-	if len(d.tabs) != 5 {
-		t.Fatalf("len(d.tabs) = %d, want 5", len(d.tabs))
+	if len(d.tabs) != 6 {
+		t.Fatalf("len(d.tabs) = %d, want 6", len(d.tabs))
 	}
-	last := d.tabs[4]
-	if last.label != "log" {
-		t.Errorf("tabs[4].label = %q, want %q", last.label, "log")
+	last := d.tabs[5]
+	if last.label != "diff" {
+		t.Errorf("tabs[5].label = %q, want %q", last.label, "diff")
 	}
-	if !last.isLog {
-		t.Error("tabs[4].isLog = false, want true")
+	if !last.isDiff {
+		t.Error("tabs[5].isDiff = false, want true")
 	}
 	if last.editable {
-		t.Error("the log tab must never be editable")
+		t.Error("the diff tab must never be editable")
 	}
 }
 
@@ -607,6 +615,193 @@ func TestDetailViewLogTabKeyBindingSwitchesTab(t *testing.T) {
 	d.update(keyMsg("5"))
 	if d.cur != 4 {
 		t.Errorf("after pressing 5, cur = %d, want 4 (the log tab)", d.cur)
+	}
+}
+
+func TestDetailViewDiffTabKeyBindingSwitchesTab(t *testing.T) {
+	root := t.TempDir()
+	j := discoverOneJob(t, root, "aaaa01_x")
+
+	d := newDetailView(j, 80, 24)
+	d.update(keyMsg("6"))
+	if d.cur != 5 {
+		t.Errorf("after pressing 6, cur = %d, want 5 (the diff tab)", d.cur)
+	}
+}
+
+// --- diff tab content (TASK-1) ----------------------------------------------
+//
+// These build real scratch repos (the gitInitRepo / addJobWorktree helpers
+// above) so the diff tab's git.LogOneline / git.DiffStat calls run end to
+// end. The scratch repos are inited with default branch "main" (see
+// gitInitRepo), matching the diff tab's SymbolicRefHead fallback, so the
+// happy paths resolve.
+
+// TestDetailDiffTabShowsLogAndStatForDivergedBranch is the core content
+// test: a job branch with its own commits renders the quick eyeball — the
+// branch's own commits (git log --oneline) plus the files it changed
+// (git diff --stat), the same output `mg diff` prints.
+func TestDetailDiffTabShowsLogAndStatForDivergedBranch(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/df01_d", "df01_d", "# Brief: Diff\n\nstatus: open\nid: df01\nbranch: feature/df01_d\ndate: 2026-01-01\n")
+	// A real change on the job branch, committed after the scaffold commit.
+	if err := os.WriteFile(filepath.Join(wtPath, "jobfile.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, wtPath, "add", "jobfile.txt")
+	gitRun(t, wtPath, "commit", "-q", "-m", "ZZDIFFCOMMIT")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	d.cur = 5
+	d.ensureCurrentSized()
+
+	if !d.tabs[5].exists {
+		t.Error("diff tab exists=false for a diverged branch, want true")
+	}
+	// The log half: the branch's own commit subject.
+	if !strings.Contains(d.tabs[5].content, "ZZDIFFCOMMIT") {
+		t.Errorf("diff tab missing the branch commit in the log half:\n%s", d.tabs[5].content)
+	}
+	// The stat half: the changed file.
+	if !strings.Contains(d.tabs[5].content, "jobfile.txt") {
+		t.Errorf("diff tab missing the changed file in the stat half:\n%s", d.tabs[5].content)
+	}
+	// And the rendered detail view shows it once the tab is active.
+	if out := d.render(); !strings.Contains(out, "ZZDIFFCOMMIT") {
+		t.Errorf("rendered detail view missing the diff tab's log content:\n%s", out)
+	}
+}
+
+// TestDetailDiffTabNoChangesPlaceholderForUndivergedBranch: a branch that has
+// not diverged from base (no commits of its own) gets `mg diff`'s exact
+// "No changes on <branch> relative to <base>." line, not an error — the
+// three-dot range is empty, which git reports as success with no output.
+func TestDetailDiffTabNoChangesPlaceholderForUndivergedBranch(t *testing.T) {
+	dir, base := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := filepath.Join(wts, "df02_u")
+	gitRun(t, dir, "worktree", "add", wtPath, "-b", "feature/df02_u")
+	// The job dir is written but NOT committed: the branch still points at
+	// the same commit as base, so the three-dot range is empty.
+	jobDir := filepath.Join(wtPath, "docs", "jobs", "df02_u")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: U\n\nstatus: open\nid: df02\nbranch: feature/df02_u\ndate: 2026-01-01\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	d.cur = 5
+	d.ensureCurrentSized()
+
+	if !d.tabs[5].exists {
+		t.Error("diff tab exists=false for an undiverged branch, want true (\"no changes\" is a real result)")
+	}
+	want := "No changes on feature/df02_u relative to " + base + "."
+	if !strings.Contains(d.tabs[5].content, want) {
+		t.Errorf("diff tab content = %q, want it to contain %q", d.tabs[5].content, want)
+	}
+}
+
+// TestDetailDiffTabNoBranchPlaceholderForWorkingTreeFallback: a job with no
+// branch (job.Discover's non-repo working-tree-only fallback) gets a
+// plain-text placeholder and exists=false — there is nothing to diff, so the
+// tab bar dims it like the log tab's no-run-yet state.
+func TestDetailDiffTabNoBranchPlaceholderForWorkingTreeFallback(t *testing.T) {
+	root := t.TempDir() // not a git repo
+	j := discoverOneJob(t, root, "aaaa07_n")
+	if j.Branch != "" {
+		t.Fatalf("setup: expected a branchless job on a non-repo project, got %q", j.Branch)
+	}
+
+	d := newDetailView(j, 80, 24)
+	d.cur = 5
+	d.ensureCurrentSized()
+
+	if d.tabs[5].exists {
+		t.Error("diff tab exists=true with no branch, want false")
+	}
+	if !strings.Contains(d.tabs[5].content, "no branch to diff") {
+		t.Errorf("diff tab placeholder = %q, want it to explain there is no branch to diff", d.tabs[5].content)
+	}
+}
+
+// TestDetailDiffTabRespectsConfiguredBaseBranch proves the diff tab resolves
+// the base from .manigot/manigot.json exactly like `mg diff` does: with a
+// configured baseBranch that does not exist, the diff must fail against it
+// (degrading to the error placeholder that names it) rather than silently
+// falling back to the default-branch resolution.
+func TestDetailDiffTabRespectsConfiguredBaseBranch(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	if err := project.Save(dir, project.Settings{BaseBranch: "trunk"}); err != nil {
+		t.Fatal(err)
+	}
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/df04_t", "df04_t", "# Brief: T\n\nstatus: open\nid: df04\nbranch: feature/df04_t\ndate: 2026-01-01\n")
+	if err := os.WriteFile(filepath.Join(wtPath, "jobfile.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, wtPath, "add", "jobfile.txt")
+	gitRun(t, wtPath, "commit", "-q", "-m", "ZZDIFFCOMMIT")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	d.cur = 5
+	d.ensureCurrentSized()
+
+	if d.tabs[5].exists {
+		t.Error("diff tab exists=true against a missing base branch, want false (degrade)")
+	}
+	if !strings.Contains(d.tabs[5].content, "trunk") {
+		t.Errorf("diff tab did not resolve the configured base branch 'trunk':\n%s", d.tabs[5].content)
+	}
+}
+
+// TestDetailDiffTabRefreshPicksUpNewCommits is the ctrl+r path: reloading the
+// detail view (App.refresh → detail.reload → loadTab) must re-compute the
+// diff from git, so commits made after the view opened show up.
+func TestDetailDiffTabRefreshPicksUpNewCommits(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	wtPath := addJobWorktree(t, dir, wts, "feature/df05_r", "df05_r", "# Brief: R\n\nstatus: open\nid: df05\nbranch: feature/df05_r\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+	d := newDetailView(jobs[0], 80, 24)
+	d.cur = 5
+	d.ensureCurrentSized()
+	if strings.Contains(d.tabs[5].content, "ZZREFRESHCOMMIT") {
+		t.Fatal("setup: refresh commit already present before it was made")
+	}
+
+	// Commit a new change on the job branch out-of-band, then refresh.
+	if err := os.WriteFile(filepath.Join(wtPath, "jobfile.txt"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, wtPath, "add", "jobfile.txt")
+	gitRun(t, wtPath, "commit", "-q", "-m", "ZZREFRESHCOMMIT")
+
+	d.reload()
+	if !strings.Contains(d.tabs[5].content, "ZZREFRESHCOMMIT") {
+		t.Errorf("reload did not pick up the new commit in the diff tab:\n%s", d.tabs[5].content)
+	}
+	if !strings.Contains(d.tabs[5].content, "jobfile.txt") {
+		t.Errorf("reload did not pick up the new file in the diff tab's stat:\n%s", d.tabs[5].content)
 	}
 }
 

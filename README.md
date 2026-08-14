@@ -687,10 +687,10 @@ Detail view:
 
 | key | action |
 |---|---|
-| `tab` / `1`-`5` | switch tab: brief · tasks · implementation · verdict · log |
+| `tab` / `1`-`6` | switch tab: brief · tasks · implementation · verdict · log · diff |
 | `pgup`/`pgdn`, `g`/`G` | scroll |
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
-| `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log are agent- or mg jdi-written) |
+| `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log/diff are agent-, mg jdi-, or TUI-computed) |
 | `D` | mark the job done — shows an in-TUI confirmation, then runs the in-process finish lifecycle (squash-merge + archive) |
 | `j` | run `mg jdi` against this job, detached in the background — no window is opened; watch it via the log tab or the list's status badge (see [Autonomous mode](#autonomous-mode-mg-jdi) and [mg jdi status & log](#mg-jdi-status--log) below) |
 | `x` / `del` | permanently delete the job — shows an in-TUI confirmation (with a dirty-worktree warning when the job's worktree has uncommitted changes), then runs the in-process delete lifecycle. `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
@@ -705,6 +705,19 @@ a bounce back to the developer shows that developer's second call as attempt
 2. It reads
 "_no mg jdi run has happened for this job yet_" until the first `mg jdi` run
 against it; large files are tailed, not loaded in full. Never editable.
+
+The **diff** tab is the TUI's representation of `mg diff <id>`: it computes
+what the job's branch changed relative to the project's base branch — the
+same quick eyeball the CLI prints by default (`git log --oneline` followed by
+`git diff --stat` over the three-dot range `<base>...<branch>`, per
+[docs/GIT_DIFF.md](docs/GIT_DIFF.md)), so you can review the job's changes
+in the TUI before marking it done with `D`. The base branch resolves exactly
+as `mg diff` does — the project's configured `baseBranch`, falling back to
+`origin/HEAD` → `main` — and the tab degrades instead of crashing: a job
+with no branch (not a git worktree job) or a git error shows a plain-text
+placeholder, and an undiverged branch reads "No changes on `<branch>`
+relative to `<base>`." It is recomputed on every `ctrl+r`, so newly
+committed changes appear on refresh. Never editable.
 
 Below the footer, the job view also shows a **git-log strip** — the same dim
 `shortHash  subject  relTime  branch` lines the job list's recent-activity

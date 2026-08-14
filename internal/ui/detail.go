@@ -11,6 +11,7 @@ import (
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
 	"github.com/lmuskalla/manigot/internal/markdown"
+	"github.com/lmuskalla/manigot/internal/project"
 )
 
 // The four markdown files every job directory holds, in the order the detail
@@ -47,6 +48,15 @@ type fileTab struct {
 	// the sidecar lives outside any job's worktree (tied only to the job
 	// name, not a branch), and it is never editable.
 	isLog bool
+
+	// isDiff marks the sixth "diff" tab: its content is computed, not read —
+	// the quick-eyeball of what the job's branch changed relative to the
+	// project's base branch (git.LogOneline + git.DiffStat over
+	// <base>...<branch>, the same output `mg diff`'s default prints, see
+	// loadDiff), built fresh on every load so ctrl+r picks up new commits.
+	// Like the log tab it is never editable; a job with no branch (the
+	// working-tree fallback) or a git error gets a plain-text placeholder.
+	isDiff bool
 
 	// stale marks a viewer that is out of date with content and/or the
 	// current body size, because the tab wasn't active when that changed —
@@ -93,8 +103,8 @@ type detailView struct {
 	recentMax int
 }
 
-// newDetailView loads all four job files, plus the fifth "log" tab, for
-// job j at the given viewport size.
+// newDetailView loads all four job files, plus the fifth "log" tab and the
+// sixth computed "diff" tab, for job j at the given viewport size.
 func newDetailView(j job.Job, width, height int) *detailView {
 	d := &detailView{job: j, width: width, height: height}
 	for _, f := range jobFiles {
@@ -108,6 +118,11 @@ func newDetailView(j job.Job, width, height int) *detailView {
 	d.tabs = append(d.tabs, fileTab{
 		label:  "log",
 		isLog:  true,
+		viewer: markdown.NewViewer(d.bodyWidth(), d.bodyHeight()),
+	})
+	d.tabs = append(d.tabs, fileTab{
+		label:  "diff",
+		isDiff: true,
 		viewer: markdown.NewViewer(d.bodyWidth(), d.bodyHeight()),
 	})
 	d.loadTabs()
@@ -178,6 +193,16 @@ func (d *detailView) loadTab(i int) {
 		}
 		return
 	}
+	if t.isDiff {
+		d.loadDiff(t)
+		if i == d.cur {
+			t.viewer.SetContent(t.content)
+			t.stale = false
+		} else {
+			t.stale = true
+		}
+		return
+	}
 	data, ok := d.readFile(t)
 	if ok {
 		t.exists = true
@@ -192,6 +217,69 @@ func (d *detailView) loadTab(i int) {
 	} else {
 		t.stale = true
 	}
+}
+
+// loadDiff fills the computed "diff" tab's content: the quick-eyeball of
+// what the job's branch changed relative to the project's base branch —
+// `git log --oneline <base>...<branch>` followed by
+// `git diff --stat <base>...<branch>` — mirroring `mg diff`'s default output
+// (cmd/mg/diff.go) and its base-branch resolution chain (see
+// diffBaseBranch), so the TUI's diff tab and the CLI's `mg diff` always
+// agree on the range shown.
+//
+// Degrades, never crashes: a job with no branch (the working-tree fallback /
+// non-repo project) and a git error (e.g. the branch deleted out from under
+// the TUI) each set exists=false and a plain-text placeholder; an undiverged
+// branch gets the same "No changes on <branch> relative to <base>." line
+// `mg diff` prints, with exists=true — it is a real, informative result.
+func (d *detailView) loadDiff(t *fileTab) {
+	t.exists = false
+	if d.job.Branch == "" {
+		t.content = "_this job has no branch to diff (not a git worktree job)._"
+		return
+	}
+	base := d.diffBaseBranch()
+	logs, err := git.LogOneline(d.job.Root, base, d.job.Branch)
+	if err != nil {
+		t.content = diffErrorPlaceholder(err)
+		return
+	}
+	files, err := git.DiffStat(d.job.Root, base, d.job.Branch)
+	if err != nil {
+		t.content = diffErrorPlaceholder(err)
+		return
+	}
+	if logs == "" && files == "" {
+		t.content = fmt.Sprintf("No changes on %s relative to %s.", d.job.Branch, base)
+		t.exists = true
+		return
+	}
+	t.exists = true
+	t.content = logs + "\n\n" + files
+}
+
+// diffBaseBranch resolves the base branch the diff tab diffs against,
+// mirroring cmd/mg/diff.go's chain: the project's configured baseBranch
+// (.manigot/manigot.json), falling back to git.SymbolicRefHead
+// (origin/HEAD → "main") when unset — deliberately NOT
+// Settings.BaseBranchValue(), which would default to "main" and skip the
+// origin/HEAD fallback. The same chain doneConfirmLines uses for its
+// "Branch : <job> → <base>" line, so the diff tab and the done confirmation
+// never disagree about what the job will be merged into.
+func (d *detailView) diffBaseBranch() string {
+	settings, _ := project.Load(d.job.Root)
+	base := settings.BaseBranch
+	if base == "" {
+		base = git.SymbolicRefHead(d.job.Root)
+	}
+	return base
+}
+
+// diffErrorPlaceholder is the plain-text content for the diff tab when git
+// fails to produce the range (e.g. a branch deleted out from under the TUI):
+// the error's message, dimmed so it reads as a degrade, not a crash.
+func diffErrorPlaceholder(err error) string {
+	return "_could not compute the diff: " + err.Error() + "_"
 }
 
 // stripLeadingFrontmatter removes the leading H1 + "key: value" frontmatter
@@ -399,6 +487,8 @@ func (d *detailView) update(msg tea.KeyMsg) {
 		d.cur = 3
 	case "5":
 		d.cur = 4
+	case "6":
+		d.cur = 5
 	default:
 		d.active().scroll(msg)
 	}
@@ -775,7 +865,7 @@ func (d *detailView) renderTabs(width int) string {
 // keeps replacing the hint entirely, same as before.
 func (d *detailView) renderFooter() string {
 	pos := d.current().viewer.Position()
-	hint := "tab/1-5 files"
+	hint := "tab/1-6 files"
 	if d.current().editable {
 		// "e" only does anything on editable tabs (brief.md today), so the
 		// hint is scoped to when it would actually work.

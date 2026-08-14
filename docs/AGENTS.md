@@ -266,10 +266,12 @@ repository (a `.git` directory).
 ### TUI and `mg jdi`
 
 `mg tui` runs the Bubble Tea TUI in-process. It lists open jobs (from
-`git worktree list` via `job.Discover`), opens each job's four files, edits
-`brief.md`, launches agents, and runs the job lifecycle directly — `mg job`,
-`mg done` and `mg delete` are function calls, not subprocesses, and the
-done/delete confirmations are in-TUI views with the scripts' wording.
+`git worktree list` via `job.Discover`), opens each job's four files plus a
+computed `diff` tab (the `mg diff` quick eyeball — `git log --oneline` +
+`git diff --stat` over `<base>...<branch>`, see the `mg diff` command above),
+edits `brief.md`, launches agents, and runs the job lifecycle directly —
+`mg job`, `mg done` and `mg delete` are function calls, not subprocesses, and
+the done/delete confirmations are in-TUI views with the scripts' wording.
 
 `mg jdi` drives a job's fixed `@analyst` → `@developer` → `@reviewer`
 sequence end to end via the session launcher's `--print` path, stopping at
@@ -368,7 +370,9 @@ either way.
   `git diff --stat` by default, `--name-only` for filenames, `--full` for the
   complete patch, `--tig` to browse it interactively in tig on the host (a
   clear error when tig isn't installed). Open jobs only — `mg done`
-  squash-merges the branch away, leaving nothing to diff
+  squash-merges the branch away, leaving nothing to diff. The same default
+  quick eyeball is also available in the TUI as the detail view's computed
+  `diff` tab (key `6`), which resolves the base branch the same way
 - `mg tui` — host-side terminal UI for browsing jobs and firing agents
 - `mg jdi --job/-j <id> [--profile <name>]` — drive a job's `@analyst` →
   `@developer` → `@reviewer` sequence end to end, unattended, under the given
