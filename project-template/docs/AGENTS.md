@@ -25,6 +25,9 @@ committing agent is never broken by a missing marker.
 Agent sessions also restrict git to reading history and making commits (the
 session git shim): worktree management, branch deletes, resets, checkouts,
 pushes, and the other destructive subcommands are refused.
+The manigot TUI's job detail view also offers a `t` key that opens the job's
+branch diff in tig (`mg diff <job> --tig`) in a tmux split pane / new
+terminal, gated on tig being installed on the host.
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

@@ -278,7 +278,10 @@ the done/delete confirmations are in-TUI views with the scripts' wording. Its
 ↑/↓/k/j navigate, type to filter (case-insensitive substring over the
 agent's name and description, narrowing the list until esc clears it), enter
 launches the highlighted agent, esc clears the filter before cancelling, and
-q cancels.
+q cancels. The detail view's `t` key opens the job's branch diff in tig on
+the host (`mg diff <job> --tig`) in a tmux split pane / new terminal exactly
+like an agent launch; the footer hint and the key are gated on tig being
+installed on the host.
 
 `mg jdi` drives a job's fixed `@analyst` → `@developer` → `@reviewer`
 sequence end to end via the session launcher's `--print` path, stopping at

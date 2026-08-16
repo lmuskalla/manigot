@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/lmuskalla/manigot/internal/launch"
 	"github.com/lmuskalla/manigot/internal/markdown"
 	"github.com/lmuskalla/manigot/internal/project"
 )
@@ -101,12 +102,21 @@ type detailView struct {
 	// commitStripShown clamps to, mirroring listView.recentActivityShown's
 	// use of its maxRecent parameter.
 	recentMax int
+
+	// tigAvailable caches whether tig resolves on the host (launch.
+	// TigAvailable), queried when the view is constructed and cached for the
+	// view's lifetime — a new job open re-checks it. It gates both the "t"
+	// key and the footer hint (see renderFooter), the "if available" reading
+	// of the brief; the launch path re-checks availability itself as an
+	// authoritative backstop. The zero value (unavailable) keeps every
+	// existing footer test green without stubbing.
+	tigAvailable bool
 }
 
 // newDetailView loads all four job files, plus the fifth "log" tab and the
 // sixth computed "diff" tab, for job j at the given viewport size.
 func newDetailView(j job.Job, width, height int) *detailView {
-	d := &detailView{job: j, width: width, height: height}
+	d := &detailView{job: j, width: width, height: height, tigAvailable: launch.TigAvailable()}
 	for _, f := range jobFiles {
 		d.tabs = append(d.tabs, fileTab{
 			label:    f.label,
@@ -877,6 +887,12 @@ func (d *detailView) renderFooter() string {
 		// "e" only does anything on editable tabs (brief.md today), so the
 		// hint is scoped to when it would actually work.
 		hint += " · e edit"
+	}
+	if d.tigAvailable && d.job.Branch != "" {
+		// "t" opens tig on the job's branch diff — only reachable when tig
+		// is installed on the host AND the job has a branch to browse (the
+		// same availability gate the key itself checks, see app.go).
+		hint += " · t tig"
 	}
 	hint += " · P push to origin · x/del remove job · ctrl+r refresh · esc back · q quit"
 

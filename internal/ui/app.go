@@ -913,6 +913,33 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, a.pushCmd(a.detail.job.Branch)
+	case "t":
+		// Open the job's branch diff in tig — a host-side TUI launched just
+		// like an agent session (tmux split pane / new terminal, see
+		// launch.Tig), not a background process like "j". The availability
+		// gate is cached on the detail view at open time (tigAvailable); the
+		// launch path re-checks it itself as an authoritative backstop, so a
+		// stale cached gate surfaces a synchronous error here rather than a
+		// doomed pane.
+		if !a.detail.tigAvailable {
+			a.detail.setStatus("tig is not installed on the host — install it, or use the diff tab")
+			return a, nil
+		}
+		if a.detail.job.Branch == "" {
+			a.detail.setStatus("no branch known for this job")
+			return a, nil
+		}
+		// The job is passed by Name (id_slug), not ID: `mg diff` resolves the
+		// job's branch via an exact match on that tail segment (see launch.
+		// Tig's own doc), and there is no profile flag — mg diff is a host
+		// git command, not a session launch.
+		desc, err := launch.Tig(a.detail.job.Name, a.root, a.settings.Terminal)
+		if err != nil {
+			a.detail.setStatus(cmdErrorText(err))
+		} else {
+			a.detail.setStatus("→ tig in " + desc)
+		}
+		return a, nil
 	}
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.

@@ -3,6 +3,7 @@ package launch
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1075,5 +1076,151 @@ func TestJdiForwardsGivenProfile(t *testing.T) {
 		if !strings.Contains(recorded, want) {
 			t.Errorf("missing %q in stub record:\n%s", want, recorded)
 		}
+	}
+}
+
+// --- tig (diff browsing) launcher -------------------------------------------
+
+// stubTigLookPath points the launch package's tig lookup at fn and restores
+// it after the test, so tig availability can be controlled without a real
+// tig on the test machine.
+func stubTigLookPath(t *testing.T, fn func(string) (string, error)) {
+	t.Helper()
+	old := TigLookPath
+	TigLookPath = fn
+	t.Cleanup(func() { TigLookPath = old })
+}
+
+func TestTigShellCommandFormat(t *testing.T) {
+	got := tigShellCommand("/usr/local/bin/manigot", "term_tig-in-tui", "/home/me/proj")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' diff 'term_tig-in-tui' --tig"
+	if !strings.HasPrefix(got, wantInner) {
+		t.Errorf("tigShellCommand =\n %q\nwant prefix\n %q", got, wantInner)
+	}
+	// The inner command must be wrapped so a failure holds the window open,
+	// exactly like every other launch path.
+	if got != holdOnFailure(wantInner) {
+		t.Errorf("tigShellCommand does not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// A tig launch must never carry --profile, --agent or --job — `mg diff`
+// takes none of them (it is a host git command, not a session launch).
+func TestTigShellCommandOmitsSessionFlags(t *testing.T) {
+	got := tigShellCommand("/usr/local/bin/manigot", "term_tig-in-tui", "/home/me/proj")
+	for _, flag := range []string{"--profile", "--agent", "--job"} {
+		if strings.Contains(got, flag) {
+			t.Errorf("tigShellCommand unexpectedly contains %s: %q", flag, got)
+		}
+	}
+}
+
+// A checkout in a directory with spaces must still produce a single word for
+// the manigot path, since the string is re-parsed by osascript / bash -lc.
+func TestTigShellCommandQuotesPathWithSpaces(t *testing.T) {
+	got := tigShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "term_tig-in-tui", "/tmp/p")
+	if !strings.Contains(got, `'/Users/me/My Projects/manigot/scripts/run.sh'`) {
+		t.Errorf("manigot path not quoted as one word in %q", got)
+	}
+}
+
+// Embedded quotes in either value must be escaped, not close the quote.
+func TestTigShellCommandQuoteEscape(t *testing.T) {
+	got := tigShellCommand("/bin/manigot", "a'b", "/path/with'quote")
+	if !strings.Contains(got, `'/path/with'\''quote'`) {
+		t.Errorf("root quote not escaped in %q", got)
+	}
+	if !strings.Contains(got, `'a'\''b'`) {
+		t.Errorf("jobID quote not escaped in %q", got)
+	}
+}
+
+func TestTigAvailableTrueWhenTigResolves(t *testing.T) {
+	stubTigLookPath(t, func(name string) (string, error) {
+		if name != "tig" {
+			t.Errorf("TigLookPath called with %q, want %q", name, "tig")
+		}
+		return "/usr/bin/tig", nil
+	})
+	if !TigAvailable() {
+		t.Error("TigAvailable() = false, want true when tig resolves")
+	}
+}
+
+func TestTigAvailableFalseWhenTigMissing(t *testing.T) {
+	stubTigLookPath(t, func(name string) (string, error) {
+		return "", exec.ErrNotFound
+	})
+	if TigAvailable() {
+		t.Error("TigAvailable() = true, want false when tig does not resolve")
+	}
+}
+
+// TestTigMissingErrorsBeforeSpawn: with tig unresolvable, Tig must return the
+// not-installed error synchronously without consulting ExeOverride at all —
+// the availability check is the authoritative backstop that runs first, so a
+// stale cached gate can never open a doomed pane. ExeOverride is pointed at a
+// marker that fails loudly: reaching it would change the error.
+func TestTigMissingErrorsBeforeSpawn(t *testing.T) {
+	stubTigLookPath(t, func(name string) (string, error) {
+		return "", exec.ErrNotFound
+	})
+	old := ExeOverride
+	t.Cleanup(func() { ExeOverride = old })
+	ExeOverride = func() (string, error) { return "", errors.New("exe override should not be consulted") }
+
+	_, err := Tig("term_tig-in-tui", t.TempDir(), "")
+	if err == nil || !strings.Contains(err.Error(), "tig is not installed") {
+		t.Errorf("Tig with tig missing = %v, want the not-installed error", err)
+	}
+}
+
+// TestTigExeOverrideFailure: with tig available but the mg binary unresolvable
+// (ExeOverride fails), Tig must surface that resolution error — mirroring
+// Agent/Quick's own "locate mg binary" error path.
+func TestTigExeOverrideFailure(t *testing.T) {
+	stubTigLookPath(t, func(name string) (string, error) {
+		return "/usr/bin/tig", nil
+	})
+	old := ExeOverride
+	t.Cleanup(func() { ExeOverride = old })
+	ExeOverride = func() (string, error) { return "", errors.New("boom") }
+
+	_, err := Tig("term_tig-in-tui", t.TempDir(), "")
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Errorf("Tig with ExeOverride failure = %v, want the resolution error", err)
+	}
+}
+
+// TestTigSuccessThroughTmuxStub exercises the full Tig launch through the
+// existing tmuxStub, mirroring TestAgentAndQuickShareOneTrackedPane: with
+// $TMUX set and a stubbed tmux on PATH, the split-window invocation must carry
+// the tig inner command, the pane must be tagged/recorded, and the returned
+// description must be "tmux pane".
+func TestTigSuccessThroughTmuxStub(t *testing.T) {
+	stub := newTmuxStub(t)
+	stubTigLookPath(t, func(name string) (string, error) {
+		return "/usr/bin/tig", nil
+	})
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	root := t.TempDir()
+	desc, err := Tig("t5oc4j", root, "")
+	if err != nil {
+		t.Fatalf("Tig: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if tmuxLastPaneID == "" {
+		t.Error("Tig launch did not record a pane id")
+	}
+	calls := stub.calls()
+	if !strings.Contains(calls, "diff 't5oc4j' --tig") {
+		t.Errorf("tmux split-window not invoked with the tig inner command:\n%s", calls)
+	}
+	if !strings.Contains(calls, "select-pane -t %100 -T manigot") {
+		t.Errorf("select-pane tagging of the new pane missing:\n%s", calls)
 	}
 }

@@ -28,6 +28,7 @@
 package launch
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -140,6 +141,44 @@ func AgentQuick(agent, projectRoot, profile, terminal string) (string, error) {
 	return launchDetached(inner, terminal)
 }
 
+// Tig opens a new terminal — inside tmux, a split pane in the TUI's current
+// window, exactly like Agent/Quick/AgentQuick, including the replace policy —
+// that runs `mg diff '<jobName>' --tig` in projectRoot: the host-side tig TUI
+// browsing what the job's branch changed (the CLI path already exists —
+// cmd/mg/diff.go runTig resolves the job's branch + the project's base
+// branch, builds the three-dot range <base>...<branch>, runs `tig <range>`,
+// and errors clearly when tig is not installed). terminal is
+// config.Settings.Terminal, threaded through to launchDetached exactly like
+// the other launch paths' own terminal parameter — see Agent's doc for the
+// override semantics. It returns the same short human description of where it
+// opened so the caller can surface it in a status line.
+//
+// Unlike Agent/Quick there is no profile flag: `mg diff` is a plain host git
+// command, not a session launch, so it takes no --profile (and no --agent or
+// --job either).
+//
+// The job is passed by its Name (id_slug), not its ID: `mg diff` resolves the
+// job's branch via an exact match on the branch's id_slug tail segment first,
+// then a unique prefix (cmd/mg/diff.go resolveJobBranch) — and job.Name
+// equals that tail segment exactly, so resolution is unambiguous.
+//
+// Tig re-checks availability itself (TigAvailable) before spawning: the
+// TUI's cached availability gate (detailView.tigAvailable) is only as fresh
+// as the last job open, so a stale cached "available" must surface a
+// synchronous error here rather than opening a doomed pane that dies on the
+// CLI's own tig-missing check.
+func Tig(jobID, projectRoot, terminal string) (string, error) {
+	if !TigAvailable() {
+		return "", errors.New("tig is not installed on the host — install it, or use the diff tab")
+	}
+	exe, err := ExeOverride()
+	if err != nil {
+		return "", fmt.Errorf("locate mg binary: %w", err)
+	}
+	inner := tigShellCommand(exe, jobID, projectRoot)
+	return launchDetached(inner, terminal)
+}
+
 // ExeOverride returns the path of the binary implementing the mg session
 // subcommand — the running binary itself. An exported package-level variable
 // so tests (in this package and internal/ui) can point Agent/Quick/AgentQuick
@@ -151,6 +190,23 @@ var ExeOverride = func() (string, error) { return os.Executable() }
 // ExeOverride, so tests (in this package and internal/ui) can point it at a
 // stub or a resolution failure.
 var JdiExe = func() (string, error) { return os.Executable() }
+
+// TigLookPath resolves the tig binary on the host, mirroring `mg diff --tig`'s
+// own check (cmd/mg/diff.go's tigLookPath). An exported package-level
+// variable, mirroring ExeOverride/JdiExe, so tests (in this package and
+// internal/ui) can point it at a stub or a tig-less PATH instead of requiring
+// tig on the test machine.
+var TigLookPath = exec.LookPath
+
+// TigAvailable reports whether tig resolves on the host — the "if available"
+// gate the TUI's `t` key and footer hint key off (see Tig's own doc for why
+// the launch path re-checks this itself). It is deliberately a lightweight
+// LookPath probe with no version check or config scan: `mg diff --tig` is the
+// authoritative backstop and errors clearly on its own when tig is missing.
+func TigAvailable() bool {
+	_, err := TigLookPath("tig")
+	return err == nil
+}
 
 // Jdi starts `mg jdi --job <jobID> --profile <profile>` detached in the
 // background — no spawned terminal window at all, unlike Agent/Quick.
@@ -437,6 +493,23 @@ func agentQuickShellCommand(manigotPath, agent, projectRoot, profile string) str
 	}
 	inner := fmt.Sprintf("cd %s && %s --profile %s --agent %s",
 		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile), shellQuote(agent))
+	return holdOnFailure(inner)
+}
+
+// tigShellCommand builds the shell string executed inside the new terminal:
+//
+//	cd '<projectRoot>' && '<manigot>' diff '<jobID>' --tig; ec=$?; ...
+//
+// Same cd-first, shellQuote-everything, holdOnFailure-wrap behavior as the
+// other launch paths — the job's files are resolved by `mg diff` from $PWD,
+// so cd-ing first matters exactly as it does for Agent/Quick. No --profile
+// flag: `mg diff` takes none (it is a host git command, not a session
+// launch). Deliberately its own function rather than a generalization of the
+// other shell-command builders, per the file's "separate function per launch
+// path" convention — keeps their exact-format tests unchanged.
+func tigShellCommand(manigotPath, jobID, projectRoot string) string {
+	inner := fmt.Sprintf("cd %s && %s diff %s --tig",
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(jobID))
 	return holdOnFailure(inner)
 }
 
