@@ -696,6 +696,7 @@ Detail view:
 | `x` / `del` | permanently delete the job — shows an in-TUI confirmation (with a dirty-worktree warning when the job's worktree has uncommitted changes), then runs the in-process delete lifecycle. `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull` |
 | `t` | open the job's branch diff in tig (`mg diff <id> --tig`) — spawns in a tmux split pane / new terminal like agent launches; only available when tig is installed on the host |
+| `c` | commit all uncommitted changes in this job's worktree (`git add -A` + `git commit` with a `[<id>] chore: commit all` message) — a catch-all sweep for the files agents sometimes leave behind, so `D`'s clean-tree check isn't tripped |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 

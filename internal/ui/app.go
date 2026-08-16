@@ -6,6 +6,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -236,6 +237,16 @@ type pushMsg struct {
 	err    error
 }
 
+// commitAllMsg reports the outcome of the detail view's "c" commit-all
+// action (a `git add -A` + `git commit` in the job's own worktree, run off
+// the UI thread via commitAllCmd so a slow git call doesn't block
+// rendering). err is git.ErrNothingToCommit when the worktree had no
+// changes — a distinct, non-failure outcome the Update handler reports as
+// "nothing to commit" rather than an error.
+type commitAllMsg struct {
+	err error
+}
+
 // Update handles window resizing and routes key presses to the active view.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -333,6 +344,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.detail.setStatus(cmdErrorText(msg.err))
 			} else {
 				a.detail.setStatus("→ pushed " + msg.branch + " to origin")
+			}
+		}
+		return a, nil
+	case commitAllMsg:
+		if a.detail != nil {
+			switch {
+			case msg.err == nil:
+				a.detail.setStatus("→ committed all changes")
+				// Unlike a push, a commit does change what the detail view
+				// shows: the bottom git-log strip (refreshCommits) and the
+				// computed diff tab (recomputed by reload via loadTabs).
+				// Refresh both so the new commit appears immediately
+				// instead of on the next ctrl+r.
+				a.detail.reload()
+				a.detail.refreshCommits(a.settings.RecentActivityCountValue())
+			case errors.Is(msg.err, git.ErrNothingToCommit):
+				// Distinct non-failure outcome: the worktree was already
+				// clean, so report that plainly rather than as an error.
+				a.detail.setStatus("nothing to commit")
+			default:
+				a.detail.setStatus(cmdErrorText(msg.err))
 			}
 		}
 		return a, nil
@@ -940,6 +972,17 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.detail.setStatus("→ tig in " + desc)
 		}
 		return a, nil
+	case "c":
+		// Commit all uncommitted changes in this job's worktree — a
+		// catch-all sweep for the files agents sometimes leave behind, which
+		// would otherwise trip mg done's clean-tree check. A host-side git
+		// action like "P", not an agent launch: the commit runs in the job's
+		// own worktree so it lands on the job branch (see commitAllCmd).
+		if a.detail.job.Branch == "" {
+			a.detail.setStatus("no branch known for this job")
+			return a, nil
+		}
+		return a, a.commitAllCmd()
 	}
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
@@ -1044,6 +1087,34 @@ func (a *App) pushCmd(branch string) tea.Cmd {
 		defer cancel()
 		err := git.PushWithContext(ctx, root, branch)
 		return pushMsg{branch: branch, err: err}
+	}
+}
+
+// commitAllCmd returns the tea.Cmd behind the "c" commit-all action: a plain
+// git call off the UI goroutine — no interactive process — staging every
+// change in the job's own worktree (git add -A) and committing it, reporting
+// the outcome as a commitAllMsg once it returns. The call is bounded by a
+// timeout (see hostGitTimeout) so a stalled git can't hang the app's command
+// channel forever.
+//
+// The commit runs inside the job's own worktree (git -C <job-worktree>), not
+// a.root — the same reasoning commitBriefCmd documents: a job's files live in
+// its own worktree, a sibling of the project root, so a pathspec relative to
+// a.root would escape the main worktree ("outside repository"), and the
+// commit must land on the *job branch*, not the base branch. The worktree
+// root is derived from the job dir exactly as commitBriefCmd derives it: a
+// job lives at <worktree>/docs/jobs/<id>_<slug>/, so two Dir() hops up lands
+// on the worktree root. The message follows the shared "[ID] <type>:
+// <summary>" convention with the fixed chore-type label "commit all" (a
+// catch-all sweep commit is a chore regardless of the job's own type).
+func (a *App) commitAllCmd() tea.Cmd {
+	worktreeRoot := filepath.Dir(filepath.Dir(a.detail.job.Dir))
+	id := a.detail.job.ID
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), hostGitTimeout)
+		defer cancel()
+		err := git.CommitAllWithContext(ctx, worktreeRoot, fmt.Sprintf("[%s] chore: commit all", id))
+		return commitAllMsg{err: err}
 	}
 }
 

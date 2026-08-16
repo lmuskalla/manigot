@@ -354,6 +354,57 @@ func CommitFileWithContext(ctx context.Context, root, path, message string) erro
 	return nil
 }
 
+// ErrNothingToCommit is returned by CommitAll when the worktree has no
+// changes to commit (git commit's exit-1 empty-index case). It is a
+// *distinct, non-failure* outcome — a caller that asks "commit all" on an
+// already-clean tree should report that the tree is clean, not that
+// something went wrong — so callers can errors.Is it apart from a real
+// error. It deliberately mirrors CommitFile's own treatment of the same
+// git output ("nothing to commit" on stdout) as a non-error, but surfaces
+// the distinction to the caller instead of swallowing it.
+var ErrNothingToCommit = errors.New("nothing to commit")
+
+// CommitAll stages every change under root — new, modified *and deleted*
+// files, via `git add -A` — and commits them with message, via
+// `git commit -m <message>`. It is the git helper behind the TUI detail
+// view's "c" commit-all action: a catch-all sweep that commits whatever an
+// agent left uncommitted in a job's worktree, so mg done's clean-tree check
+// is never tripped by leftovers. `git add -A` honours exclude rules, so
+// paths excluded via .git/info/exclude (e.g. the .opencode/ and .claude/
+// container mount targets, see ExcludeMountTargets) are never re-staged.
+//
+// A worktree with nothing to commit (git commit's empty-index exit-1 case,
+// the same "nothing to commit" stdout CommitFile detects) returns
+// ErrNothingToCommit — a distinct, non-failure outcome, not a wrapped
+// error. A non-repo / missing git binary returns ErrNotARepo; any other
+// failure returns the wrapped error including git's stderr.
+func CommitAll(root, message string) error {
+	return CommitAllWithContext(context.Background(), root, message)
+}
+
+// CommitAllWithContext is CommitAll with a caller-supplied context (see
+// runCtx): used by the TUI's background commit-all cmd, so a stalled git
+// can't hang the app's command channel.
+func CommitAllWithContext(ctx context.Context, root, message string) error {
+	if _, stderr, err := runCtx(ctx, root, "add", "-A"); err != nil {
+		if notARepo(stderr, err) {
+			return ErrNotARepo
+		}
+		return wrapErr("git add -A", err, stderr)
+	}
+	out, stderr, err := runCtx(ctx, root, "commit", "-m", message)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return ErrNotARepo
+		}
+		if strings.Contains(string(out), "nothing to commit") {
+			return ErrNothingToCommit
+		}
+		return wrapErr("git commit", err, stderr)
+	}
+	return nil
+}
+
 // verdictCommitPattern matches a commit subject following @reviewer's own
 // convention (agents/reviewer.md): "[<jobID>] verdict: <summary>". Anchored
 // at the start of the subject and exact on jobID (via regexp.QuoteMeta), so

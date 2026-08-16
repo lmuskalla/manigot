@@ -894,7 +894,7 @@ func (d *detailView) renderFooter() string {
 		// same availability gate the key itself checks, see app.go).
 		hint += " · t tig"
 	}
-	hint += " · P push to origin · x/del remove job · ctrl+r refresh · esc back · q quit"
+	hint += " · P push to origin · c commit all · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {
