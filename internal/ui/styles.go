@@ -58,4 +58,14 @@ var (
 	// terminal's own configured red instead of depending on truecolor
 	// support.
 	warnStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))
+
+	// gitPanelModalStyle is the popup box that floats the git panel over the
+	// detail view: a rounded, accent-bordered box with a solid background
+	// fill, so the cells it covers are fully replaced rather than letting the
+	// detail content show through (see App.gitPanelOverlay's placeOverlay).
+	gitPanelModalStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accent).
+				Background(lipgloss.Color("#2D2A3E")).
+				Padding(1, 2)
 )

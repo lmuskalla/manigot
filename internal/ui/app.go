@@ -468,7 +468,7 @@ func (a *App) View() string {
 	case stateConfirm:
 		content = a.confirm.render()
 	case stateGitPanel:
-		content = a.gitPanel.render()
+		content = a.gitPanelOverlay()
 	default:
 		content = a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	}

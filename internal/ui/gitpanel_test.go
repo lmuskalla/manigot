@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lmuskalla/manigot/internal/job"
+	"github.com/muesli/termenv"
 )
 
 // --- the "g" key opens the panel ---------------------------------------------
@@ -463,5 +466,148 @@ func TestMergeMsgErrorSurfacesInDetailStatus(t *testing.T) {
 	}
 	if want := cmdErrorText(wantErr); got.detail.status != want {
 		t.Errorf("status = %q, want %q", got.detail.status, want)
+	}
+}
+
+// --- popup overlay -----------------------------------------------------------
+
+// TestGitPanelOverlayKeepsDetailVisible verifies the stateGitPanel render is
+// now a popup over the detail view rather than a full-frame swap: App.View
+// still shows the job detail underneath the panel box, alongside the panel's
+// own title, rows, and key hint.
+func TestGitPanelOverlayKeepsDetailVisible(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/git08_g", "git08_g", "# Brief: Git\n\nstatus: open\nid: git08\nbranch: feature/git08_g\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	a := NewApp(dir, jobs)
+	a.width, a.height = 80, 24
+	a.detail = newDetailView(jobs[0], 80, 24)
+	a.gitPanel = newGitPanelView(80, 24)
+	a.state = stateGitPanel
+
+	out := a.View()
+	// The panel's own surface is all present...
+	for _, want := range []string{"Git", "Commit all", "Push to origin", "Merge default branch", "enter run", "esc/q cancel"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("overlay missing panel row %q:\n%s", want, out)
+		}
+	}
+	// ...and so is the underlying detail view — the popup floats over it
+	// instead of replacing it.
+	if !strings.Contains(out, a.detail.job.Title) {
+		t.Errorf("overlay lost the underlying detail title %q:\n%s", a.detail.job.Title, out)
+	}
+	// The box carries the modal's border and background, marking it as a
+	// floating dialog rather than a plain full-frame list.
+	if !strings.Contains(out, "╭") || !strings.Contains(out, "╰") {
+		t.Errorf("overlay lacks the rounded modal border:\n%s", out)
+	}
+}
+
+// TestGitPanelOverlayCentersBoxInFrame pins the popup geometry: the box's
+// top-left corner lands centered within the viewport, not pinned to the top
+// left or anywhere off-frame, and the rows above and below it stay untouched.
+func TestGitPanelOverlayCentersBoxInFrame(t *testing.T) {
+	// gitPanelModalStyle renders "xx\nyy" as a 6-row (2 content + padding +
+	// border) × 8-column box. Over a 12×10 base that places it at x=2, y=2.
+	modal := gitPanelModalStyle.Render("xx\nyy")
+	var baseLines []string
+	for i := 0; i < 10; i++ {
+		baseLines = append(baseLines, strings.Repeat(" ", 12))
+	}
+	out := placeOverlay(strings.Join(baseLines, "\n"), modal, 12, 10)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 10 {
+		t.Fatalf("overlay height = %d lines, want 10:\n%s", len(lines), out)
+	}
+	// The box top border sits at row 2, indented to column 2 within a 12-wide
+	// row; content rows carry the box's own padding.
+	if got := ansi.StringWidth(lines[2]); got != 12 {
+		t.Errorf("box top row width = %d, want 12", got)
+	}
+	if !strings.HasPrefix(ansi.Strip(lines[2]), "  ╭──────╮") {
+		t.Errorf("box top border misplaced:\n%q", ansi.Strip(lines[2]))
+	}
+	if !strings.Contains(ansi.Strip(lines[4]), "xx") || !strings.Contains(ansi.Strip(lines[5]), "yy") {
+		t.Errorf("box content misplaced:\n%s", out)
+	}
+	if !strings.Contains(ansi.Strip(lines[7]), "╰──────╯") {
+		t.Errorf("box bottom border missing:\n%s", out)
+	}
+	// Rows above and below the box are untouched frame space.
+	for _, i := range []int{0, 1, 8, 9} {
+		if strings.TrimSpace(ansi.Strip(lines[i])) != "" {
+			t.Errorf("row %d should be untouched frame space, got %q", i, ansi.Strip(lines[i]))
+		}
+	}
+}
+
+// TestPlaceOverlayMergesCellsOverAnsiBase pins the cell-by-cell merge: the
+// box replaces exactly the base cells it covers and the base content — and
+// its ANSI styling — survives on both sides, with the frame width preserved.
+func TestPlaceOverlayMergesCellsOverAnsiBase(t *testing.T) {
+	forceColor(t)
+	// 12-cell base line: "aaaa" + bold "BBBB" + "cccc".
+	base := "aaaa" + lipgloss.NewStyle().Bold(true).Render("BBBB") + "cccc"
+	// 2-cell-wide box centered on the 12-cell frame → covers columns 5–6
+	// (the middle of the bold run).
+	out := placeOverlay(base, "xx\nyy", 12, 1)
+
+	if got := ansi.StringWidth(out); got != 12 {
+		t.Errorf("overlay width = %d, want 12", got)
+	}
+	if want := "aaaaB" + "xx" + "Bcccc"; ansi.Strip(out) != want {
+		t.Errorf("overlay = %q, want %q", ansi.Strip(out), want)
+	}
+}
+
+// TestCutDropsMiddleRangeWithoutSplittingAnsi verifies cut removes exactly
+// the [lo, hi) cell range of a rendered line, leaving the ANSI intact on both
+// sides and keeping the display widths of the two halves correct.
+func TestCutDropsMiddleRangeWithoutSplittingAnsi(t *testing.T) {
+	forceColor(t)
+	// "ab" + red("cd") + "ef": dropping columns 2–3 must remove the red "cd"
+	// without tearing the color codes open or shifting the surviving cells.
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	line := "ab" + red.Render("cd") + "ef"
+	left, right := cut(line, 2, 4)
+
+	if plain := ansi.Strip(left + right); plain != "abef" {
+		t.Errorf("cut produced %q, want %q", plain, "abef")
+	}
+	if wl, wr := ansi.StringWidth(left), ansi.StringWidth(right); wl != 2 || wr != 2 {
+		t.Errorf("cut widths = %d/%d, want 2/2", wl, wr)
+	}
+}
+
+// forceColor switches the lipgloss renderer to a color profile for the
+// duration of a test, so styles actually emit their ANSI sequences instead of
+// degrading to plain text under the default no-color test profile. Restored
+// on the way out so later tests keep seeing the same rendering they expect.
+func forceColor(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
+
+// TestCutClampsOutOfRangeColumns pins cut's boundary behavior: a range past
+// the line's end or a line shorter than the range degrades to no-op rather
+// than corrupting the line.
+func TestCutClampsOutOfRangeColumns(t *testing.T) {
+	line := "abcdef"
+	left, right := cut(line, 0, 3)
+	if left != "" || right != "def" {
+		t.Errorf("cut(0,3) = %q + %q, want %q + %q", left, right, "", "def")
+	}
+	left, right = cut(line, 0, 99)
+	if left != "" || right != "" {
+		t.Errorf("cut past end left %q + %q, want empty both", left, right)
+	}
+	left, right = cut("ab", 4, 6)
+	if left != "ab" || right != "" {
+		t.Errorf("short line cut = %q + %q, want %q + %q", left, right, "ab", "")
 	}
 }
