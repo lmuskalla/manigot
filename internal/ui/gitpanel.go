@@ -44,7 +44,7 @@ var gitPanelActions = []struct {
 
 // gitPanelView is the small "git" modal opened by "g" from the detail view: a
 // non-destructive picker of the git commands the detail view offers, one per
-// row, moved through with ↑/↓/k/j and run with enter. It deliberately has no
+// row, moved through with ↑/↓ and run with enter. It deliberately has no
 // type-to-filter (three fixed rows need none, unlike the agents picker) and
 // no filtering bookkeeping at all — the App acts on gpSubmit via the
 // selected() action, exactly like agentsPickerView hands its apSubmit to
@@ -67,7 +67,7 @@ func (v *gitPanelView) resize(width, height int) {
 }
 
 // update processes a key for the panel and reports the resulting action:
-// ↑/↓/k/j move the cursor (clamped to the three rows), enter submits, esc/q
+// ↑/↓ move the cursor (clamped to the three rows), enter submits, esc/q
 // cancel. Every other key is a no-op.
 func (v *gitPanelView) update(msg tea.KeyMsg) gpAction {
 	switch msg.String() {
@@ -75,11 +75,11 @@ func (v *gitPanelView) update(msg tea.KeyMsg) gpAction {
 		return gpSubmit
 	case "esc", "q":
 		return gpCancel
-	case "up", "k":
+	case "up":
 		if v.cursor > 0 {
 			v.cursor--
 		}
-	case "down", "j":
+	case "down":
 		if v.cursor < len(gitPanelActions)-1 {
 			v.cursor++
 		}
@@ -112,7 +112,7 @@ func (v *gitPanelView) render() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("↑/↓/k/j navigate · enter run · esc/q cancel"))
+	b.WriteString(dimStyle.Render("↑/↓ navigate · enter run · esc/q cancel"))
 	return b.String()
 }
 

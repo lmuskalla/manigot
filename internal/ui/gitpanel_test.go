@@ -84,8 +84,11 @@ func TestGitKeyWithoutBranchIsNoop(t *testing.T) {
 
 // --- panel navigation & cancel ----------------------------------------------
 
-// TestGitPanelNavigation covers the picker's cursor movement: ↑/↓/k/j move
-// and clamp at the ends, and the cursor starts on the first row.
+// TestGitPanelNavigation covers the picker's cursor movement: ↑/↓ move and
+// clamp at the ends, and the cursor starts on the first row. The vim keys j/k
+// are regression-pinned as no-ops — the panel dropped them when the project
+// decided not to use vim keys to navigate (mirroring the list view's
+// TestListJAndKNoLongerMoveCursor precedent).
 func TestGitPanelNavigation(t *testing.T) {
 	v := newGitPanelView(80, 24)
 	if v.cursor != 0 {
@@ -99,17 +102,34 @@ func TestGitPanelNavigation(t *testing.T) {
 	if v.cursor != 1 {
 		t.Errorf("down = %d, want 1", v.cursor)
 	}
-	v.update(keyMsg("j"))
+	v.update(keyMsg("down"))
 	if v.cursor != 2 {
-		t.Errorf("j = %d, want 2", v.cursor)
+		t.Errorf("down = %d, want 2", v.cursor)
 	}
 	v.update(keyMsg("down")) // already at bottom — must not overrun
 	if v.cursor != 2 {
 		t.Errorf("down at bottom moved cursor to %d, want 2", v.cursor)
 	}
+	v.update(keyMsg("up"))
+	if v.cursor != 1 {
+		t.Errorf("up = %d, want 1", v.cursor)
+	}
+
+	// Regression: j/k no longer move the cursor — pressed mid-list where a
+	// bound j/k would have moved, they must leave the selection alone.
+	v.update(keyMsg("j"))
+	if v.cursor != 1 {
+		t.Errorf("cursor = %d after pressing j, want 1 (j must not move the selection)", v.cursor)
+	}
 	v.update(keyMsg("k"))
 	if v.cursor != 1 {
-		t.Errorf("k = %d, want 1", v.cursor)
+		t.Errorf("cursor = %d after pressing k, want 1 (k must not move the selection)", v.cursor)
+	}
+
+	// Contrast: ↑/↓ still navigate.
+	v.update(keyMsg("down"))
+	if v.cursor != 2 {
+		t.Errorf("cursor = %d after pressing down, want 2 (down must still move the selection)", v.cursor)
 	}
 }
 

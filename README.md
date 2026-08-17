@@ -768,7 +768,7 @@ job with no branch or a project that isn't a git repo.
 
 The **git panel** (`g`) is a small modal listing the detail view's git
 commands — **Commit all**, **Push to origin**, and **Merge default branch**
-— one per row, moved through with `↑`/`↓`/`k`/`j` and run with `enter`
+— one per row, moved through with `↑`/`↓` and run with `enter`
 (`esc`/`q` cancels back to the detail view). The first two are the same
 actions as the `c`/`P` accelerators; **Merge default branch** brings a job's
 worktree up to speed before starting work: it runs `git merge --no-edit`
