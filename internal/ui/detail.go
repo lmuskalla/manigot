@@ -529,7 +529,10 @@ func (t *fileTab) scroll(msg tea.KeyMsg) {
 		t.viewer.PageDown()
 	case "pgup":
 		t.viewer.PageUp()
-	case "g", "home":
+	// "g" is deliberately not bound here anymore: the detail view's App-level
+	// "g" key opens the git panel (see app.go's updateDetail), so the viewer
+	// scroll-to-top stays reachable via "home" only.
+	case "home":
 		t.viewer.Top()
 	case "G", "end":
 		t.viewer.Bottom()
@@ -894,7 +897,7 @@ func (d *detailView) renderFooter() string {
 		// same availability gate the key itself checks, see app.go).
 		hint += " · t tig"
 	}
-	hint += " · P push to origin · c commit all · x/del remove job · ctrl+r refresh · esc back · q quit"
+	hint += " · g git · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
 		if strings.Contains(d.status, "\n") {

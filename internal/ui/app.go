@@ -34,6 +34,7 @@ const (
 	stateSettings // "s" from the list — edit the persisted TUI settings
 	stateAgents   // "a" from the list — pick and launch any agent as a jobless quick session
 	stateConfirm  // "D" / "delete" / "x" from the detail — confirm a destructive lifecycle action
+	stateGitPanel // "g" from the detail — pick a git command (commit all / push / merge default branch)
 )
 
 // App is the root Bubble Tea model.
@@ -80,6 +81,11 @@ type App struct {
 	// confirm is non-nil while state == stateConfirm — the destructive-action
 	// confirmation for "D" (mark done) and "delete"/"x" (delete).
 	confirm *confirmView
+
+	// gitPanel is non-nil while state == stateGitPanel — the "g" git-command
+	// picker over the detail view (commit all / push to origin / merge
+	// default branch).
+	gitPanel *gitPanelView
 
 	// status is a transient one-line message shown in the footer (e.g. after
 	// running mg-job or an agent).
@@ -247,6 +253,18 @@ type commitAllMsg struct {
 	err error
 }
 
+// mergeMsg reports the outcome of the detail view's "merge default branch"
+// action (a `git merge --no-edit <base>` run in the job's own worktree, off
+// the UI thread via mergeCmd so a slow git call doesn't block rendering).
+// base names the resolved base branch the merge ran against, for the success
+// status line; err is non-nil on any git failure (a dirty worktree git
+// refuses, a conflict leaves the tree in the conflicted state for the user
+// to resolve manually — both surface as ordinary status errors).
+type mergeMsg struct {
+	base string
+	err  error
+}
+
 // Update handles window resizing and routes key presses to the active view.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -273,6 +291,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if a.confirm != nil {
 			a.confirm.resize(a.width, a.height)
+		}
+		if a.gitPanel != nil {
+			a.gitPanel.resize(a.width, a.height)
 		}
 		return a, nil
 	case editorDoneMsg:
@@ -368,6 +389,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return a, nil
+	case mergeMsg:
+		// A merge changes what the detail view shows exactly like a commit
+		// does — the job branch moved, so the bottom git-log strip
+		// (refreshCommits) and the computed diff tab (reload via loadTabs)
+		// both need rebuilding. A conflict or a dirty-worktree refusal
+		// surfaces as a plain status error; the tree is left as git put it
+		// for the user to resolve manually.
+		if a.detail != nil {
+			if msg.err != nil {
+				a.detail.setStatus(cmdErrorText(msg.err))
+			} else {
+				a.detail.setStatus("→ merged " + msg.base + " into " + a.detail.job.Branch)
+				a.detail.reload()
+				a.detail.refreshCommits(a.settings.RecentActivityCountValue())
+			}
+		}
+		return a, nil
 	case spinnerTickMsg:
 		// Advance the activity indicator. The step always moves (even on the
 		// tick that observes the run has ended — the check below happens
@@ -407,6 +445,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateAgentsPicker(msg)
 		case stateConfirm:
 			return a.updateConfirm(msg)
+		case stateGitPanel:
+			return a.updateGitPanel(msg)
 		}
 	}
 	return a, nil
@@ -427,6 +467,8 @@ func (a *App) View() string {
 		content = a.agentsPicker.render()
 	case stateConfirm:
 		content = a.confirm.render()
+	case stateGitPanel:
+		content = a.gitPanel.render()
 	default:
 		content = a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	}
@@ -844,6 +886,38 @@ func (a *App) updateAgentsPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// updateGitPanel handles keys in the "git" panel opened by "g" from the
+// detail view: esc/q cancels back to the detail view; enter dispatches the
+// highlighted action — the same cmds the "c" commit-all and "P" push-to-origin
+// accelerators run, plus TASK-2's mergeCmd — and then returns to the detail
+// view, where the resulting *Msg's Update case (commitAllMsg / pushMsg /
+// mergeMsg) surfaces the outcome in the status line. The "g" key itself is
+// gated on the job having a branch (see updateDetail), so no branch guard is
+// needed here — every action in the panel targets the job's worktree branch.
+func (a *App) updateGitPanel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch a.gitPanel.update(msg) {
+	case gpCancel:
+		a.gitPanel = nil
+		a.state = stateDetail
+	case gpSubmit:
+		action, ok := a.gitPanel.selected()
+		a.gitPanel = nil
+		a.state = stateDetail
+		if !ok || a.detail == nil {
+			return a, nil
+		}
+		switch action {
+		case gitActionCommitAll:
+			return a, a.commitAllCmd()
+		case gitActionPush:
+			return a, a.pushCmd(a.detail.job.Branch)
+		case gitActionMerge:
+			return a, a.mergeCmd()
+		}
+	}
+	return a, nil
+}
+
 // updateDetail handles keys while a job's files are showing.
 func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -983,6 +1057,23 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, a.commitAllCmd()
+	case "g":
+		// Open the git panel: the discoverable entry for the detail view's
+		// git commands (commit all / push to origin / merge default branch).
+		// "g" used to be the file viewer's scroll-to-top key (shared with
+		// "home"); the panel takes it over, and scroll-to-top stays
+		// reachable via "home" (see detail.go's scroll). The "P"/"c" direct
+		// accelerators stay bound too — the panel is the discoverable
+		// surface, not a removal of the old keys. Gated on the job having a
+		// branch like "P"/"c"/"t": every action in the panel targets the
+		// job's worktree branch.
+		if a.detail.job.Branch == "" {
+			a.detail.setStatus("no branch known for this job")
+			return a, nil
+		}
+		a.gitPanel = newGitPanelView(a.width, a.height)
+		a.state = stateGitPanel
+		return a, nil
 	}
 	// Action bar: fire the agent whose key matches, if it is valid for the
 	// current job's stage.
@@ -1115,6 +1206,39 @@ func (a *App) commitAllCmd() tea.Cmd {
 		defer cancel()
 		err := git.CommitAllWithContext(ctx, worktreeRoot, fmt.Sprintf("[%s] chore: commit all", id))
 		return commitAllMsg{err: err}
+	}
+}
+
+// mergeCmd returns the tea.Cmd behind the "merge default branch" action: a
+// plain git call off the UI goroutine — no interactive process — merging the
+// resolved base branch into the job's own worktree (git merge --no-edit
+// <base>, see git.MergeBranch), reporting the outcome as a mergeMsg once it
+// returns. The call is bounded by a timeout (see hostGitTimeout) so a stalled
+// git can't hang the app's command channel forever.
+//
+// The base branch resolves through the same chain diffBaseBranch and
+// doneConfirmLines use — the project's configured baseBranch
+// (.manigot/manigot.json, read from the project root via job.Root), falling
+// back to git.SymbolicRefHead (origin/HEAD → "main") — so "merge default
+// branch" merges the same ref the diff tab diffs against and mg done merges
+// into. The merge itself runs inside the job's own worktree (git -C
+// <job-worktree>), not a.root — the job's files and branch live there, and a
+// merge targeting the job branch must run where that branch is checked out.
+// The worktree root is derived from the job dir exactly as commitAllCmd
+// derives it: a job lives at <worktree>/docs/jobs/<id>_<slug>/, so two Dir()
+// hops up lands on the worktree root.
+func (a *App) mergeCmd() tea.Cmd {
+	worktreeRoot := filepath.Dir(filepath.Dir(a.detail.job.Dir))
+	settings, _ := project.Load(a.detail.job.Root)
+	base := settings.BaseBranch
+	if base == "" {
+		base = git.SymbolicRefHead(a.detail.job.Root)
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), hostGitTimeout)
+		defer cancel()
+		err := git.MergeBranchWithContext(ctx, worktreeRoot, base)
+		return mergeMsg{base: base, err: err}
 	}
 }
 

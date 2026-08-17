@@ -7,7 +7,7 @@ import "github.com/lmuskalla/manigot/internal/agents"
 //
 // The keys are chosen so they never collide with the detail view's other
 // bindings (tab file nav, 1-6 file/log/diff select, e edit, D mark done, j run
-// mg-jdi, x/del remove job, t tig, b switch branch, P push to origin, c commit
+// mg-jdi, x/del remove job, t tig, g git panel, P push to origin, c commit
 // all, esc/q, ctrl+r). Developer uses "d" (case matters: distinct from the
 // Shift'd "D" mark-done binding). This table is the single source of truth for
 // both the rendering and the key handling. Agent names are the agents package

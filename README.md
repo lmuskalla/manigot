@@ -688,7 +688,7 @@ Detail view:
 | key | action |
 |---|---|
 | `tab` / `1`-`6` | switch tab: brief · tasks · implementation · verdict · log · diff |
-| `pgup`/`pgdn`, `g`/`G` | scroll |
+| `pgup`/`pgdn`, `home`/`G` | scroll |
 | `p` `a` `d` `r` `s` | run the agent shown in the action bar (Owner, Analyst, Developer, Reviewer, Security — all five are always available, regardless of the job's stage) |
 | `e` | edit `brief.md` in `$EDITOR` (only on the brief tab — tasks/implementation/verdict/log/diff are agent-, mg jdi-, or TUI-computed) |
 | `D` | mark the job done — shows an in-TUI confirmation, then runs the in-process finish lifecycle (squash-merge + archive) |
@@ -697,6 +697,7 @@ Detail view:
 | `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull` |
 | `t` | open the job's branch diff in tig (`mg diff <id> --tig`) — spawns in a tmux split pane / new terminal like agent launches; only available when tig is installed on the host |
 | `c` | commit all uncommitted changes in this job's worktree (`git add -A` + `git commit` with a `[<id>] chore: commit all` message) — a catch-all sweep for the files agents sometimes leave behind, so `D`'s clean-tree check isn't tripped |
+| `g` | open the git panel — pick one of the detail view's git commands for this job's worktree: commit all, push to origin, or merge default branch (see below) |
 | `ctrl+r` | refresh |
 | `esc` | back to list |
 
@@ -729,6 +730,20 @@ cross-branch `git.RecentCommits`). It is refreshed when the job opens and on
 `ctrl+r`, sized like the list's strip (up to the settings'
 recent-activity count, floor of one line), and disappears entirely for a
 job with no branch or a project that isn't a git repo.
+
+The **git panel** (`g`) is a small modal listing the detail view's git
+commands — **Commit all**, **Push to origin**, and **Merge default branch**
+— one per row, moved through with `↑`/`↓`/`k`/`j` and run with `enter`
+(`esc`/`q` cancels back to the detail view). The first two are the same
+actions as the `c`/`P` accelerators; **Merge default branch** brings a job's
+worktree up to speed before starting work: it runs `git merge --no-edit`
+inside the job's own worktree, merging in the project's locally-resolved
+base branch (the configured `baseBranch`, falling back to `origin/HEAD` →
+`main` — the same local base the diff tab diffs against and `D` merges into).
+It never fetches, so it merges whatever state that base branch is in
+locally; a worktree that is already up to date is a successful no-op, and a
+merge conflict leaves the tree in git's conflicted state for you to resolve
+manually (the detail view's status line reports the conflict).
 
 `e` resolves the editor to run as: the settings screen's Editor field (see
 below), if set; otherwise `$VISUAL`, then `$EDITOR`, then whichever of
