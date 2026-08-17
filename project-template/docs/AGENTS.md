@@ -28,6 +28,11 @@ pushes, and the other destructive subcommands are refused.
 The manigot TUI's job detail view also offers a `t` key that opens the job's
 branch diff in tig (`mg diff <job> --tig`) in a tmux split pane / new
 terminal, gated on tig being installed on the host.
+Copying text from inside a session uses OSC 52: your terminal emulator must
+support it, and tmux needs `set-clipboard on` when the session runs inside
+tmux (mg forwards your terminal environment into the container and warns at
+session start when it detects tmux would swallow the clipboard writes — see
+the manigot README's "Clipboard / copying from agent sessions" section).
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

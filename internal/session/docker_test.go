@@ -683,3 +683,188 @@ func TestBuildOpenCodeModelForwardedAsIsLegacy(t *testing.T) {
 	}
 	containsAll(t, inv.Argv, "-e", "OPENCODE_MODEL=custom/model", "-e", "MANIGOT_TOOL=opencode")
 }
+
+// TestBuildTerminalEnvForwarding — the host's terminal-identity vars are
+// forwarded into the container so the in-container TUIs see the real terminal
+// (OSC 52 clipboard emission is gated on them). Forwarding is strictly
+// conditional: only vars set to a non-empty value on the host are forwarded,
+// so a build with none of them set stays byte-identical to one built without
+// the feature.
+func TestBuildTerminalEnvForwarding(t *testing.T) {
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+
+	// Nothing set (or empty): no terminal env is forwarded at all — the argv
+	// is exactly what it would be without the feature.
+	for _, k := range append(append([]string{}, terminalEnvVars...), "WEZTERM_PANE", "WEZTERM_UNIX_SOCKET") {
+		t.Setenv(k, "")
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range terminalEnvVars {
+		if strings.Contains(joined, "-e\n"+k+"=") {
+			t.Errorf("unset %s must not be forwarded:\n%s", k, joined)
+		}
+	}
+	for _, k := range []string{"WEZTERM_PANE", "WEZTERM_UNIX_SOCKET"} {
+		if strings.Contains(joined, "-e\n"+k+"=") {
+			t.Errorf("unset %s must not be forwarded:\n%s", k, joined)
+		}
+	}
+
+	// All set: each var is forwarded with its value, WEZTERM_* included.
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("TERM_PROGRAM", "WezTerm")
+	t.Setenv("TERM_PROGRAM_VERSION", "20240203")
+	t.Setenv("VTE_VERSION", "6800")
+	t.Setenv("KITTY_WINDOW_ID", "42")
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%5")
+	t.Setenv("WT_SESSION", "abc123")
+	t.Setenv("WEZTERM_PANE", "%1")
+	t.Setenv("WEZTERM_UNIX_SOCKET", "/tmp/wezterm.sock")
+	inv, err = BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-e", "TERM=xterm-256color",
+		"-e", "COLORTERM=truecolor",
+		"-e", "TERM_PROGRAM=WezTerm",
+		"-e", "TERM_PROGRAM_VERSION=20240203",
+		"-e", "VTE_VERSION=6800",
+		"-e", "KITTY_WINDOW_ID=42",
+		"-e", "TMUX=/tmp/tmux-1000/default,1234,0",
+		"-e", "TMUX_PANE=%5",
+		"-e", "WT_SESSION=abc123",
+		"-e", "WEZTERM_PANE=%1",
+		"-e", "WEZTERM_UNIX_SOCKET=/tmp/wezterm.sock",
+	)
+}
+
+// fakeTmux puts an executable `tmux` first on PATH that prints output (or,
+// with fail=true, exits non-zero) — a stand-in for the host's real tmux so
+// the clipboard-interception check can be exercised without one installed.
+func fakeTmux(t *testing.T, output string, fail bool) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\n"
+	if fail {
+		script += "echo 'no server running on /tmp/tmux-1000/default' >&2\n"
+		script += "exit 1\n"
+	} else {
+		script += "echo '" + output + "'\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// tmuxWarnDiag builds an interactive docker invocation with the ambient env
+// (TMUX/print controlled by the caller) and returns the diagnostics output.
+func tmuxWarnDiag(t *testing.T, opts Options, interactive bool) string {
+	t.Helper()
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildDockerInvocation(opts, info, r, interactive, &diag); err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	return diag.String()
+}
+
+// TestWarnTmuxClipboardOff: inside tmux with set-clipboard off, an
+// interactive session warns on stderr that OSC 52 clipboard writes will be
+// swallowed — the diagnostics stream, so it can never corrupt --print stdout.
+func TestWarnTmuxClipboardOff(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	fakeTmux(t, "set-clipboard off", false)
+	diag := tmuxWarnDiag(t, Options{}, true)
+	if !strings.Contains(diag, "set-clipboard off") || !strings.Contains(diag, "tmux set -g set-clipboard on") {
+		t.Errorf("missing tmux set-clipboard warning:\n%s", diag)
+	}
+}
+
+// TestWarnTmuxClipboardOn: set-clipboard on forwards OSC 52 — no warning.
+func TestWarnTmuxClipboardOn(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	fakeTmux(t, "set-clipboard on", false)
+	if diag := tmuxWarnDiag(t, Options{}, true); strings.Contains(diag, "set-clipboard off") {
+		t.Errorf("set-clipboard on must not warn:\n%s", diag)
+	}
+}
+
+// TestWarnTmuxClipboardExternal: set-clipboard external (tmux >= 3.2) also
+// forwards OSC 52 to the outer terminal — no warning.
+func TestWarnTmuxClipboardExternal(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	fakeTmux(t, "set-clipboard external", false)
+	if diag := tmuxWarnDiag(t, Options{}, true); strings.Contains(diag, "set-clipboard off") {
+		t.Errorf("set-clipboard external must not warn:\n%s", diag)
+	}
+}
+
+// TestWarnTmuxClipboardNoTmuxBinary: tmux not on PATH silently skips the
+// check — no warning, no error.
+func TestWarnTmuxClipboardNoTmuxBinary(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	if diag := tmuxWarnDiag(t, Options{}, true); strings.Contains(diag, "set-clipboard") {
+		t.Errorf("missing tmux binary must not warn:\n%s", diag)
+	}
+}
+
+// TestWarnTmuxClipboardOutsideTmux: no $TMUX, even with tmux on PATH — no
+// warning (the user is not inside tmux, nothing to intercept).
+func TestWarnTmuxClipboardOutsideTmux(t *testing.T) {
+	t.Setenv("TMUX", "")
+	fakeTmux(t, "set-clipboard off", false)
+	if diag := tmuxWarnDiag(t, Options{}, true); strings.Contains(diag, "set-clipboard off") {
+		t.Errorf("outside tmux must not warn:\n%s", diag)
+	}
+}
+
+// TestWarnTmuxClipboardPrintMode: --print runs are non-interactive — the
+// check is skipped even inside tmux with set-clipboard off.
+func TestWarnTmuxClipboardPrintMode(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	fakeTmux(t, "set-clipboard off", false)
+	if diag := tmuxWarnDiag(t, Options{Print: true}, true); strings.Contains(diag, "set-clipboard off") {
+		t.Errorf("print mode must not warn:\n%s", diag)
+	}
+}
+
+// TestWarnTmuxClipboardTmuxFailure: a failing tmux query (no server, option
+// unknown) silently skips the check — no launch path can break because of it.
+func TestWarnTmuxClipboardTmuxFailure(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	fakeTmux(t, "", true)
+	if diag := tmuxWarnDiag(t, Options{}, true); strings.Contains(diag, "set-clipboard") {
+		t.Errorf("failing tmux query must not warn:\n%s", diag)
+	}
+}

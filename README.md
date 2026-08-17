@@ -411,6 +411,41 @@ launcher for work that must touch the host itself.
 
 ---
 
+## Clipboard / copying from agent sessions
+
+Copying text from inside an agent session (selecting agent output, the
+"copied" indicator) relies on the **OSC 52** terminal escape sequence
+(`ESC ] 52 ; c ; <base64> BEL`): the agent CLIs are full-screen TUIs inside
+the Docker container, and the only way such an app can write the *host* OS
+clipboard is by emitting OSC 52, which flows container TUI → docker pty →
+docker client → host terminal (possibly through tmux). mg forwards the bytes
+unmodified — the prerequisites are on the terminal side:
+
+- **Your terminal emulator must support OSC 52.** Most modern terminals do
+  (iTerm2, kitty, WezTerm, Windows Terminal, recent VTE-based terminals, ...);
+  some older or minimal terminals ignore the sequence entirely. A terminal
+  without OSC 52 support cannot be fixed by mg.
+- **tmux needs `set-clipboard on` when the session runs inside tmux.** tmux
+  intercepts all pane output; with `set-clipboard off` (the pre-tmux-3.2
+  default and a common deliberate setting) the OSC 52 sequence is stripped and
+  your host clipboard is never touched — while the app still shows "copied".
+  Fix it with `tmux set -g set-clipboard on` (or `external` on tmux ≥ 3.2,
+  which forwards to the outer terminal). mg detects this at session start and
+  prints a warning on stderr when it finds `set-clipboard off` — strictly
+  read-only, mg never mutates your tmux state.
+
+To make the in-container TUIs see the real terminal — the identity many of
+them key their copy/clipboard behavior off — mg forwards the host's terminal
+environment into the container: `TERM`, `COLORTERM`, `TERM_PROGRAM`,
+`TERM_PROGRAM_VERSION`, `VTE_VERSION`, `KITTY_WINDOW_ID`, `TMUX`, `TMUX_PANE`,
+`WT_SESSION`, and every `WEZTERM_*` variable, each forwarded only when set and
+non-empty on the host. OpenCode additionally switches to tmux's
+DCS-passthrough OSC 52 form when `TMUX` is set. `mg host` sessions are
+unaffected — the CLI runs on the host with the full environment already
+present.
+
+---
+
 ## Agents
 
 Thirteen agents are available globally in every project. Call them with `@name`

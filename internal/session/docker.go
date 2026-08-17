@@ -35,6 +35,82 @@ type DockerInvocation struct {
 // dockerImageName is the container image run.sh launched.
 const dockerImageName = "manigot"
 
+// terminalEnvVars lists the host terminal-identity variables forwarded into
+// the container so the in-container agent TUIs see the real terminal. TUIs
+// gate their copy/clipboard behavior on these: OSC 52 emission is decided
+// from terminal identity/capability vars (TERM, COLORTERM, TERM_PROGRAM,
+// TERM_PROGRAM_VERSION, VTE_VERSION, KITTY_WINDOW_ID, TMUX, TMUX_PANE,
+// WT_SESSION — plus the WEZTERM_* family, which WezTerm sets several of),
+// and OpenCode additionally switches to its tmux DCS-passthrough OSC 52 form
+// when TMUX is set. None of these were forwarded before, so the in-container
+// TUIs saw an unrecognized terminal and copying from agent output silently
+// failed (see the "Clipboard / copying from agent sessions" docs section).
+// Each var is forwarded only when set and non-empty on the host — never an
+// empty value — so a session launched outside a terminal (CI, a script)
+// keeps a byte-identical argv to a build without this feature.
+var terminalEnvVars = []string{
+	"TERM",
+	"COLORTERM",
+	"TERM_PROGRAM",
+	"TERM_PROGRAM_VERSION",
+	"VTE_VERSION",
+	"KITTY_WINDOW_ID",
+	"TMUX",
+	"TMUX_PANE",
+	"WT_SESSION",
+}
+
+// terminalEnvArgs returns the docker -e entries forwarding the host's
+// terminal identity into the container: every terminalEnvVars entry that is
+// set and non-empty on the host, plus every WEZTERM_* variable (also only
+// when set to a non-empty value). No var set → an empty slice, keeping the
+// docker argv byte-identical to a session built without terminal forwarding.
+func terminalEnvArgs() []string {
+	var args []string
+	for _, key := range terminalEnvVars {
+		if v := os.Getenv(key); v != "" {
+			args = append(args, "-e", key+"="+v)
+		}
+	}
+	for _, kv := range os.Environ() {
+		name, value, ok := strings.Cut(kv, "=")
+		if ok && strings.HasPrefix(name, "WEZTERM_") && value != "" {
+			args = append(args, "-e", kv)
+		}
+	}
+	return args
+}
+
+// warnTmuxClipboard detects the tmux clipboard-interception failure mode at
+// session start and warns on diag (stderr — the diagnostics stream): when the
+// session is interactive (a TUI to copy from — --print/mg-jdi runs capture
+// JSON output instead, so the check is skipped), the host is inside tmux
+// ($TMUX set) and tmux is on PATH, `tmux show-options -g set-clipboard` is
+// run; if it reports off, tmux will strip the OSC 52 clipboard writes the
+// in-container TUIs emit, so copying from the agent shows "copied" but never
+// reaches the host clipboard. Strictly read-only: no tmux state is mutated,
+// and any tmux failure (not installed, no server, an option query error)
+// silently skips the check — no launch path can break because of it.
+func warnTmuxClipboard(diag io.Writer, interactive, print bool) {
+	if !interactive || print {
+		return
+	}
+	if os.Getenv("TMUX") == "" {
+		return
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		return
+	}
+	out, err := exec.Command("tmux", "show-options", "-g", "set-clipboard").Output()
+	if err != nil {
+		return
+	}
+	if strings.TrimSpace(string(out)) == "set-clipboard off" {
+		fmt.Fprintln(diag, "Warning: your tmux has set-clipboard off — it will swallow OSC 52 clipboard writes from the agent, so copying inside the session won't reach your host clipboard.")
+		fmt.Fprintln(diag, "         Run 'tmux set -g set-clipboard on' to fix it (see the 'Clipboard / copying from agent sessions' docs section).")
+	}
+}
+
 // BuildDockerInvocation assembles the docker run argv, mirroring run.sh's
 // launch construction — every flag, mount, and env
 // var is load-bearing, so the argument order and exact strings are pinned by
@@ -49,6 +125,10 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 			fmt.Fprintf(diag, "Warning: no .env found at %s\n", envFile)
 		}
 	}
+
+	// The tmux OSC 52 clipboard-interception warning (TASK-2 of the clipboard
+	// job): strictly read-only, failures silently skipped.
+	warnTmuxClipboard(diag, interactive, opts.Print)
 
 	// ── Git identity ─────────────────────────────────────────────────────────
 	// Host GIT_AUTHOR_NAME/EMAIL env vars win; otherwise fall back to the
@@ -262,6 +342,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
+	argv = append(argv, terminalEnvArgs()...)
 	argv = append(argv, info.KeyEnv...)
 	argv = append(argv, "-e", "GIT_AUTHOR_NAME_CFG="+gitName)
 	argv = append(argv, "-e", "GIT_AUTHOR_EMAIL_CFG="+gitEmail)
