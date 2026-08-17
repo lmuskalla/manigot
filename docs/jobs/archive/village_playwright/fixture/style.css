@@ -1,0 +1,75 @@
+/* Fixture styles — every deliberate defect is documented inline. Everything
+   else must be clean so `shot` flags exactly the seeded defects and nothing
+   spurious. */
+:root {
+  --bg: #ffffff;
+  --text: #222222;            /* strong contrast on white (16.7:1) */
+  --heading: #1a1a1a;
+  --muted-bg: #f5f5f5;
+  --border: #dddddd;
+  --accent: #1a73e8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Header and cards share one left edge: 20px. The misaligned card breaks it. */
+.site-header { background: var(--muted-bg); padding: 24px 20px; }
+.brand { margin: 0; font-size: 28px; color: var(--heading); }
+.tagline { margin: 4px 0 0; color: var(--text); }
+
+.container { padding: 20px; max-width: 980px; }
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin: 0 0 16px;
+  /* left edge: 20px (grid line) — inherited from .container padding */
+}
+
+/* Seeded defect 3: pushed 8px right of the shared 20px grid line. The other
+   cards sit at the container's 20px left padding; this card's margin-left
+   moves it to 28px — a near-miss misalignment, not a deliberate indent. */
+.card.misaligned {
+  margin-left: 8px;
+}
+
+.card-title { margin: 0 0 8px; font-size: 20px; color: var(--heading); }
+.card-body { margin: 0 0 8px; color: var(--text); }
+.card-body:last-child { margin-bottom: 0; }
+
+/* Seeded defect 1: known-failing contrast pair — #999999 text on #ffffff.
+   Contrast ≈ 2.85:1, below WCAG AA 4.5:1 for normal text. */
+.low-contrast { color: #999999; }
+
+/* Seeded defect 2: known overflow — a fixed 320px-wide box with overflow-x
+   hidden and a long unbroken word. The content is clipped (scrollWidth >
+   clientWidth) but the page itself does not scroll, so the report flags
+   exactly one internal overflow. */
+.notice-board {
+  width: 320px;
+  overflow-x: hidden;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--muted-bg);
+  border: 1px dashed var(--border);
+  font-family: "Liberation Mono", monospace;
+  font-size: 14px;
+}
+
+.site-footer {
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: var(--muted-bg);
+}
+.site-footer p { margin: 0; color: var(--text); }

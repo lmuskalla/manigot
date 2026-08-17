@@ -37,6 +37,8 @@ manigot/
     ...                   ← agentlist, cli, editor, home, launch, markdown, project
   scripts/                ← one script only
     entrypoint.sh         ← runs inside the container before the agent CLI starts
+    shot.js               ← the `shot` render tool (baked into the image as /usr/local/bin/shot;
+                            renders a URL to PNG + model-free render report — see docs/PLAYWRIGHT.md)
   bin/                    ← built binaries (gitignored) — `make mg` produces bin/mg
   .env                    ← your credentials + default profile (gitignored, never committed)
   .gitignore
@@ -111,6 +113,15 @@ A profile bundles an agent CLI with one of your subscriptions:
 | `zai` | OpenCode | Z.AI Coding Plan | `ZHIPU_API_KEY` |
 | `opencode-go` | OpenCode | OpenCode Go subscription | `OPENCODE_API_KEY` |
 | `opencode-zen` | OpenCode | OpenCode Zen (DeepSeek V4 Flash Free) | `OPENCODE_API_KEY` |
+
+Which provider key rides into the container is pinned per profile: only `zai`
+forwards `ZHIPU_API_KEY`, only `opencode-go` forwards `OPENCODE_API_KEY`, and
+`claude-pro` forwards the OAuth token + account UUIDs. This matters for the
+`shot` render tool's `--describe` vision layer (see `docs/PLAYWRIGHT.md`): it
+needs `ZHIPU_API_KEY` in the session env, so it is available under `zai`
+today. The other profiles get a clear "no key" error from `shot --describe`
+and rely on the model-free render report instead; the perception matrix may
+later widen the key forwarding (see the job's probe protocol).
 
 The quickest way to get going:
 

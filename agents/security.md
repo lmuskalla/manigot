@@ -146,3 +146,9 @@ Recommendation: What needs to change (not the implementation — just what).
 ```
 
 If you find nothing significant, say so plainly. Do not invent findings to justify the review.
+
+## Rendered work
+
+You are a read-only agent: never run `shot`. If a job's render report
+(`screenshots/render-report.md` + PNGs in the job dir) exists, you may read it
+for ground truth about the rendered UI; do not produce renders yourself.

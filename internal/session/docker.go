@@ -294,9 +294,10 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	// (git status, git diff) don't fail on the ro mount.
 	var gitDirMount []string
 	var gitDirEnv []string
+	commits := agentCommits(opts, root)
 	if root.GitCommonDir != "" {
 		mode := "z"
-		if !agentCommits(opts, root) {
+		if !commits {
 			mode = "ro"
 			gitDirEnv = []string{"-e", "GIT_OPTIONAL_LOCKS=0"}
 		}
@@ -349,6 +350,13 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, "-e", "MANIGOT_TOOL="+info.Tool)
 	argv = append(argv, "-e", "MANIGOT_PRINT="+strconv.FormatBool(opts.Print))
 	argv = append(argv, "-e", "MANIGOT_QUOTE="+quote)
+	// MANIGOT_AGENT_COMMITS tells container-side tooling which agent is
+	// running: the `shot` render tool's wrapper guard refuses to run for
+	// non-committing agents (the Claude Code gating layer — OpenCode enforces
+	// the same via permission: blocks), mirroring the git shim's soft layer.
+	// Defaults to true when unset, matching agentCommits' own default so a
+	// missing marker never breaks a committing agent.
+	argv = append(argv, "-e", "MANIGOT_AGENT_COMMITS="+strconv.FormatBool(commits))
 	argv = append(argv, "--network=bridge")
 	argv = append(argv, "--memory=2g")
 	argv = append(argv, "--security-opt=no-new-privileges")

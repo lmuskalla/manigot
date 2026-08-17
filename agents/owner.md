@@ -81,3 +81,9 @@ Then:
 **Concerns:** Anything that could go wrong or pull the product in the wrong direction.
 
 **Recommendation:** What should happen next — proceed as-is, change X before proceeding, or drop it entirely. Be specific.
+
+## Rendered work
+
+You are a read-only agent: never run `shot`. If a job's render report
+(`screenshots/render-report.md` + PNGs in the job dir) exists, read it for
+ground truth about the rendered UI; do not produce renders yourself.

@@ -21,6 +21,13 @@ configured with `mg setup`.
   `ui`, `orchestrate`, `config`, `agentlist`, `cli`, `home`, `launch`,
   `markdown`, `project`, `editor`)
 - Agent definitions: Markdown files in `agents/`, baked into the image at build time
+- The `shot` render tool (`scripts/shot.js`, baked into the image as
+  `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
+  `--with-deps` at build) renders a URL to a PNG and produces a model-free
+  render report of exact DOM facts — element inventory, WCAG AA/AAA contrast,
+  overflow/clipping, alignment/spacing, font status, z-index. Agent-neutral
+  tooling: developer may run it (verify own rendered work); read-only agents
+  consume the artifacts and never run it (see docs/PLAYWRIGHT.md).
 
 ## Architecture
 
@@ -367,6 +374,15 @@ either way.
   means no notifications at all).
   Written by `mg setup`/`mg profiles`/the TUI settings screen; read via
   `config.GetEnv`/`EnvValue`. Never committed.
+  Key forwarding is pinned per profile (test-pinned in `internal/session`):
+  only `zai` forwards `ZHIPU_API_KEY` into its container, only `opencode-go`
+  forwards `OPENCODE_API_KEY`, and `claude-pro` forwards the OAuth token +
+  account UUIDs. Consequence for the `shot` render tool (docs/PLAYWRIGHT.md):
+  its `--describe` vision layer needs `ZHIPU_API_KEY` in the session env, so
+  it works under `zai` today; other profiles get a clear "no key" error and
+  fall back to the model-free render report. The perception matrix may later
+  widen the forwarding (see the job's probe protocol) — a one-line
+  `OpenCodeKeys` change plus its tests, deliberately not made pre-matrix.
 - `config/tui-settings.json` (gitignored) — the TUI's personal preferences:
   which editor opens `brief.md`, the recent-activity count, and which
   terminal spawns a session (used only when the TUI is not inside tmux —

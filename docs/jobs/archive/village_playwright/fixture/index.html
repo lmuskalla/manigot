@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fixture — seeded defects for shot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1 class="brand">Village Gazette</h1>
+    <p class="tagline">News for the people of Meridian Valley</p>
+  </header>
+
+  <main class="container">
+    <!-- Seeded defect 1: known-failing contrast pair (#999999 on #ffffff, ~2.85:1, fails WCAG AA) -->
+    <section class="card">
+      <h2 class="card-title">Harvest festival announced</h2>
+      <p class="card-body">The annual harvest festival returns this autumn, with stalls, music, and the traditional lantern parade.</p>
+      <p class="card-body low-contrast">This line is deliberately low-contrast — #999999 on white, about 2.85:1, below the WCAG AA 4.5:1 minimum.</p>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Bridge repairs completed</h2>
+      <p class="card-body">The Mill Lane bridge has reopened after six weeks of repairs. A community celebration is planned.</p>
+    </section>
+
+    <!-- Seeded defect 2: known overflow — a fixed-width notice box whose
+         content (a long unbroken word) overflows and is clipped. The box
+         clips instead of expanding the page, so shot flags exactly one
+         internal overflow, not a cascade. -->
+    <section class="card">
+      <h2 class="card-title">Wide notice board</h2>
+      <p class="card-body">The notice box below is deliberately too narrow for its content — the long word is clipped.</p>
+      <div class="notice-board">NOTICE:SupercalifragilisticexpialidociousFestivalParadeAnnouncement</div>
+    </section>
+
+    <!-- Seeded defect 3: known misalignment — card pushed 8px off the shared grid line -->
+    <section class="card misaligned">
+      <h2 class="card-title">Off-grid announcement</h2>
+      <p class="card-body">This card is deliberately shifted 8px to the right of the shared 20px left grid line.</p>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Council minutes available</h2>
+      <p class="card-body">Minutes from last week's council meeting are now available at the village hall.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Village Gazette — serving the community since 1924. Contact us at the village hall.</p>
+  </footer>
+</body>
+</html>

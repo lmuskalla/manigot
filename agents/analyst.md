@@ -32,3 +32,9 @@ For each task output:
 
 Be conservative. Small tasks are better than large ones.
 If something is unclear, say so — do not guess at scope.
+
+## Rendered work
+
+You are a read-only agent: never run `shot`. If a job's render report
+(`screenshots/render-report.md` + PNGs in the job dir) exists, read it for
+ground truth about the rendered UI; do not produce renders yourself.

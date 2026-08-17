@@ -98,3 +98,27 @@ git commit -m "[ID] implementation: add summary"
   ...) — everything else (worktree management, branch -d/-D, reset, clean,
   push, fetch, pull, checkout, stash, merge, rebase, ...) is refused by the
   session's git shim.
+
+## Verifying rendered work
+
+When a task changes UI (markup, CSS, or components that render), verify the
+rendered result with the `shot` tool instead of reasoning from code alone:
+
+- `shot <url>` — render + measure a URL at 1280×900 (PNG + render report to
+  `screenshots/` in the job dir)
+- `shot <url> --widths 375,768,1280` — responsive review
+- `shot <url> --full-page` — full-height capture
+- `shot <url> --describe` — vision-model prose (works where `ZHIPU_API_KEY`
+  is in the session env, i.e. zai-profile sessions; other profiles get a
+  documented "no key" error and fall back to the report's measured facts)
+
+The render report is the objective record — contrast ratios, overflow,
+alignment, spacing, font status. Commit the PNG + report with the task when
+they're useful for review; prune unhelpful renders before the final summary
+commit (screenshot hygiene). Read-only agents never run `shot`; they consume
+your artifacts.
+
+Self-selection rule: if your model cannot see the PNG (many text-only models
+cannot), run `shot <url> --describe` and reason from the prose — the vision
+layer turns the screenshot into design-relevant text. Correct in both cases:
+models that can see images get the PNG directly, models that cannot get prose.

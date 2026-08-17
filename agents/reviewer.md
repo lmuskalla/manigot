@@ -105,3 +105,10 @@ git commit -m "[ID] verdict: <one-line summary>"
 ```
 
 You cannot write or edit source files. Report findings in `verdict.md`. The developer addresses them in follow-up tasks on the same branch. Note: git is restricted in agent sessions to read + commit (`git add`, `git commit`, `git log`, `git diff`, `git show`, `git status`, ...); everything else — worktree management, branch -d/-D, reset, checkout, push, stash, ... — is refused by the session's git shim.
+
+## Rendered work
+
+When a job's render report exists (`screenshots/render-report.md` + PNGs in the
+job dir), read the report and view the PNGs if your model supports images —
+they are ground truth for what the UI actually looks like. Never run `shot`
+yourself: you are a review agent; the developer produces the renders.

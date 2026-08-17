@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-venv \
+    fonts-liberation \
+    fonts-dejavu-core \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -59,6 +61,39 @@ RUN usermod -l claude -d /home/claude -m node \
 # Docker doesn't derive it from /etc/passwd for an unrecognized UID, it just
 # leaves it unset/"/".
 ENV HOME=/home/claude
+
+# Playwright — the `shot` render tool's browser engine (see docs/PLAYWRIGHT.md).
+# Version resolved from the registry at build time (npm view playwright version)
+# and pinned for this build — the registry is the authority, and the browser
+# revision stays deterministic per build. Debian 13 (trixie) is an officially
+# supported distro for this version, so `install --with-deps` resolves the
+# headless-shell system libraries itself — no hand-enumerated apt list to
+# drift. Only the headless shell is installed (~90MB), not full Chromium
+# (~300MB); one browser, no cross-browser matrix. The font layer (Liberation +
+# DejaVu) is installed in the system-deps layer above — typography review
+# against tofu is worse than no review.
+#
+# PLAYWRIGHT_BROWSERS_PATH must point inside /home/claude: the install runs as
+# root (the default /root/.cache is unreachable at runtime, when the container
+# runs as the invoking host UID with HOME=/home/claude). Baking the env var in
+# makes the install land there AND keeps runtime lookups on the same path. The
+# chmod right after the install runs as root so the browser dir is opened to
+# every session UID before the build switches to USER claude (whose own
+# `chmod -R o+rwX /home/claude` later can only touch claude-owned files).
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/claude/.cache/ms-playwright
+RUN PW_VERSION="$(npm view playwright version)" \
+    && npm install -g "playwright@${PW_VERSION}" \
+    && npx playwright install --with-deps chromium-headless-shell \
+    && chmod -R o+rwX /home/claude/.cache
+
+# The `shot` render tool — a Node script baked into the image (see
+# docs/PLAYWRIGHT.md). Landed on PATH as /usr/local/bin/shot with a node
+# shebang; NODE_PATH points at the global node_modules so `require('playwright')`
+# resolves without growing entrypoint.sh's bash. Node's require() searches
+# NODE_PATH as a fallback after the script's own node_modules chain.
+ENV NODE_PATH=/usr/local/lib/node_modules
+COPY --chown=claude:claude scripts/shot.js /usr/local/bin/shot
+RUN chmod +x /usr/local/bin/shot
 
 # Global agents — baked into the image, available in every project.
 # Project-level agents (mounted at runtime) override these if same name.

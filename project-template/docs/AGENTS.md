@@ -33,6 +33,10 @@ support it, and tmux needs `set-clipboard on` when the session runs inside
 tmux (mg forwards your terminal environment into the container and warns at
 session start when it detects tmux would swallow the clipboard writes — see
 the manigot README's "Clipboard / copying from agent sessions" section).
+The `shot` tool (`/usr/local/bin/shot`, see the manigot README's PLAYWRIGHT
+doc) renders a URL to a PNG + model-free render report. The developer agent
+uses it to verify rendered work; read-only agents consume the artifacts and
+never run it.
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 
