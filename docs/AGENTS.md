@@ -157,6 +157,16 @@ this feature). OpenCode additionally switches to tmux's DCS-passthrough OSC 52
 form when `TMUX` is set. `mg host` sessions are unaffected — the CLI runs on
 the host with the full environment already present.
 
+### Container cleanup
+
+Container cleanup: sessions run with `--rm`, so containers normally self-remove
+on exit; the residue of abnormal ends (killed client, killed pane/window,
+host/daemon restart, hung CLI) is pruned automatically before every container
+launch — exited containers whose name matches the manigot prefix are removed,
+running manigot containers and foreign containers are never touched, and a
+prune failure only warns and never aborts the launch. The explicit `mg prune`
+command (see Commands) covers on-demand or cron use.
+
 ### Session git shim
 
 Every container session (under both CLIs) gets a PATH-first `git` shim,
@@ -410,6 +420,13 @@ either way.
   falling back to the remote default branch when unset)
 - `mg delete <id>` — permanently delete a job (worktree + branch, no merge),
   or an orphaned worktree by its name
+- `mg prune` — remove orphaned manigot docker containers: every EXITED
+  container whose name matches the manigot prefix (the residue of abnormal
+  session ends — sessions run with `--rm`), never touching running manigot
+  containers or foreign ones. Reports the removed and running counts; exits 1
+  with a clear error when docker is missing or the daemon is down. The launch
+  path already prunes automatically before every session — this is the
+  explicit form for on-demand or cron use
 - `mg diff <id> [--full|--name-only|--tig]` — show what a job's branch changed,
   three-dot `<base>...<branch>` per docs/GIT_DIFF.md: `git log --oneline` +
   `git diff --stat` by default, `--name-only` for filenames, `--full` for the

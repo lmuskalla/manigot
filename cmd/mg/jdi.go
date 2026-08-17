@@ -361,6 +361,14 @@ func (r *commandAgentRunner) Run(agent string, j job.Job) ([]byte, error) {
 		return nil, err
 	}
 
+	// Prune orphaned manigot containers before the run — the same fail-soft
+	// self-healing cleanup as the interactive session path. Warnings go into
+	// the diag buffer, which only surfaces on error; a prune failure never
+	// aborts the invocation.
+	if _, err := pruneOrphans(&diag); err != nil {
+		fmt.Fprintf(&diag, "mg: warning: could not prune orphaned containers: %v\n", err)
+	}
+
 	var stdout bytes.Buffer
 	if code := inv.Run(os.Stdin, &stdout, &diag); code != 0 {
 		return stdout.Bytes(), fmt.Errorf("mg --print --agent %s --job %s: exit code %d: %s", agent, j.Name, code, strings.TrimSpace(diag.String()))

@@ -50,6 +50,8 @@ func main() {
 		os.Exit(runDone(args[1:], os.Stdin, os.Stdout, os.Stderr))
 	case "delete":
 		os.Exit(runDelete(args[1:], os.Stdin, os.Stdout, os.Stderr))
+	case "prune":
+		os.Exit(runPrune(args[1:], os.Stdout, os.Stderr))
 	case "diff":
 		os.Exit(runDiff(args[1:], os.Stdout, os.Stderr))
 	case "init":
@@ -105,6 +107,9 @@ Commands:
                                    reviewer)
   mg done <id>                    Archive a finished job (merge + remove worktree)
   mg delete <id>                  Permanently delete a job (worktree + branch, no merge)
+  mg prune                        Remove orphaned docker containers left behind
+                                   by abnormal session ends, and report how
+                                   many manigot containers are still running
   mg diff <id> [--full|--name-only|--tig]
                                    Show what a job's branch changed, three-dot
                                    against the base branch (log + diff --stat

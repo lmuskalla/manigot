@@ -233,6 +233,7 @@ its first argument:
 | `mg jobs` | list open jobs with state and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose); the session launches in the agent appropriate to the job's stage (analyst/developer/reviewer); also surfaces orphaned worktrees (leftover `.manigot-worktrees/` dirs with no git registration) and offers to remove them; needs `docs/` |
 | `mg done` | archive a finished job — merges it into the base branch and removes its worktree; needs `docs/` |
 | `mg delete` | permanently delete a job (worktree + branch, no merge), or an orphaned worktree by its name; needs `docs/` |
+| `mg prune` | remove orphaned docker containers left behind by abnormal session ends — exited manigot-* containers only; running manigot-* and foreign containers are never touched. Prints the removed and running counts (or "Nothing to prune."), and exits 1 with a clear error when docker is missing or the daemon is down. The launch path prunes automatically before every session — this is the explicit form for on-demand or cron use |
 | `mg diff` | show what a job's branch changed, three-dot against the base branch — log + `diff --stat` by default, `--name-only` for filenames, `--full` for the complete patch, `--tig` to browse it in tig on the host; needs `docs/` |
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
@@ -330,6 +331,9 @@ mg job "upgrade dependencies" --type chore
 
 # Archive a finished job
 mg done a3f9k2
+
+# Remove orphaned docker containers left behind by abnormal session ends
+mg prune
 
 # Drive a job unattended: @analyst -> @developer -> @reviewer, end to end
 mg jdi --job a3f9k2

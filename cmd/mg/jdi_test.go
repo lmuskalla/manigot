@@ -17,6 +17,7 @@ import (
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
 	"github.com/lmuskalla/manigot/internal/orchestrate"
+	"github.com/lmuskalla/manigot/internal/session"
 )
 
 // runGit runs git -C dir args, failing the test on any error — mirrors
@@ -959,5 +960,87 @@ func TestNotifyCrashedRunUnconfiguredLeavesSidecarUntouched(t *testing.T) {
 	// is left exactly as it was (ReadJDIStatus still degrades it away).
 	if _, ok := job.StaleRunningJDI(root, jobName); !ok {
 		t.Error("sidecar was modified despite ntfy being unconfigured — unconfigured behavior must be unchanged")
+	}
+}
+
+// pruneTestJob builds a real worktree job (the mg job flow) for the
+// commandAgentRunner prune-wiring tests — initTestRepo's job branch has no
+// registered worktree, but commandAgentRunner.Run resolves its --job through
+// the worktree path (ResolveRootFrom → WorktreeForBranch), so a real
+// worktree job is required.
+func pruneTestJob(t *testing.T) (dir string, j job.Job) {
+	t.Helper()
+	t.Setenv("PATH", pathWithRealGitOnly(t))
+	dir = mgCheckout(t)
+	t.Chdir(dir)
+	profileCheckout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=k\n")
+
+	var out, errOut strings.Builder
+	if code := runJob([]string{"Prune Job"}, &out, &errOut); code != 0 {
+		t.Fatalf("runJob: %d %s", code, errOut.String())
+	}
+	branch := mgJobBranch(t, dir)
+	jobName := strings.TrimPrefix(branch, "feature/")
+	wt := mgWorktreePath(t, dir, branch)
+	j = job.Job{
+		Name:   jobName,
+		Dir:    filepath.Join(wt, "docs", "jobs", jobName),
+		Root:   wt,
+		ID:     strings.Split(jobName, "_")[0],
+		Branch: branch,
+	}
+	return dir, j
+}
+
+// TestCommandAgentRunnerPrunesBeforeRun pins the mg-jdi launch-path wiring:
+// commandAgentRunner.Run calls pruneOrphans (stubbed — docker is not on the
+// test PATH) before its docker invocation, which then fails on the git-only
+// PATH — proving the prune ran and did not replace the launch.
+func TestCommandAgentRunnerPrunesBeforeRun(t *testing.T) {
+	dir, j := pruneTestJob(t)
+
+	var pruneCalls int
+	old := pruneOrphans
+	pruneOrphans = func(diag io.Writer) (session.PruneResult, error) {
+		pruneCalls++
+		return session.PruneResult{Removed: 2, Running: 0}, nil
+	}
+	t.Cleanup(func() { pruneOrphans = old })
+
+	r := &commandAgentRunner{projectRoot: dir, profile: "zai"}
+	_, err := r.Run("analyst", j)
+	if err == nil {
+		t.Fatal("Run = nil error, want the docker-launch failure (docker is not on the test PATH)")
+	}
+	if pruneCalls != 1 {
+		t.Errorf("pruneOrphans called %d times, want 1", pruneCalls)
+	}
+	if !strings.Contains(err.Error(), "executable file not found") {
+		t.Errorf("the invocation must have proceeded to the docker launch:\n%v", err)
+	}
+}
+
+// TestCommandAgentRunnerPruneFailureDoesNotAbort: a prune failure only warns
+// (into the diag buffer, which surfaces in the invocation error) and never
+// aborts the invocation — the docker launch is still attempted.
+func TestCommandAgentRunnerPruneFailureDoesNotAbort(t *testing.T) {
+	dir, j := pruneTestJob(t)
+
+	old := pruneOrphans
+	pruneOrphans = func(diag io.Writer) (session.PruneResult, error) {
+		return session.PruneResult{}, errors.New("Cannot connect to the Docker daemon")
+	}
+	t.Cleanup(func() { pruneOrphans = old })
+
+	r := &commandAgentRunner{projectRoot: dir, profile: "zai"}
+	_, err := r.Run("analyst", j)
+	if err == nil {
+		t.Fatal("Run = nil error, want the docker-launch failure (docker is not on the test PATH)")
+	}
+	if !strings.Contains(err.Error(), "could not prune orphaned containers") {
+		t.Errorf("missing the prune warning in the invocation error:\n%v", err)
+	}
+	if !strings.Contains(err.Error(), "executable file not found") {
+		t.Errorf("the invocation must proceed past a prune failure (docker attempted):\n%v", err)
 	}
 }
