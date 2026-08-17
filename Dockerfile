@@ -78,8 +78,8 @@ ENV HOME=/home/claude
 # runs as the invoking host UID with HOME=/home/claude). Baking the env var in
 # makes the install land there AND keeps runtime lookups on the same path. The
 # chmod right after the install runs as root so the browser dir is opened to
-# every session UID before the build switches to USER claude (whose own
-# `chmod -R o+rwX /home/claude` later can only touch claude-owned files).
+# every session UID — the final `chmod -R o+rwX /home/claude` also runs as root
+# (see below), because claude (UID 1000) cannot chmod root-owned files.
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/claude/.cache/ms-playwright
 RUN PW_VERSION="$(npm view playwright version)" \
     && npm install -g "playwright@${PW_VERSION}" \
@@ -133,7 +133,15 @@ RUN cd /tmp/tui && go mod download && rm -rf /tmp/tui
 # means this UID almost never matches the baked-in claude (1000), so open up
 # $HOME to any UID — nothing sensitive lives here, just agent configs and the
 # Go module cache.
+#
+# Must run as root: $HOME mixes claude-owned files (agent configs, the Go
+# module cache from the step above) with root-owned files (.npm, the Playwright
+# browser cache). chmod requires ownership of every file it touches, so an
+# unprivileged build user fails on the root-owned ones even though they are
+# already world-accessible.
+USER root
 RUN chmod -R o+rwX /home/claude
+USER claude
 
 WORKDIR /workspace
 
