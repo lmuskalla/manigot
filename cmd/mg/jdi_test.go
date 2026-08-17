@@ -322,6 +322,9 @@ func TestRunStopsAfterOneBounceExhausted(t *testing.T) {
 	if got.Kind != orchestrate.StopNeedsHuman {
 		t.Fatalf("Run.Kind = %v, want StopNeedsHuman (reason: %s)", got.Kind, got.Reason)
 	}
+	if !strings.Contains(got.Reason, "review cycle") {
+		t.Errorf("Reason = %q, want it to contain \"review cycle\"", got.Reason)
+	}
 	// developer, reviewer (round 1, rejected), developer (the one allowed
 	// bounce), reviewer (round 2, rejected again) — then stop, no third
 	// developer bounce.

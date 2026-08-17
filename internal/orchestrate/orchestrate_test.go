@@ -3,6 +3,7 @@ package orchestrate
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lmuskalla/manigot/internal/job"
@@ -16,6 +17,7 @@ func TestNext(t *testing.T) {
 		latestCommitIsVerdict bool
 		wantKind              Kind
 		wantAgent             string
+		wantReasonContains    string
 	}{
 		{
 			name:     "define: brief.md not written",
@@ -76,6 +78,7 @@ func TestNext(t *testing.T) {
 			verdictRounds:         2,
 			latestCommitIsVerdict: true,
 			wantKind:              StopNeedsHuman,
+			wantReasonContains:    "review cycle",
 		},
 		{
 			name:                  "implement, 2 verdicts, developer responded again: still budget exhausted",
@@ -83,12 +86,14 @@ func TestNext(t *testing.T) {
 			verdictRounds:         2,
 			latestCommitIsVerdict: false,
 			wantKind:              StopNeedsHuman,
+			wantReasonContains:    "review cycle",
 		},
 		{
-			name:          "implement, 3+ verdicts: still budget exhausted",
-			stage:         job.StageImplement,
-			verdictRounds: 5,
-			wantKind:      StopNeedsHuman,
+			name:               "implement, 3+ verdicts: still budget exhausted",
+			stage:              job.StageImplement,
+			verdictRounds:      5,
+			wantKind:           StopNeedsHuman,
+			wantReasonContains: "review cycle",
 		},
 		{
 			name:     "unknown stage",
@@ -111,6 +116,9 @@ func TestNext(t *testing.T) {
 			}
 			if got.Reason == "" {
 				t.Errorf("Next(%v, %d, %v).Reason is empty, want a non-empty explanation", tc.stage, tc.verdictRounds, tc.latestCommitIsVerdict)
+			}
+			if tc.wantReasonContains != "" && !strings.Contains(got.Reason, tc.wantReasonContains) {
+				t.Errorf("Next(%v, %d, %v).Reason = %q, want it to contain %q", tc.stage, tc.verdictRounds, tc.latestCommitIsVerdict, got.Reason, tc.wantReasonContains)
 			}
 		})
 	}

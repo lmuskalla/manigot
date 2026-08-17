@@ -109,8 +109,11 @@ func Next(stage job.Stage, verdictRounds int, latestCommitIsVerdict bool) Decisi
 			// Two rejections already happened (a third could only exist if
 			// job.Stage() were still StageImplement after a second rejection,
 			// which is exactly this case) — the one-bounce retry budget is
-			// exhausted regardless of what's on the tip.
-			return Decision{Kind: StopNeedsHuman, Reason: "retry budget exhausted: 2 verdict commits already, still not approved"}
+			// exhausted regardless of what's on the tip. The Reason leads
+			// with "needs human: review cycle" so this deliberate
+			// developer/reviewer back-and-forth stop reads distinctly from a
+			// crash.
+			return Decision{Kind: StopNeedsHuman, Reason: "needs human: review cycle — retry budget exhausted: 2 verdict commits already, still not approved"}
 		case latestCommitIsVerdict:
 			// Exactly 1 verdict commit, and it's still the tip: @reviewer
 			// rejected once and @developer hasn't responded yet. This is the
