@@ -54,7 +54,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 	var jobArg string
 	fs.StringVar(&jobArg, "job", "", "job ID or directory name to drive (required)")
 	fs.StringVar(&jobArg, "j", "", "short form of --job")
-	profileArg := fs.String("profile", "", "subscription profile to run agents under: claude-pro, zai, or opencode-go (default claude-pro)")
+	profileArg := fs.String("profile", "", "subscription profile to run agents under: claude-pro, zai, opencode-go, or opencode-zen (default claude-pro)")
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "mg jdi %s\n\n", jdiVersion)
 		fmt.Fprintf(stderr, "Drives a job's @analyst -> @developer -> @reviewer sequence end to end.\n\n")
@@ -81,7 +81,7 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 		profile = config.ProfileClaudePro
 	}
 	if _, ok := config.ProfileByID(profile); !ok {
-		fmt.Fprintf(stderr, "mg jdi: --profile must be one of: claude-pro, zai, opencode-go (got %q)\n", profile)
+		fmt.Fprintf(stderr, "mg jdi: --profile must be one of: claude-pro, zai, opencode-go, opencode-zen (got %q)\n", profile)
 		return 2
 	}
 

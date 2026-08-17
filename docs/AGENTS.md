@@ -3,9 +3,10 @@
 Isolated agent environment per project: one Docker image, subscription
 billing via mounted OAuth credentials, real filesystem containment, and a
 structured brief → tasks → implementation → verdict job workflow. Runs a
-session under one of three subscription profiles — `claude-pro` (Claude Code,
-billed to Claude Pro/Max), `zai` (OpenCode, billed to a Z.AI Coding Plan), and
-`opencode-go` (OpenCode, billed to the OpenCode Go subscription) — chosen per
+session under one of four subscription profiles — `claude-pro` (Claude Code,
+billed to Claude Pro/Max), `zai` (OpenCode, billed to a Z.AI Coding Plan),
+`opencode-go` (OpenCode, billed to the OpenCode Go subscription), and
+`opencode-zen` (OpenCode, billed to OpenCode Zen) — chosen per
 session with `mg --profile <name>`, defaulted with `mg profiles`, and
 configured with `mg setup`.
 
@@ -282,7 +283,7 @@ repository (a `.git` directory).
   (git top-level, else `$PWD`), reporting "already initialized" when `docs/`
   exists, then optionally hands off to `@prompter` (via `--prompt`) to draft
   a concrete `docs/AGENTS.md`.
-- `mg profiles [name]` lists the three profiles (which are ready, and which
+- `mg profiles [name]` lists the profiles (which are ready, and which
   is the default), sets the default (`MANIGOT_PROFILE` in manigot's `.env`),
   or picks it interactively on a TTY. The TUI's settings screen shares the
   same default.
@@ -348,7 +349,8 @@ either way.
 - `manigot/.env` (gitignored) — credentials and defaults for the profiles
   (`CLAUDE_CODE_OAUTH_TOKEN`/`CLAUDE_ACCOUNT_UUID`/`CLAUDE_EMAIL`/
   `CLAUDE_ORG_UUID` for claude-pro, `ZHIPU_API_KEY` + `OPENCODE_ZAI_MODEL`
-  for zai, `OPENCODE_API_KEY` + `OPENCODE_GO_MODEL` for opencode-go, and
+  for zai, `OPENCODE_API_KEY` + `OPENCODE_GO_MODEL` for opencode-go,
+  `OPENCODE_API_KEY` + `OPENCODE_ZEN_MODEL` for opencode-zen, and
   `MANIGOT_PROFILE` — the default profile shared between CLI and TUI), plus
   the optional ntfy push-notification keys `NTFY_URL`/`NTFY_TOPIC`/
   `NTFY_TOKEN` for `mg jdi` (see the `mg jdi` section — `NTFY_TOPIC` unset
@@ -382,7 +384,7 @@ either way.
 - `mg` — start an isolated session from inside any project directory; `docs/`
   is optional (see Architecture above)
 - `mg --profile <name>` — same, but under the given subscription profile
-  (`claude-pro`/`zai`/`opencode-go`); `--tool` is accepted as a legacy alias
+  (`claude-pro`/`zai`/`opencode-go`/`opencode-zen`); `--tool` is accepted as a legacy alias
 - `mg profiles [name]` — list the profiles (and which is the default), set the
   default bare `mg` uses, or pick it interactively (no name, on a TTY)
 - `mg setup [name] [--check]` — configure credentials for the profiles,

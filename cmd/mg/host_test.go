@@ -23,7 +23,7 @@ func hostCheckout(t *testing.T, env string) string {
 	for _, k := range []string{
 		"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID",
 		"ANTHROPIC_API_KEY", "ZHIPU_API_KEY", "OPENCODE_API_KEY", "OPENAI_API_KEY",
-		"OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_MODEL", "MANIGOT_PROFILE",
+		"OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_ZEN_MODEL", "OPENCODE_MODEL", "MANIGOT_PROFILE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -65,7 +65,7 @@ func TestRunHostInvalidProfile(t *testing.T) {
 	if code := runHost([]string{"--profile", "bogus"}, os.Stdin, &out, &errOut); code != 1 {
 		t.Errorf("invalid-profile exit code = %d, want 1", code)
 	}
-	if !strings.Contains(errOut.String(), "--profile must be one of: claude-pro|zai|opencode-go") {
+	if !strings.Contains(errOut.String(), "--profile must be one of: claude-pro|zai|opencode-go|opencode-zen") {
 		t.Errorf("missing profile error:\n%s", errOut.String())
 	}
 }

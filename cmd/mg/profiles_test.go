@@ -28,7 +28,7 @@ func profileCheckout(t *testing.T, env string) string {
 	// key so the tests are hermetic regardless of the host's env.
 	for _, k := range []string{
 		"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID",
-		"ZHIPU_API_KEY", "OPENCODE_API_KEY", "OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL",
+		"ZHIPU_API_KEY", "OPENCODE_API_KEY", "OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_ZEN_MODEL",
 		"MANIGOT_PROFILE",
 	} {
 		t.Setenv(k, "")
@@ -83,6 +83,29 @@ func TestProfilesSetWarnsOnMissingCreds(t *testing.T) {
 	}
 }
 
+func TestProfilesSetOpenCodeZen(t *testing.T) {
+	dir := profileCheckout(t, "OPENCODE_API_KEY=zen-key\n")
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"opencode-zen"}, strings.NewReader(""), &out, &errOut, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "MANIGOT_PROFILE=opencode-zen") {
+		t.Errorf(".env missing MANIGOT_PROFILE=opencode-zen:\n%s", env)
+	}
+	if !strings.Contains(out.String(), "Default profile set to opencode-zen") {
+		t.Errorf("missing set confirmation:\n%s", out.String())
+	}
+	// The shared OPENCODE_API_KEY is present — no missing-creds warning.
+	if strings.Contains(out.String(), "Warning:") {
+		t.Errorf("unexpected warning with the key set:\n%s", out.String())
+	}
+}
+
 func TestProfilesSetUnknownProfile(t *testing.T) {
 	profileCheckout(t, "")
 	var out, errOut strings.Builder
@@ -93,7 +116,7 @@ func TestProfilesSetUnknownProfile(t *testing.T) {
 	if !strings.Contains(errOut.String(), "Error: unknown profile 'bogus'.") {
 		t.Errorf("missing unknown-profile error:\n%s", errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "Valid profiles: claude-pro zai opencode-go") {
+	if !strings.Contains(errOut.String(), "Valid profiles: claude-pro zai opencode-go opencode-zen") {
 		t.Errorf("missing valid-profiles hint:\n%s", errOut.String())
 	}
 }

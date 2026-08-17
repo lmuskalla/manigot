@@ -25,6 +25,9 @@ func TestSetupCheckAll(t *testing.T) {
 	if !strings.Contains(got, "✓ opencode-go  ready") {
 		t.Errorf("opencode-go not ready:\n%s", got)
 	}
+	if !strings.Contains(got, "✓ opencode-zen ready") {
+		t.Errorf("opencode-zen not ready:\n%s", got)
+	}
 }
 
 func TestSetupCheckSingleProfile(t *testing.T) {
@@ -154,6 +157,31 @@ func TestSetupWizardTypedValuesWriteEnv(t *testing.T) {
 	}
 	if strings.Contains(got, "old-model") {
 		t.Errorf(".env kept the old model:\n%s", got)
+	}
+}
+
+func TestSetupWizardOpenCodeZenWritesEnv(t *testing.T) {
+	dir := profileCheckout(t, "")
+	var out strings.Builder
+	// opencode-zen wizard: type the shared key, then accept the default model.
+	in := "zen-key\n\n"
+	code := runSetup([]string{"opencode-zen"}, strings.NewReader(in), &out, &strings.Builder{}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, output:\n%s", code, out.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(env)
+	if !strings.Contains(got, "OPENCODE_API_KEY=zen-key") {
+		t.Errorf(".env missing typed key:\n%s", got)
+	}
+	if !strings.Contains(got, "OPENCODE_ZEN_MODEL=opencode/deepseek-v4-flash-free") {
+		t.Errorf(".env missing default model:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "Done. Switch the default with: mg profiles <name>") {
+		t.Errorf("missing done message:\n%s", out.String())
 	}
 }
 
@@ -302,8 +330,9 @@ func TestSetupWizardShowsNtfyBlock(t *testing.T) {
 	// profiles (model prompts excepted) and only the ntfy block needs input.
 	profileCheckout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_ACCOUNT_UUID=u\nCLAUDE_EMAIL=e\nCLAUDE_ORG_UUID=o\nZHIPU_API_KEY=k\nOPENCODE_API_KEY=k\n")
 	var out strings.Builder
-	// zai model, opencode-go model, then ntfy URL/topic/token — five prompts.
-	code := runSetup([]string{}, strings.NewReader("\n\n\n\n\n"), &out, &strings.Builder{}, true)
+	// zai model, opencode-go model, opencode-zen model, then ntfy URL/topic/
+	// token — six prompts.
+	code := runSetup([]string{}, strings.NewReader("\n\n\n\n\n\n"), &out, &strings.Builder{}, true)
 	if code != 0 {
 		t.Fatalf("exit code = %d, output:\n%s", code, out.String())
 	}

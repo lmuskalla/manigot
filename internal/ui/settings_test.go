@@ -98,7 +98,8 @@ func TestSettingsProfileCycleOnlyWhenProfileFocused(t *testing.T) {
 		t.Errorf("left/right while editor focused changed profile: %d -> %d", before, v.profile)
 	}
 
-	// focus on profile (four tabs away now): right cycles claude-pro -> zai -> opencode-go -> claude-pro.
+	// focus on profile (four tabs away now): right cycles claude-pro -> zai ->
+	// opencode-go -> opencode-zen -> claude-pro.
 	v.update(key(t, tea.KeyTab)) // editor -> base branch
 	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
 	v.update(key(t, tea.KeyTab)) // job branch prefix -> recent activity count
@@ -117,13 +118,17 @@ func TestSettingsProfileCycleOnlyWhenProfileFocused(t *testing.T) {
 		t.Errorf("after right: profile = %q, want %q", got, config.ProfileOpenCodeGo)
 	}
 	v.update(key(t, tea.KeyRight))
+	if got := v.settingsValue().Profile; got != config.ProfileOpenCodeZen {
+		t.Errorf("after right: profile = %q, want %q", got, config.ProfileOpenCodeZen)
+	}
+	v.update(key(t, tea.KeyRight))
 	if got := v.settingsValue().Profile; got != config.ProfileClaudePro {
 		t.Errorf("after right wrap: profile = %q, want %q", got, config.ProfileClaudePro)
 	}
 	// left cycles backwards.
 	v.update(key(t, tea.KeyLeft))
-	if got := v.settingsValue().Profile; got != config.ProfileOpenCodeGo {
-		t.Errorf("after left: profile = %q, want %q", got, config.ProfileOpenCodeGo)
+	if got := v.settingsValue().Profile; got != config.ProfileOpenCodeZen {
+		t.Errorf("after left: profile = %q, want %q", got, config.ProfileOpenCodeZen)
 	}
 }
 
@@ -210,7 +215,7 @@ func TestSettingsRender(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
 	v.update(key(t, tea.KeyRunes, 'a', 'b', 'c'))
 	out := v.render()
-	for _, want := range []string{"Editor:", "Base branch", "Job branch prefix", "Recent activity:", "claude-pro", "zai", "opencode-go", "abc", "Profile", "recent activity strip", "Terminal:", "auto-detect"} {
+	for _, want := range []string{"Editor:", "Base branch", "Job branch prefix", "Recent activity:", "claude-pro", "zai", "opencode-go", "opencode-zen", "abc", "Profile", "recent activity strip", "Terminal:", "auto-detect"} {
 		if !contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}

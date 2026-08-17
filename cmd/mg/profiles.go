@@ -15,29 +15,33 @@ import (
 // the old scripts checked them: claude-pro needs all four subscription keys,
 // the opencode profiles need their single auth key.
 var profileAuthKeys = map[string][]string{
-	config.ProfileClaudePro:  {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"},
-	config.ProfileZAI:        {"ZHIPU_API_KEY"},
-	config.ProfileOpenCodeGo: {"OPENCODE_API_KEY"},
+	config.ProfileClaudePro:   {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"},
+	config.ProfileZAI:         {"ZHIPU_API_KEY"},
+	config.ProfileOpenCodeGo:  {"OPENCODE_API_KEY"},
+	config.ProfileOpenCodeZen: {"OPENCODE_API_KEY"},
 }
 
 // profileModelEnv maps the opencode profiles to the .env key that overrides
 // their default model. claude-pro has no such key — the CLI's own default.
 var profileModelEnv = map[string]string{
-	config.ProfileZAI:        "OPENCODE_ZAI_MODEL",
-	config.ProfileOpenCodeGo: "OPENCODE_GO_MODEL",
+	config.ProfileZAI:         "OPENCODE_ZAI_MODEL",
+	config.ProfileOpenCodeGo:  "OPENCODE_GO_MODEL",
+	config.ProfileOpenCodeZen: "OPENCODE_ZEN_MODEL",
 }
 
 // profileModelDefaults are the model strings shown when no .env override is
 // set — the same defaults profiles.sh's table carried.
 var profileModelDefaults = map[string]string{
-	config.ProfileClaudePro:  "(Claude Code default)",
-	config.ProfileZAI:        "zai-coding-plan/glm-5.2",
-	config.ProfileOpenCodeGo: "opencode-go/glm-5.2",
+	config.ProfileClaudePro:   "(Claude Code default)",
+	config.ProfileZAI:         "zai-coding-plan/glm-5.2",
+	config.ProfileOpenCodeGo:  "opencode-go/glm-5.2",
+	config.ProfileOpenCodeZen: "opencode/deepseek-v4-flash-free",
 }
 
 const profilesHelp = `mg profiles [name]
 
-Lists manigot's subscription profiles — claude-pro, zai, opencode-go — showing
+Lists manigot's subscription profiles — claude-pro, zai, opencode-go,
+opencode-zen — showing
 which are configured and which is the default used by bare ` + "`mg`" + `. With a name,
 sets that profile as the default (written as MANIGOT_PROFILE in manigot/.env);
 with no name and an interactive terminal, prompts to select the default after
@@ -87,7 +91,7 @@ func runProfiles(args []string, r io.Reader, stdout, stderr io.Writer, tty bool)
 // confirmation + missing-credentials warning profiles.sh's confirm_set did.
 func profilesSet(name string, stdout, stderr io.Writer) int {
 	switch name {
-	case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo:
+	case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen:
 	default:
 		fmt.Fprintf(stderr, "Error: unknown profile '%s'.\n", name)
 		fmt.Fprintf(stderr, "Valid profiles: %s\n", strings.Join(profileIDs(), " "))

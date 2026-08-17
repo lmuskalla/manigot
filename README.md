@@ -6,10 +6,12 @@
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
-Runs a session under one of three **subscription profiles** — `claude-pro`
+Runs a session under one of four **subscription profiles** — `claude-pro`
 (Claude Code, billed to your Claude Pro/Max subscription), `zai` (OpenCode,
-billed to your Z.AI Coding Plan), and `opencode-go` (OpenCode, billed to the
-OpenCode Go subscription). Pick per session with `--profile`, set the default
+billed to your Z.AI Coding Plan), `opencode-go` (OpenCode, billed to the
+OpenCode Go subscription), and `opencode-zen` (OpenCode, billed to OpenCode
+Zen — DeepSeek V4 Flash Free costs no credits). Pick per session with
+`--profile`, set the default
 used by bare `mg` with `mg profiles`, and configure credentials with
 `mg setup`.
 
@@ -108,6 +110,7 @@ A profile bundles an agent CLI with one of your subscriptions:
 | `claude-pro` | Claude Code | Claude Pro/Max subscription | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs |
 | `zai` | OpenCode | Z.AI Coding Plan | `ZHIPU_API_KEY` |
 | `opencode-go` | OpenCode | OpenCode Go subscription | `OPENCODE_API_KEY` |
+| `opencode-zen` | OpenCode | OpenCode Zen (DeepSeek V4 Flash Free) | `OPENCODE_API_KEY` |
 
 The quickest way to get going:
 
@@ -118,7 +121,7 @@ mg setup              # interactive wizard: walks through each profile,
                       # auto-applying what it can read off your host (e.g.
                       # your Claude account from ~/.claude.json) and letting
                       # you paste the rest into manigot/.env
-mg profiles           # see the three profiles, which are ready, and the default;
+mg profiles           # see the profiles, which are ready, and the default;
                       # on an interactive terminal it then lets you pick the
                       # default right there
 mg profiles zai       # make bare `mg` use the zai profile
@@ -188,6 +191,22 @@ OPENCODE_GO_MODEL=opencode-go/glm-5.2
 EOF
 ```
 
+### `opencode-zen` — OpenCode, OpenCode Zen
+
+OpenCode Zen uses the same OpenCode API key from [opencode.ai/auth](https://opencode.ai/auth)
+as `opencode-go` — billing follows your subscription. Zen's DeepSeek V4 Flash
+Free model costs no credits, so this profile works with a key alone:
+
+```bash
+cat >> manigot/.env << EOF
+OPENCODE_API_KEY=sk-...        # your key from https://opencode.ai/auth
+
+# optional: which model this profile defaults to, as provider/model.
+# Zen's free DeepSeek V4 Flash model is opencode/deepseek-v4-flash-free
+OPENCODE_ZEN_MODEL=opencode/deepseek-v4-flash-free
+EOF
+```
+
 The `--profile` selector and `mg profiles`/`mg setup` are the supported way to
 manage these. `--tool claude-code|opencode` is still accepted as a legacy
 alias: `--tool claude-code` behaves exactly like `--profile claude-pro`, and
@@ -206,7 +225,7 @@ its first argument:
 | command | does |
 |---|---|
 | `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
-| `mg profiles` | list the three profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg`, or pick it interactively on a TTY; the TUI's settings screen shares the same default |
+| `mg profiles` | list the profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg`, or pick it interactively on a TTY; the TUI's settings screen shares the same default |
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose; thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
@@ -288,6 +307,7 @@ mg init
 mg                            # the default profile (claude-pro), or whatever `mg profiles` set
 mg --profile zai              # this session on your Z.AI Coding Plan
 mg --profile opencode-go      # this session on your OpenCode Go subscription
+mg --profile opencode-zen     # this session on OpenCode Zen (free model)
 mg profiles                   # list profiles + the current default (then pick a new one on a TTY)
 mg setup --check              # which profiles are ready to use
 
@@ -337,10 +357,10 @@ both, the job prompt wins.
 ## Choosing a profile
 
 A profile bundles the agent CLI with the subscription it is billed against.
-`--profile claude-pro` (default), `--profile zai`, or `--profile opencode-go`.
-What differs per profile:
+`--profile claude-pro` (default), `--profile zai`, `--profile opencode-go`, or
+`--profile opencode-zen`. What differs per profile:
 
-| | `claude-pro` | `zai` / `opencode-go` |
+| | `claude-pro` | `zai` / `opencode-go` / `opencode-zen` |
 |---|---|---|
 | CLI in container | `claude` | `opencode` |
 | Auth | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs (Claude subscription) | `ZHIPU_API_KEY` / `OPENCODE_API_KEY` |
@@ -351,7 +371,7 @@ What differs per profile:
 | Project agents | `/workspace/.claude/agents/` | `/workspace/.opencode/agents/` |
 | `docs/AGENTS.md` mounted at | `/workspace/.claude/CLAUDE.md` | `/workspace/AGENTS.md` |
 | Initial job prompt | positional argument | `--prompt` |
-| Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go subscription |
+| Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go / OpenCode Zen subscription |
 | Non-interactive (`--print` / `mg jdi`) | supported | supported |
 
 Both tools get the same `agents/*.md` files baked in at build time. The
@@ -403,8 +423,8 @@ launcher for work that must touch the host itself.
 - **Agents.** manigot's global agents are baked into the container image,
   not installed on the host — `--agent` works only if the host's own CLI has
   that agent installed (it errors clearly otherwise).
-- **OpenCode model.** The zai/opencode-go profiles' plan model is forwarded
-  via opencode's `--model` flag; mg never writes your host's opencode
+- **OpenCode model.** The zai/opencode-go/opencode-zen profiles' plan model is
+  forwarded via opencode's `--model` flag; mg never writes your host's opencode
   config.
 - **`--print` stays a container path.** `mg host --print` is rejected with a
   clear error — non-interactive runs (and `mg jdi`) still use the container.
@@ -598,8 +618,8 @@ worktree is resolved per invocation) — when:
 drives — both stay available as ordinary agents, unaffected.
 
 `mg jdi` runs under the `claude-pro` profile by default; pass `--profile
-zai` or `--profile opencode-go` to drive the sequence under an OpenCode
-subscription instead:
+zai`, `--profile opencode-go`, or `--profile opencode-zen` to drive the
+sequence under an OpenCode subscription instead:
 
 ```bash
 mg jdi --job a3f9k2 --profile zai
@@ -793,7 +813,8 @@ Press `s` from the job list to open the settings screen:
 
 - **Editor** — the command `e` (in the detail view) runs to open `brief.md`.
   Leave blank to fall back to `$VISUAL`/`$EDITOR`/`nano`/`vi`.
-- **Profile** — `claude-pro`, `zai`, or `opencode-go`, cycled with `←`/`→`
+- **Profile** — `claude-pro`, `zai`, `opencode-go`, or `opencode-zen`,
+  cycled with `←`/`→`
   (the selected profile's tool, model, and billing are shown beneath the list).
   Selects which subscription firing an agent from the action bar launches
   (adds `--profile` to the `mg --agent ... --job ...` command the same way

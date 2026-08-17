@@ -135,6 +135,51 @@ func TestBuildHostOpenCodeProfile(t *testing.T) {
 	}
 }
 
+func TestBuildHostOpenCodeZenProfile(t *testing.T) {
+	_, _ = docProject(t)
+	fakeHostBinary(t)
+	checkout(t, "MANIGOT_PROFILE=opencode-zen\nOPENCODE_API_KEY=zen-secret\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	if inv.Argv[0] != "opencode" {
+		t.Errorf("argv[0] = %q, want opencode", inv.Argv[0])
+	}
+	// The Zen profile's plan model is forwarded via opencode's own --model flag.
+	containsAll(t, inv.Argv, "--model", "opencode/deepseek-v4-flash-free")
+	m := envMap(t, inv.Env)
+	if m["OPENCODE_API_KEY"] != "zen-secret" {
+		t.Errorf("host env OPENCODE_API_KEY = %q, want zen-secret", m["OPENCODE_API_KEY"])
+	}
+	if m["OPENCODE_MODEL"] != "" {
+		t.Errorf("host env must not forward OPENCODE_MODEL — the model goes via --model (got %q)", m["OPENCODE_MODEL"])
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	for _, forbidden := range []string{"--auto", "-e", "docker"} {
+		if strings.Contains(joined, forbidden) {
+			t.Errorf("opencode host argv must not carry %q:\n%s", forbidden, joined)
+		}
+	}
+	// An opencode profile must not forward the claude-pro subscription keys.
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if m[k] != "" {
+			t.Errorf("opencode host env forwards %s=%q, want only the profile's own keys", k, m[k])
+		}
+	}
+}
+
 func TestBuildHostPrintRejected(t *testing.T) {
 	_, _ = docProject(t)
 	fakeHostBinary(t)
