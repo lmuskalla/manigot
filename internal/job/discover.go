@@ -21,9 +21,10 @@ const ArchiveDirName = "archive"
 // the session launcher and the CLI commands all use.
 //
 // It returns ("", nil) when no such directory exists before the filesystem
-// root — the same convention the bash scripts use (empty string means "not
-// found"). An error is only returned if the working directory itself cannot
-// be determined.
+// root (or before the invoking directory's own git repo boundary, when it's
+// inside one — see FindProjectRootFrom) — the same convention the bash
+// scripts use (empty string means "not found"). An error is only returned if
+// the working directory itself cannot be determined.
 func FindProjectRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -37,11 +38,25 @@ func FindProjectRoot() (string, error) {
 // launcher uses it to resolve a project from an explicit root (mg-jdi runs
 // its --print invocations against the project it was started in, not the
 // process cwd).
+//
+// The walk-up never crosses the invoking directory's own git repo boundary:
+// a project's path must always be respected as-is, so a repo nested inside
+// another repo's working copy (each with its own .git — e.g. a sub-project
+// checked out inside a monorepo) must never have its root resolved to the
+// outer repo just because the outer one happens to have a docs/ dir and the
+// inner one doesn't yet. When startDir is inside a git repo, reaching that
+// repo's toplevel without finding docs/ stops the walk right there.
 func FindProjectRootFrom(startDir string) (string, error) {
+	toplevel, gitErr := git.RevParseToplevel(startDir)
 	dir := startDir
 	for {
 		if fi, statErr := os.Stat(filepath.Join(dir, "docs")); statErr == nil && fi.IsDir() {
 			return filepath.Clean(dir), nil
+		}
+		if gitErr == nil && filepath.Clean(dir) == filepath.Clean(toplevel) {
+			// Reached this repo's boundary without finding docs/ — never
+			// cross into a parent/unrelated git repo beyond it.
+			return "", nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
