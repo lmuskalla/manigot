@@ -77,7 +77,7 @@ func runAgents(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty 
 		})
 	}
 
-	chosen, ok, err := pick("Select an agent", rows)
+	chosen, ok, err := pick("Select an agent", rows, 0)
 	if err != nil {
 		fmt.Fprintf(stderr, "mg agents: %v\n", err)
 		return 1

@@ -7,8 +7,8 @@
 // and the exact wording of every prompt and error message matches the script it
 // replaces, 1:1 (that wording is the CLI's user-visible contract).
 //
-// A command that asks several prompts in sequence (the setup wizard, a menu)
-// should wrap its input in ONE bufio.Reader and pass that down: readLine reuses
+// A command that asks several prompts in sequence (the setup wizard) should
+// wrap its input in ONE bufio.Reader and pass that down: readLine reuses
 // a *bufio.Reader it is given, but a fresh wrap per prompt would lose whatever
 // the previous bufio.Reader buffered past its newline.
 package cli
@@ -23,10 +23,6 @@ import (
 
 	"golang.org/x/term"
 )
-
-// ErrQuit is returned by Select when the user answers q/quit/exit, matching
-// the profiles.sh interactive loop's quit path.
-var ErrQuit = errors.New("quit")
 
 // IsTerminal reports whether f refers to a terminal (the Go form of bash's
 // `[[ -t 0 ]]`). Callers use it to decide whether interactive prompting is
@@ -104,51 +100,6 @@ func PromptValue(label, current, def string, r io.Reader, w io.Writer) (string, 
 		return current, nil
 	}
 	return def, nil
-}
-
-// Select renders a numbered menu (1..n) and loops until a valid selection.
-//
-// Empty input is accepted (returning 0, nil) when allowEmpty is true — the
-// "Enter keeps the current value" path of profiles.sh; when allowEmpty is false
-// (agents.sh) empty input re-prompts. q/quit/exit returns ErrQuit. Anything
-// else re-prompts with the same error wording the scripts use.
-func Select(prompt string, n int, allowEmpty bool, r io.Reader, w io.Writer) (int, error) {
-	// One reader for the whole loop — wrapping afresh each round would lose
-	// whatever the previous bufio.Reader buffered past the newline.
-	br := bufio.NewReader(r)
-	for {
-		fmt.Fprint(w, prompt)
-		line, err := readLine(br)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				if allowEmpty {
-					return 0, nil
-				}
-				return 0, fmt.Errorf("unexpected end of input while selecting")
-			}
-			return 0, err
-		}
-		if line == "" {
-			if allowEmpty {
-				return 0, nil
-			}
-			fmt.Fprintf(w, "Enter a number between 1 and %d.\n", n)
-			continue
-		}
-		switch strings.ToLower(line) {
-		case "q", "quit", "exit":
-			return 0, ErrQuit
-		}
-		var choice int
-		if _, err := fmt.Sscanf(line, "%d", &choice); err == nil && choice >= 1 && choice <= n {
-			return choice, nil
-		}
-		if allowEmpty {
-			fmt.Fprintf(w, "Enter a number between 1 and %d, or q to quit.\n", n)
-		} else {
-			fmt.Fprintf(w, "Enter a number between 1 and %d.\n", n)
-		}
-	}
 }
 
 // readLine reads one line from r, trimming the trailing newline (and any

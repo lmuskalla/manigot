@@ -78,7 +78,7 @@ const (
 // lists, orphan-only flows).
 func pickerStub(t *testing.T) pickerRunFunc {
 	t.Helper()
-	return func(title string, rows []ui.PickerRow) (string, bool, error) {
+	return func(title string, rows []ui.PickerRow, start int) (string, bool, error) {
 		t.Fatalf("picker unexpectedly run (title %q)", title)
 		return "", false, nil
 	}
@@ -87,7 +87,7 @@ func pickerStub(t *testing.T) pickerRunFunc {
 // pickerChoice returns a pickerRunFunc that reports the given result without
 // touching a terminal — the fake the wiring tests inject.
 func pickerChoice(id string, ok bool) pickerRunFunc {
-	return func(title string, rows []ui.PickerRow) (string, bool, error) {
+	return func(title string, rows []ui.PickerRow, start int) (string, bool, error) {
 		return id, ok, nil
 	}
 }
@@ -166,7 +166,7 @@ func TestJobsPickerGetsJobRows(t *testing.T) {
 
 	var gotTitle string
 	var gotRows []ui.PickerRow
-	pick := func(title string, rows []ui.PickerRow) (string, bool, error) {
+	pick := func(title string, rows []ui.PickerRow, start int) (string, bool, error) {
 		gotTitle, gotRows = title, rows
 		return "", false, nil // cancelled
 	}

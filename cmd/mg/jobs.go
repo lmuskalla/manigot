@@ -119,7 +119,7 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 		})
 	}
 
-	id, ok, err := pick("Select a job", rows)
+	id, ok, err := pick("Select a job", rows, 0)
 	if err != nil {
 		fmt.Fprintf(stderr, "mg jobs: %v\n", err)
 		return 1

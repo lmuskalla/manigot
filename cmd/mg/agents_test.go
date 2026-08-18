@@ -132,7 +132,7 @@ func TestAgentsPickerGetsAgentRows(t *testing.T) {
 
 	var gotTitle string
 	var gotRows []ui.PickerRow
-	pick := func(title string, rows []ui.PickerRow) (string, bool, error) {
+	pick := func(title string, rows []ui.PickerRow, start int) (string, bool, error) {
 		gotTitle, gotRows = title, rows
 		return "", false, nil // cancelled
 	}
@@ -202,7 +202,7 @@ func TestAgentsPickerRowsCapDescription(t *testing.T) {
 	t.Chdir(proj)
 
 	var gotRows []ui.PickerRow
-	pick := func(title string, rows []ui.PickerRow) (string, bool, error) {
+	pick := func(title string, rows []ui.PickerRow, start int) (string, bool, error) {
 		gotRows = rows
 		return "", false, nil // cancelled
 	}

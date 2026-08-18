@@ -33,7 +33,7 @@ func main() {
 		printHelp()
 		os.Exit(0)
 	case "profiles":
-		os.Exit(runProfiles(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
+		os.Exit(runProfiles(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin), ttyPicker))
 	case "setup":
 		os.Exit(runSetup(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
 	case "agents", "crew":
@@ -88,7 +88,9 @@ Commands:
   mg profiles [name]              List the profiles (and which is the default),
                                    set the default used by bare `
 		mid = `, or pick
-                                   one interactively (no name, on a TTY)
+                                   one via an interactive picker on a TTY
+                                   (type to filter, enter to choose,
+                                   esc/q cancel)
   mg setup [name] [--check]       Configure credentials for your subscriptions,
                                    interactively, or report status with --check
   mg agents                       List available agents and pick one to start,

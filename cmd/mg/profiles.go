@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lmuskalla/manigot/internal/cli"
 	"github.com/lmuskalla/manigot/internal/config"
+	"github.com/lmuskalla/manigot/internal/ui"
 )
 
 // profileAuthKeys lists the .env keys a profile needs to be ready, in the order
@@ -44,8 +44,8 @@ Lists manigot's subscription profiles — claude-pro, zai, opencode-go,
 opencode-zen — showing
 which are configured and which is the default used by bare ` + "`mg`" + `. With a name,
 sets that profile as the default (written as MANIGOT_PROFILE in manigot/.env);
-with no name and an interactive terminal, prompts to select the default after
-listing.
+with no name and an interactive terminal, picks the default via an interactive
+picker on a TTY (type to filter, enter to choose, esc/q cancel).
 
 The default is shared: the TUI's settings screen reads and writes the same
 MANIGOT_PROFILE, so TUI-launched sessions use whatever this command sets, and
@@ -53,9 +53,13 @@ vice versa.
 `
 
 // runProfiles implements `mg profiles` — the port of scripts/profiles.sh with
-// identical output wording. r is the interactive input (used only when tty),
-// stdout carries the listing/confirmations, stderr the errors.
-func runProfiles(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int {
+// identical output wording. r is the interactive input (kept for signature
+// uniformity with runAgents/runJobs even though the picker reads the terminal
+// itself), stdout carries the listing/confirmations, stderr the errors. On a
+// TTY the default-profile selection is the injected picker seam (pick) — the
+// same one runJobs/runAgents use — so tests never start a real Bubble Tea
+// program.
+func runProfiles(args []string, r io.Reader, stdout, stderr io.Writer, tty bool, pick pickerRunFunc) int {
 	fs := flag.NewFlagSet("mg profiles", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() { fmt.Fprint(stdout, profilesHelp) }
@@ -84,7 +88,7 @@ func runProfiles(args []string, r io.Reader, stdout, stderr io.Writer, tty bool)
 	if len(rest) == 1 {
 		return profilesSet(rest[0], stdout, stderr)
 	}
-	return profilesList(r, stdout, tty)
+	return profilesList(r, stdout, tty, pick)
 }
 
 // profilesSet writes MANIGOT_PROFILE=<name> into .env and prints the same
@@ -117,12 +121,16 @@ func confirmSet(name string, w io.Writer) {
 	}
 }
 
-// profilesList prints the profile table, then offers the interactive select on
-// a TTY — same listing, same `[1-N, Enter keeps X, q quits]` loop. Rows are
-// padded by byte width (padBytes), matching bash printf's byte-based padding:
-// the label column contains a multi-byte ·, so rune-based fmt padding would
-// misalign every row by one.
-func profilesList(r io.Reader, w io.Writer, tty bool) int {
+// profilesList prints the profile table, then offers the interactive picker
+// on a TTY — same listing, and the picker rows carry the same padded columns
+// (byte-padded by padBytes, matching bash printf's byte-based padding: the
+// label column contains a multi-byte ·, so rune-based fmt padding would
+// misalign every row by one). The picker replaces the old numbered
+// `[1-N, Enter keeps X, q quits]` loop; the cursor opens on the active
+// default so a bare enter keeps it. Off a TTY the listing alone is the whole
+// command (exit 0 — listing is `mg profiles`' documented purpose, unlike
+// jobs/agents which refuse because selection is their only purpose).
+func profilesList(r io.Reader, w io.Writer, tty bool, pick pickerRunFunc) int {
 	active := config.EnvValue("MANIGOT_PROFILE")
 	if active == "" {
 		active = config.ProfileClaudePro
@@ -147,28 +155,49 @@ func profilesList(r io.Reader, w io.Writer, tty bool) int {
 		return 0
 	}
 
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Select the default profile (shared with the TUI):")
 	profiles := config.Profiles()
-	choice, err := cli.Select(fmt.Sprintf("  [1-%d, Enter keeps %s, q quits]: ", len(profiles), active), len(profiles), true, r, w)
-	if err == cli.ErrQuit {
-		return 0
+	rows := make([]ui.PickerRow, 0, len(profiles))
+	start := 0
+	for i, p := range profiles {
+		if p.ID == active {
+			start = i
+		}
+		model := profileModel(p.ID)
+		cred := creds(p.ID)
+		mark := " "
+		if p.ID == active {
+			mark = "*"
+		}
+		rows = append(rows, ui.PickerRow{
+			ID:        p.ID,
+			SearchKey: p.ID + " " + p.Label + " " + p.Tool + " " + model + " " + cred,
+			// The same padded columns as the plain listing (minus the leading
+			// indent, which the picker's own cursor/blank prefix provides),
+			// keeping the * active mark.
+			Label: mark + padBytes(p.ID, 12) + " " + padBytes(p.Label, 28) + " " +
+				padBytes(p.Tool, 10) + " " + padBytes(model, 26) + " " + cred,
+		})
 	}
+
+	chosen, ok, err := pick("Select the default profile", rows, start)
 	if err != nil {
 		fmt.Fprintf(w, "mg profiles: %v\n", err)
 		return 1
 	}
-	if choice == 0 {
+	if !ok {
+		// Cancelled (esc/q) — a quiet exit 0, not the old "quit" error.
+		return 0
+	}
+	if chosen == active {
 		fmt.Fprintf(w, "Keeping %s.\n", active)
 		return 0
 	}
-	target := profiles[choice-1].ID
 	fmt.Fprintln(w, "")
-	if err := config.UpsertEnv("MANIGOT_PROFILE", target); err != nil {
+	if err := config.UpsertEnv("MANIGOT_PROFILE", chosen); err != nil {
 		fmt.Fprintf(w, "mg profiles: %v\n", err)
 		return 1
 	}
-	confirmSet(target, w)
+	confirmSet(chosen, w)
 	return 0
 }
 

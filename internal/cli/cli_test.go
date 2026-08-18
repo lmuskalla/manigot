@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"errors"
-	"io"
 	"strings"
 	"testing"
 )
@@ -133,87 +131,5 @@ func TestPromptValueEmptyShown(t *testing.T) {
 	// matching setup.sh's `  $label [...]` formatting exactly.
 	if want := "    OPENCODE_GO_MODEL [empty] — Enter keeps it: "; w.String() != want {
 		t.Errorf("prompt = %q, want %q", w.String(), want)
-	}
-}
-
-func TestSelectValidNumber(t *testing.T) {
-	got, err := Select("Select an agent [1-3]: ", 3, false, strings.NewReader("2\n"), &strings.Builder{})
-	if err != nil {
-		t.Fatalf("Select: %v", err)
-	}
-	if got != 2 {
-		t.Errorf("Select = %d, want 2", got)
-	}
-}
-
-func TestSelectRepromptsOnInvalidThenAccepts(t *testing.T) {
-	var w strings.Builder
-	got, err := Select("Select an agent [1-3]: ", 3, false, strings.NewReader("9\nabc\n3\n"), &w)
-	if err != nil {
-		t.Fatalf("Select: %v", err)
-	}
-	if got != 3 {
-		t.Errorf("Select = %d, want 3", got)
-	}
-	// The prompt is printed once per iteration, like bash's read -rp loop.
-	want := "Select an agent [1-3]: Enter a number between 1 and 3.\n" +
-		"Select an agent [1-3]: Enter a number between 1 and 3.\n" +
-		"Select an agent [1-3]: "
-	if w.String() != want {
-		t.Errorf("output = %q, want %q", w.String(), want)
-	}
-}
-
-func TestSelectEmptyRepromptsWhenNotAllowed(t *testing.T) {
-	_, err := Select("Select an agent [1-3]: ", 3, false, strings.NewReader("\n1\n"), &strings.Builder{})
-	if err != nil {
-		t.Fatalf("Select: %v", err)
-	}
-}
-
-func TestSelectEmptyAllowedReturnsZero(t *testing.T) {
-	got, err := Select("  [1-3, Enter keeps zai, q quits]: ", 3, true, strings.NewReader("\n"), &strings.Builder{})
-	if err != nil {
-		t.Fatalf("Select: %v", err)
-	}
-	if got != 0 {
-		t.Errorf("Select empty = %d, want 0 (keep)", got)
-	}
-}
-
-func TestSelectQuitReturnsErrQuit(t *testing.T) {
-	for _, in := range []string{"q\n", "Q\n", "quit\n", "exit\n"} {
-		_, err := Select("  [1-3, Enter keeps zai, q quits]: ", 3, true, strings.NewReader(in), &strings.Builder{})
-		if !errors.Is(err, ErrQuit) {
-			t.Errorf("Select(%q) error = %v, want ErrQuit", in, err)
-		}
-	}
-}
-
-func TestSelectQuitWordingWhenAllowed(t *testing.T) {
-	var w strings.Builder
-	got, err := Select("  [1-3, Enter keeps zai, q quits]: ", 3, true, strings.NewReader("9\n2\n"), &w)
-	if err != nil {
-		t.Fatalf("Select: %v", err)
-	}
-	if got != 2 {
-		t.Errorf("Select = %d, want 2", got)
-	}
-	// Prompt prints per iteration; the invalid answer gets the ", or q to quit."
-	// wording that profiles.sh uses.
-	want := "  [1-3, Enter keeps zai, q quits]: Enter a number between 1 and 3, or q to quit.\n" +
-		"  [1-3, Enter keeps zai, q quits]: "
-	if w.String() != want {
-		t.Errorf("output = %q, want %q", w.String(), want)
-	}
-}
-
-func TestSelectEOFWhenEmptyNotAllowedErrors(t *testing.T) {
-	_, err := Select("Select an agent [1-3]: ", 3, false, strings.NewReader(""), &strings.Builder{})
-	if err == nil {
-		t.Fatal("expected an error on EOF when empty is not allowed")
-	}
-	if errors.Is(err, io.EOF) {
-		t.Errorf("error should wrap a descriptive message, not raw EOF: %v", err)
 	}
 }

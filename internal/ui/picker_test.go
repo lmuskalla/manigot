@@ -105,6 +105,38 @@ func TestPickerEnterWithNoRows(t *testing.T) {
 	}
 }
 
+// TestPickerStartAt pins the initial-cursor setter: StartAt moves the cursor
+// to the requested row, clamps at both ends, and is a no-op on an empty row
+// list — so a caller can open on a chosen row (the active default) without
+// risking an out-of-range cursor.
+func TestPickerStartAt(t *testing.T) {
+	// A middle row lands exactly.
+	p := NewPicker("t", testPickerRows())
+	p.StartAt(1)
+	if p.cursor != 1 {
+		t.Errorf("StartAt(1) cursor = %d, want 1", p.cursor)
+	}
+
+	// Below zero clamps to the first row.
+	p.StartAt(-5)
+	if p.cursor != 0 {
+		t.Errorf("StartAt(-5) cursor = %d, want 0", p.cursor)
+	}
+
+	// Past the end clamps to the last row.
+	p.StartAt(99)
+	if p.cursor != 2 {
+		t.Errorf("StartAt(99) cursor = %d, want 2", p.cursor)
+	}
+
+	// An empty row list is a no-op, not a crash.
+	p = NewPicker("t", nil)
+	p.StartAt(3)
+	if p.cursor != 0 {
+		t.Errorf("StartAt on empty rows cursor = %d, want 0", p.cursor)
+	}
+}
+
 // TestPickerScrolls exercises the windowing: with fewer visible rows than
 // rows, the offset follows the cursor so the highlighted row stays on
 // screen, and scrolls back when the cursor returns up.

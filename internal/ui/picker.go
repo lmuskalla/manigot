@@ -68,6 +68,25 @@ func NewPicker(title string, rows []PickerRow) *Picker {
 	return &Picker{title: title, rows: rows, width: 80, height: 24}
 }
 
+// StartAt moves the picker's cursor to the given row index before it first
+// renders, clamping i into [0, len(rows)-1] and scrolling the window so the
+// chosen row is visible. It is a no-op on an empty row list. NewPicker starts
+// at row 0; callers that want the cursor on a specific row — e.g. a settings
+// list that opens on the active default — call StartAt before running.
+func (p *Picker) StartAt(i int) {
+	if len(p.rows) == 0 {
+		return
+	}
+	if i < 0 {
+		i = 0
+	}
+	if i >= len(p.rows) {
+		i = len(p.rows) - 1
+	}
+	p.cursor = i
+	p.clampView()
+}
+
 // Init implements tea.Model.
 func (p *Picker) Init() tea.Cmd { return nil }
 

@@ -40,7 +40,7 @@ interface for jdi — every OS boundary and time dependency is injectable, and
 the tests use these seams. This is deliberate, consistent discipline.
 
 **Error handling is consistent.** Sentinel errors where they matter
-(`ErrNotARepo`, `ErrCancelled`, `ErrQuit`, `ErrNotFound`), `errors.Is`/
+(`ErrNotARepo`, `ErrCancelled`, `ErrNotFound`), `errors.Is`/
 `errors.As` used correctly, and graceful degradation followed as a policy
 ("never crash on host-command error"). The `cli.Confirm` `bufio.Reader`
 reuse caveat is a real subtlety that was caught and documented.

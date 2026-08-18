@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lmuskalla/manigot/internal/ui"
 )
 
 // profileCheckout builds a minimal fake manigot checkout (the file
@@ -39,7 +41,7 @@ func profileCheckout(t *testing.T, env string) string {
 
 func TestProfilesHelp(t *testing.T) {
 	var out, errOut strings.Builder
-	code := runProfiles([]string{"--help"}, strings.NewReader(""), &out, &errOut, false)
+	code := runProfiles([]string{"--help"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 0 {
 		t.Errorf("help exit code = %d, want 0", code)
 	}
@@ -51,7 +53,7 @@ func TestProfilesHelp(t *testing.T) {
 func TestProfilesSetValid(t *testing.T) {
 	dir := profileCheckout(t, "# header\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-secret\n")
 	var out, errOut strings.Builder
-	code := runProfiles([]string{"zai"}, strings.NewReader(""), &out, &errOut, false)
+	code := runProfiles([]string{"zai"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
 	}
@@ -74,7 +76,7 @@ func TestProfilesSetValid(t *testing.T) {
 func TestProfilesSetWarnsOnMissingCreds(t *testing.T) {
 	profileCheckout(t, "")
 	var out, errOut strings.Builder
-	code := runProfiles([]string{"opencode-go"}, strings.NewReader(""), &out, &errOut, false)
+	code := runProfiles([]string{"opencode-go"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
 	}
@@ -86,7 +88,7 @@ func TestProfilesSetWarnsOnMissingCreds(t *testing.T) {
 func TestProfilesSetOpenCodeZen(t *testing.T) {
 	dir := profileCheckout(t, "OPENCODE_API_KEY=zen-key\n")
 	var out, errOut strings.Builder
-	code := runProfiles([]string{"opencode-zen"}, strings.NewReader(""), &out, &errOut, false)
+	code := runProfiles([]string{"opencode-zen"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
 	}
@@ -109,7 +111,7 @@ func TestProfilesSetOpenCodeZen(t *testing.T) {
 func TestProfilesSetUnknownProfile(t *testing.T) {
 	profileCheckout(t, "")
 	var out, errOut strings.Builder
-	code := runProfiles([]string{"bogus"}, strings.NewReader(""), &out, &errOut, false)
+	code := runProfiles([]string{"bogus"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -123,7 +125,7 @@ func TestProfilesSetUnknownProfile(t *testing.T) {
 
 func TestProfilesTooManyArgs(t *testing.T) {
 	var out, errOut strings.Builder
-	code := runProfiles([]string{"zai", "extra"}, strings.NewReader(""), &out, &errOut, false)
+	code := runProfiles([]string{"zai", "extra"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -135,7 +137,7 @@ func TestProfilesTooManyArgs(t *testing.T) {
 func TestProfilesListNonTTY(t *testing.T) {
 	profileCheckout(t, "MANIGOT_PROFILE=opencode-go\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-secret\nCLAUDE_ACCOUNT_UUID=uuid\nCLAUDE_EMAIL=e@x.io\nCLAUDE_ORG_UUID=org\nOPENCODE_API_KEY=ok-key\n")
 	var out strings.Builder
-	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, false)
+	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}
@@ -155,7 +157,7 @@ func TestProfilesListNonTTY(t *testing.T) {
 func TestProfilesListShowsMissingClaudeKeys(t *testing.T) {
 	profileCheckout(t, "MANIGOT_PROFILE=claude-pro\n")
 	var out strings.Builder
-	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, false)
+	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, false, pickerStub(t))
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}
@@ -164,11 +166,15 @@ func TestProfilesListShowsMissingClaudeKeys(t *testing.T) {
 	}
 }
 
+// TestProfilesListInteractiveSelect covers the TTY submit path with an
+// injected picker (the seam — no real Bubble Tea program): choosing a profile
+// other than the active default writes MANIGOT_PROFILE and prints the set
+// confirmation.
 func TestProfilesListInteractiveSelect(t *testing.T) {
 	dir := profileCheckout(t, "# header\n")
 	var out strings.Builder
-	// Empty .env means the active default is claude-pro; select 2 (zai).
-	code := runProfiles([]string{}, strings.NewReader("2\n"), &out, &strings.Builder{}, true)
+	// Empty .env means the active default is claude-pro; choose zai.
+	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("zai", true))
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}
@@ -184,10 +190,13 @@ func TestProfilesListInteractiveSelect(t *testing.T) {
 	}
 }
 
+// TestProfilesListInteractiveEnterKeeps covers the "enter keeps the current
+// default" affordance: choosing the already-active profile prints "Keeping X."
+// instead of re-writing .env.
 func TestProfilesListInteractiveEnterKeeps(t *testing.T) {
 	profileCheckout(t, "MANIGOT_PROFILE=zai\n")
 	var out strings.Builder
-	code := runProfiles([]string{}, strings.NewReader("\n"), &out, &strings.Builder{}, true)
+	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("zai", true))
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}
@@ -196,10 +205,75 @@ func TestProfilesListInteractiveEnterKeeps(t *testing.T) {
 	}
 }
 
-func TestProfilesListInteractiveQuit(t *testing.T) {
+// TestProfilesListInteractiveCancel covers the cancelled-picker path: esc/q
+// exits 0 quietly, exactly like the old q-quits path.
+func TestProfilesListInteractiveCancel(t *testing.T) {
 	var out strings.Builder
-	code := runProfiles([]string{}, strings.NewReader("q\n"), &out, &strings.Builder{}, true)
+	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("", false))
 	if code != 0 {
-		t.Errorf("quit exit code = %d, want 0", code)
+		t.Errorf("cancel exit code = %d, want 0", code)
+	}
+}
+
+// TestProfilesPickerGetsProfileRows pins the picker wiring: on a TTY the
+// picker is fed the title plus one pre-rendered row per profile (ID,
+// padded-column label with the * active mark, search key id+label+tool+model
+// +creds), and the cursor start index is the active default's position — so a
+// bare enter keeps it.
+func TestProfilesPickerGetsProfileRows(t *testing.T) {
+	// opencode-go is the active default — the third of the four profiles, so
+	// the picker must open on start index 2.
+	profileCheckout(t, "MANIGOT_PROFILE=opencode-go\n")
+
+	var gotTitle string
+	var gotRows []ui.PickerRow
+	var gotStart int
+	pick := func(title string, rows []ui.PickerRow, start int) (string, bool, error) {
+		gotTitle, gotRows, gotStart = title, rows, start
+		return "", false, nil // cancelled
+	}
+	var out strings.Builder
+	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, true, pick)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (cancel exits quietly)", code)
+	}
+	if gotTitle != "Select the default profile" {
+		t.Errorf("picker title = %q, want %q", gotTitle, "Select the default profile")
+	}
+	if len(gotRows) != 4 {
+		t.Fatalf("picker rows = %d, want 4", len(gotRows))
+	}
+	wantIDs := []string{"claude-pro", "zai", "opencode-go", "opencode-zen"}
+	for i, want := range wantIDs {
+		if gotRows[i].ID != want {
+			t.Errorf("row %d ID = %q, want %q", i, gotRows[i].ID, want)
+		}
+	}
+	// The search key carries id + label + tool + model + creds so
+	// type-to-filter can match on any of them.
+	wantSearchParts := [][]string{
+		{"claude-pro", "Claude Code", "claude-code", "(Claude Code default)", "✗ missing CLAUDE_CODE_OAUTH_TOKEN"},
+		{"zai", "Z.AI Coding Plan", "opencode", "zai-coding-plan/glm-5.2", "✗ missing ZHIPU_API_KEY"},
+		{"opencode-go", "OpenCode · Go", "opencode", "opencode-go/glm-5.2", "✗ missing OPENCODE_API_KEY"},
+		{"opencode-zen", "OpenCode · Zen", "opencode", "opencode/deepseek-v4-flash-free", "✗ missing OPENCODE_API_KEY"},
+	}
+	for i, parts := range wantSearchParts {
+		key := gotRows[i].SearchKey
+		for _, want := range parts {
+			if !strings.Contains(key, want) {
+				t.Errorf("row %d search key missing %q: %q", i, want, key)
+			}
+		}
+	}
+	// The label keeps the padded columns (tool/model/creds) and the * active
+	// mark on the active default's row.
+	if !strings.Contains(gotRows[0].Label, "claude-code") || !strings.Contains(gotRows[0].Label, "✗ missing CLAUDE_CODE_OAUTH_TOKEN") {
+		t.Errorf("row 0 label missing tool/model/creds columns: %q", gotRows[0].Label)
+	}
+	if !strings.HasPrefix(gotRows[2].Label, "*opencode-go") {
+		t.Errorf("row 2 (active default) label missing the * mark: %q", gotRows[2].Label)
+	}
+	if gotStart != 2 {
+		t.Errorf("start index = %d, want 2 (opencode-go is the active default)", gotStart)
 	}
 }
