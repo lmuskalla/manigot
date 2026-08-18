@@ -115,8 +115,9 @@ func TestJobsListsWithStateAndBadge(t *testing.T) {
 			t.Errorf("listing missing %q:\n%s", want, got)
 		}
 	}
-	// Newest first (date desc), same ordering as the TUI.
-	for _, want := range []string{"1) def02", "2) aaa01"} {
+	// Newest first (date desc), same ordering as the TUI — the ids carry
+	// their display "#" prefix in the listing.
+	for _, want := range []string{"1) #def02", "2) #aaa01"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected date-desc order, missing %q:\n%s", want, got)
 		}
@@ -149,7 +150,7 @@ func TestJobsSelectWritesChosenAndLaunches(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("unexpected success; the re-exec should not accept the flags")
 	}
-	if !strings.Contains(out.String(), "→ Starting a session in aaa01...") {
+	if !strings.Contains(out.String(), "→ Starting a session in #aaa01...") {
 		t.Errorf("missing launch line:\n%s", out.String())
 	}
 }
@@ -181,10 +182,10 @@ func TestJobsPickerGetsJobRows(t *testing.T) {
 	if len(gotRows) != 2 {
 		t.Fatalf("picker rows = %d, want 2", len(gotRows))
 	}
-	if gotRows[0].ID != "def02" || gotRows[0].SearchKey != "def02 Beta Job" {
-		t.Errorf("row 0 = %+v, want def02 with id+title search key", gotRows[0])
+	if gotRows[0].ID != "def02" || gotRows[0].SearchKey != "#def02 Beta Job" {
+		t.Errorf("row 0 = %+v, want def02 (raw ID) with #-prefixed id+title search key", gotRows[0])
 	}
-	if !strings.Contains(gotRows[0].Label, "def02") || !strings.Contains(gotRows[0].Label, "fix") ||
+	if !strings.Contains(gotRows[0].Label, "#def02") || !strings.Contains(gotRows[0].Label, "fix") ||
 		!strings.Contains(gotRows[0].Label, "2026-02-02") || !strings.Contains(gotRows[0].Label, "Beta Job") {
 		t.Errorf("row 0 label missing listing columns: %q", gotRows[0].Label)
 	}
@@ -373,13 +374,13 @@ func TestJobsStageGuidance(t *testing.T) {
 }
 
 // TestJobsLaunchLine pins the launch-line wording: with an agent it names it
-// ("→ Starting a session in @analyst for aaa01..."), without one it stays the
-// plain agent-less line.
+// ("→ Starting a session in @analyst for #aaa01..."), without one it stays the
+// plain agent-less line — the id always carries its display "#" prefix.
 func TestJobsLaunchLine(t *testing.T) {
-	if got, want := jobsLaunchLine("aaa01", "analyst"), "→ Starting a session in @analyst for aaa01..."; got != want {
+	if got, want := jobsLaunchLine("aaa01", "analyst"), "→ Starting a session in @analyst for #aaa01..."; got != want {
 		t.Errorf("jobsLaunchLine with agent = %q, want %q", got, want)
 	}
-	if got, want := jobsLaunchLine("aaa01", ""), "→ Starting a session in aaa01..."; got != want {
+	if got, want := jobsLaunchLine("aaa01", ""), "→ Starting a session in #aaa01..."; got != want {
 		t.Errorf("jobsLaunchLine without agent = %q, want %q", got, want)
 	}
 }
@@ -443,13 +444,13 @@ func TestJobsSelectStageLaunchOutput(t *testing.T) {
 		{
 			name:     "define stays agent-less with guidance",
 			setup:    func(t *testing.T, root string) {}, // jobsBrief alone is frontmatter-only (unwritten)
-			wantLine: "→ Starting a session in aaa01...",
+			wantLine: "→ Starting a session in #aaa01...",
 			wantGuid: "brief.md is not written yet — write it first",
 		},
 		{
 			name:     "plan launches in analyst",
 			setup:    planFixture,
-			wantLine: "→ Starting a session in @analyst for aaa01...",
+			wantLine: "→ Starting a session in @analyst for #aaa01...",
 		},
 		{
 			name: "implement launches in developer",
@@ -457,7 +458,7 @@ func TestJobsSelectStageLaunchOutput(t *testing.T) {
 				planFixture(t, root)
 				jobsWriteJobFile(t, root, "aaa01_alpha", "tasks.md", jobsFilledTasks)
 			},
-			wantLine: "→ Starting a session in @developer for aaa01...",
+			wantLine: "→ Starting a session in @developer for #aaa01...",
 		},
 		{
 			name: "review launches in reviewer",
@@ -466,7 +467,7 @@ func TestJobsSelectStageLaunchOutput(t *testing.T) {
 				jobsWriteJobFile(t, root, "aaa01_alpha", "tasks.md", jobsFilledTasks)
 				jobsWriteJobFile(t, root, "aaa01_alpha", "implementation.md", jobsFilledImplementation)
 			},
-			wantLine: "→ Starting a session in @reviewer for aaa01...",
+			wantLine: "→ Starting a session in @reviewer for #aaa01...",
 		},
 		{
 			name: "finished stays agent-less with guidance",
@@ -476,7 +477,7 @@ func TestJobsSelectStageLaunchOutput(t *testing.T) {
 				jobsWriteJobFile(t, root, "aaa01_alpha", "implementation.md", jobsFilledImplementation)
 				jobsWriteJobFile(t, root, "aaa01_alpha", "verdict.md", jobsApprovedVerdict)
 			},
-			wantLine: "→ Starting a session in aaa01...",
+			wantLine: "→ Starting a session in #aaa01...",
 			wantGuid: "verdict is APPROVED — run mg done to merge",
 		},
 		{
@@ -487,14 +488,14 @@ func TestJobsSelectStageLaunchOutput(t *testing.T) {
 				jobsWriteJobFile(t, root, "aaa01_alpha", "implementation.md", jobsFilledImplementation)
 				jobsWriteJobFile(t, root, "aaa01_alpha", "verdict.md", jobsRejectedVerdict)
 			},
-			wantLine: "→ Starting a session in @developer for aaa01...",
+			wantLine: "→ Starting a session in @developer for #aaa01...",
 		},
 		{
 			name: "explicit passthrough agent names the launch line",
 			setup: func(t *testing.T, root string) {
 				planFixture(t, root)
 			},
-			wantLine: "→ Starting a session in @security for aaa01...",
+			wantLine: "→ Starting a session in @security for #aaa01...",
 		},
 	}
 	for _, c := range cases {

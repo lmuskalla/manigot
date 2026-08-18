@@ -134,12 +134,13 @@ type columnWidths struct {
 	id, status, stage, typ, date, title int
 }
 
-// listColumns returns the list view's fixed column widths. id is 12 rather
-// than 8 so word-based job ids (e.g. "caterpillar") render untruncated —
-// pad() would cut a longer word at the column edge. stage is wider
-// than typ because the longest stage name ("implement") is 9 chars.
+// listColumns returns the list view's fixed column widths. id is 13 rather
+// than 8 so the longest word-based job id (12 chars, e.g. "unemployment")
+// plus its display "#" prefix renders untruncated — pad() would cut a
+// longer word at the column edge. stage is wider than typ because the
+// longest stage name ("implement") is 9 chars.
 func listColumns() columnWidths {
-	return columnWidths{id: 12, status: 6, stage: 10, typ: 8, date: 12, title: 0}
+	return columnWidths{id: 13, status: 6, stage: 10, typ: 8, date: 12, title: 0}
 }
 
 // render draws the list view — title, job rows (or the empty-state invite),
@@ -274,7 +275,7 @@ func (v *listView) renderJobRow(j job.Job, cols columnWidths, selected bool, spi
 		status = statusDoneStyle.Render(pad(j.Status, cols.status))
 	}
 	cells := []string{
-		pad(j.ID, cols.id),
+		pad("#"+j.ID, cols.id),
 		status,
 		pad(string(j.Stage()), cols.stage),
 		pad(j.Type, cols.typ),

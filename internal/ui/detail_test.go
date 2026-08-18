@@ -377,6 +377,27 @@ func TestDetailViewMetaLineShowsBranch(t *testing.T) {
 	}
 }
 
+// TestDetailViewMetaLinePrefixesIDWithHashtag pins the detail view's meta
+// line rendering the job id with a "#" prefix ("#fun · status · type · date")
+// — the display change this job ships, so word-based ids read as ids rather
+// than prose.
+func TestDetailViewMetaLinePrefixesIDWithHashtag(t *testing.T) {
+	dir, _ := gitInitRepo(t)
+	wts := t.TempDir()
+	addJobWorktree(t, dir, wts, "feature/habit01_f", "habit01_f", "# Brief: Fun\n\nstatus: open\nid: fun\nbranch: feature/habit01_f\ntype: feature\ndate: 2026-01-01\n")
+
+	jobs, _ := job.Discover(dir)
+	if len(jobs) != 1 {
+		t.Fatalf("job.Discover: want 1 job, got %+v", jobs)
+	}
+
+	d := newDetailView(jobs[0], 80, 24)
+	out := d.render()
+	if !strings.Contains(out, "#fun · open · feature · 2026-01-01") {
+		t.Errorf("meta line missing the hashtag-prefixed id:\n%s", out)
+	}
+}
+
 // --- status/hint coexistence (TASK-5) ---------------------------------------
 
 // TestDetailFooterKeepsHintAlongsideSingleLineStatus is a regression test for

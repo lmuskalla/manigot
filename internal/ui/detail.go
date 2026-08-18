@@ -658,7 +658,7 @@ func (d *detailView) render() string {
 
 	// Title + meta line.
 	b.WriteString(titleStyle.Render(d.job.Title))
-	meta := fmt.Sprintf("  %s · %s · %s · %s", d.job.ID, d.job.Status, d.job.Type, d.job.Date)
+	meta := fmt.Sprintf("  #%s · %s · %s · %s", d.job.ID, d.job.Status, d.job.Type, d.job.Date)
 	b.WriteString(dimStyle.Render(meta))
 	// Branch: show which branch the job's own worktree is checked out to.
 	// Purely informational — every job has its own worktree, so there is no

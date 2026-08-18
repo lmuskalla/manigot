@@ -64,7 +64,7 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 		fmt.Fprintln(stdout, "Jobs:")
 		fmt.Fprintln(stdout, "")
 		for i, j := range jobs {
-			row := fmt.Sprintf("  %2d) %-8s %-6s %-8s %-12s %s", i+1, j.ID, j.Status, j.Type, j.Date, j.Title)
+			row := fmt.Sprintf("  %2d) #%-8s %-6s %-8s %-12s %s", i+1, j.ID, j.Status, j.Type, j.Date, j.Title)
 			if badge := jobsBadge(root, j); badge != "" {
 				row += "  " + badge
 			}
@@ -108,13 +108,13 @@ func runJobs(passthrough []string, r io.Reader, stdout, stderr io.Writer, tty bo
 
 	rows := make([]ui.PickerRow, 0, len(jobs))
 	for _, j := range jobs {
-		label := fmt.Sprintf("%-8s %-6s %-8s %-12s %s", j.ID, j.Status, j.Type, j.Date, j.Title)
+		label := fmt.Sprintf("#%-8s %-6s %-8s %-12s %s", j.ID, j.Status, j.Type, j.Date, j.Title)
 		if badge := jobsBadge(root, j); badge != "" {
 			label += "  " + badge
 		}
 		rows = append(rows, ui.PickerRow{
 			ID:        j.ID,
-			SearchKey: j.ID + " " + j.Title,
+			SearchKey: "#" + j.ID + " " + j.Title,
 			Label:     label,
 		})
 	}
@@ -203,12 +203,14 @@ func stageGuidance(stage job.Stage) string {
 
 // jobsLaunchLine renders the "→ Starting a session ..." line printed before
 // the launch: it names the derived agent when there is one ("→ Starting a
-// session in @analyst for aaa01..."), and stays agent-less otherwise.
+// session in @analyst for #aaa01..."), and stays agent-less otherwise. The id
+// is a display-only "#"-prefixed rendering — the re-exec args jobsLaunchArgs
+// builds keep the raw id.
 func jobsLaunchLine(id, agent string) string {
 	if agent != "" {
-		return fmt.Sprintf("→ Starting a session in @%s for %s...", agent, id)
+		return fmt.Sprintf("→ Starting a session in @%s for #%s...", agent, id)
 	}
-	return fmt.Sprintf("→ Starting a session in %s...", id)
+	return fmt.Sprintf("→ Starting a session in #%s...", id)
 }
 
 // jobsLaunchArgs builds the re-exec args for the picked job: `mg --job <id>

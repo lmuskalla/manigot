@@ -553,20 +553,21 @@ func TestRenderListShowsStageColumn(t *testing.T) {
 }
 
 // TestRenderListWordIDNotTruncated verifies the job-id column renders
-// word-based ids in full — the column was widened from 8 to 12 so a word like
-// "caterpillar" (11 chars) isn't cut off by pad() at the column edge.
+// word-based ids in full with the "#" prefix — the column is 13 wide so the
+// longest word id (12 chars, e.g. "unemployment") plus the "#" isn't cut off
+// by pad() at the column edge.
 func TestRenderListWordIDNotTruncated(t *testing.T) {
 	j := job.Job{
-		Name:   "caterpillar_garden",
+		Name:   "unemployment_benefits",
 		Dir:    t.TempDir(), // no job files → stage define
-		ID:     "caterpillar",
-		Title:  "Caterpillar Garden",
+		ID:     "unemployment",
+		Title:  "Unemployment Benefits",
 		Type:   "feature",
 		Status: "open",
 	}
 	cols := listColumns()
 	row := (&listView{}).renderJobRow(j, cols, false, 0)
-	if !strings.Contains(row, "caterpillar") {
+	if !strings.Contains(row, "#unemployment") {
 		t.Errorf("job row truncated the word id:\n%s", row)
 	}
 }
