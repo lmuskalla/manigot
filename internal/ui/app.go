@@ -91,6 +91,22 @@ type App struct {
 	// running mg-job or an agent).
 	status string
 
+	// statusUntil is when the current list status blinks then clears — see
+	// statusExpireMsg. statusBlinkOn toggles the list footer's *rendered*
+	// visibility during the blink window immediately before statusUntil; the
+	// underlying status text stays set throughout the blink (statusVisible
+	// decides rendering, so footer layout never jitters mid-blink).
+	statusUntil   time.Time
+	statusBlinkOn bool
+
+	// statusExpiryTicking guards the status-expiry tick chain: true while a
+	// statusExpireMsg is scheduled or in flight, so no second concurrent
+	// chain can be started (armStatusExpiry is a no-op while it's set).
+	// Cleared by the tick handler itself the moment no status remains on
+	// either surface — the chain self-terminates, returning the app to its
+	// idle (no timer) behaviour.
+	statusExpiryTicking bool
+
 	// jdiSeen tracks, per job Name, the last job.JDIState observed for that
 	// job's mg-jdi status sidecar — the TUI's own stop-notification dedup. The very first observation of any given job
 	// (no prior entry) always just seeds this map rather than ringing the
@@ -140,6 +156,15 @@ type App struct {
 // of sitting as a static badge.
 type spinnerTickMsg struct{}
 
+// statusExpireMsg drives the blink-then-clear of transient status messages
+// (the list footer's status and the detail footer's status). It is the app's
+// second timer-driven message — alongside spinnerTickMsg, the other narrow
+// exception to "no separate timer-driven tick" — a ~statusBlinkInterval
+// redraw that exists only while a status is set, so a transient status
+// blinks a few times then disappears instead of persisting forever (see
+// armStatusExpiry and its Update handler).
+type statusExpireMsg struct{}
+
 // hostGitTimeout bounds the TUI's background git cmds (push-to-origin, the
 // auto-commit after a brief.md edit). These run off the UI goroutine, so an
 // unbounded git call — most realistically a stalled network push — would hang
@@ -169,6 +194,10 @@ const jdiSeenFallbackTTL = 2 * time.Minute
 // for jdiSeenFallbackTTL without an actual sleep.
 var jdiNow = time.Now
 
+// statusNow is time.Now, indirected so tests can simulate the passage of time
+// for the status blink/expiry state machine without an actual sleep.
+var statusNow = time.Now
+
 // NewApp builds the root model from a discovered job list. Settings are
 // loaded from disk (see config.Load); a load failure (e.g. a corrupt
 // tui-settings.json) is non-fatal — the app starts with default settings and
@@ -178,7 +207,10 @@ func NewApp(root string, jobs []job.Job) *App {
 	settings, err := config.Load()
 	a.settings = settings
 	if err != nil {
-		a.status = cmdErrorText(err)
+		// A startup config-load error is a transient status like any other:
+		// it blinks then clears. The arming cmd is discarded here (NewApp
+		// returns no cmd) — Init re-arms via armStatusExpiry.
+		a.setStatus(cmdErrorText(err))
 	}
 	a.list.currentBranch, _ = git.CurrentBranch(root) // "" on detached HEAD / non-repo
 	// Settings must be loaded before the initial recent-commits fetch so the
@@ -194,9 +226,9 @@ func NewApp(root string, jobs []job.Job) *App {
 	a.projectSettings = projSettings
 	if perr != nil {
 		if a.status != "" {
-			a.status += " · " + cmdErrorText(perr)
+			a.setStatus(a.status + " · " + cmdErrorText(perr))
 		} else {
-			a.status = cmdErrorText(perr)
+			a.setStatus(cmdErrorText(perr))
 		}
 	}
 	return a
@@ -204,10 +236,14 @@ func NewApp(root string, jobs []job.Job) *App {
 
 // Init starts the program. No initial commands are needed — except the
 // activity-indicator tick chain when an mg-jdi run is already active at
-// startup (startSpinnerIfRunning), so a TUI opened mid-run animates its
-// badge without waiting for a keypress or refresh.
+// startup (startSpinnerIfRunning, so a TUI opened mid-run animates its badge
+// without waiting for a keypress or refresh) and the status-expiry chain when
+// a startup status was set in NewApp (armStatusExpiry, so a config-load error
+// surfaced in the footer blinks then clears like any other transient status).
+// Both are no-ops (nil) when there is nothing to animate, and tea.Batch
+// drops those nils.
 func (a *App) Init() tea.Cmd {
-	return a.startSpinnerIfRunning()
+	return tea.Batch(a.startSpinnerIfRunning(), a.armStatusExpiry())
 }
 
 // editorDoneMsg reports the outcome of the "e" edit-shortcut's tea.ExecProcess
@@ -338,11 +374,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.detail = nil
 		a.state = stateList
 		if msg.err != nil {
-			a.status = cmdErrorText(msg.err)
-		} else {
-			a.status = "refreshed"
+			return a, tea.Batch(spinnerCmd, a.setStatus(cmdErrorText(msg.err)))
 		}
-		return a, spinnerCmd
+		return a, tea.Batch(spinnerCmd, a.setStatus("refreshed"))
 	case deleteMsg:
 		// Same reasoning as doneMsg: a declined delete (ErrCancelled) leaves
 		// the job present in the re-read list — refreshJobs and returning to
@@ -351,11 +385,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.detail = nil
 		a.state = stateList
 		if msg.err != nil {
-			a.status = cmdErrorText(msg.err)
-		} else {
-			a.status = "refreshed"
+			return a, tea.Batch(spinnerCmd, a.setStatus(cmdErrorText(msg.err)))
 		}
-		return a, spinnerCmd
+		return a, tea.Batch(spinnerCmd, a.setStatus("refreshed"))
 	case pushMsg:
 		// A push never changes what the working tree or job list looks
 		// like — only origin's state — so there is nothing to refresh or
@@ -426,6 +458,43 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.spinnerTicking = true
 		return a, a.spinnerTickCmd()
+	case statusExpireMsg:
+		// Blink-then-clear state machine for transient statuses. Each tick
+		// (statusBlinkInterval) toggles the rendered visibility of any status
+		// that has entered its blink window (the statusBlinkWindow right
+		// before its deadline), and clears the status text entirely once past
+		// the deadline. The underlying text stays set during the blink (only
+		// statusBlinkOn toggles), so footer layout — footerLines()/bodyHeight()
+		// on the detail surface — never jitters mid-blink; only at final
+		// expiry is the text cleared. The chain self-terminates (returns nil
+		// and clears the guard) the moment no status remains on either
+		// surface, so the app returns to its idle, no-timer behaviour.
+		now := statusNow()
+		if a.status != "" {
+			if !now.Before(a.statusUntil) {
+				a.status = ""
+				a.statusBlinkOn = false
+			} else if now.After(a.statusUntil.Add(-statusBlinkWindow)) {
+				a.statusBlinkOn = !a.statusBlinkOn
+			}
+		}
+		if a.detail != nil && a.detail.status != "" {
+			if !now.Before(a.detail.statusUntil) {
+				a.detail.status = ""
+				a.detail.statusBlinkOn = false
+				// Clearing the text shrinks the footer back to one line, so
+				// resize the body viewers to reclaim the freed rows (the same
+				// thing setStatus("") does on navigation).
+				a.detail.syncViewerSize()
+			} else if now.After(a.detail.statusUntil.Add(-statusBlinkWindow)) {
+				a.detail.statusBlinkOn = !a.detail.statusBlinkOn
+			}
+		}
+		if a.status == "" && (a.detail == nil || a.detail.status == "") {
+			a.statusExpiryTicking = false
+			return a, nil
+		}
+		return a, a.statusExpireCmd()
 	case tea.KeyMsg:
 		// Global keys handled in every state.
 		switch msg.String() {
@@ -470,7 +539,7 @@ func (a *App) View() string {
 	case stateGitPanel:
 		content = a.gitPanelOverlay()
 	default:
-		content = a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+		content = a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	}
 	return uiPaddingStyle.Render(content)
 }
@@ -649,6 +718,87 @@ func (a *App) startSpinnerIfRunning() tea.Cmd {
 	return a.spinnerTickCmd()
 }
 
+// statusExpireCmd returns the tea.Cmd that delivers the next statusExpireMsg
+// after statusBlinkInterval — one tick of the blink/expiry state machine.
+func (a *App) statusExpireCmd() tea.Cmd {
+	return tea.Tick(statusBlinkInterval, func(time.Time) tea.Msg {
+		return statusExpireMsg{}
+	})
+}
+
+// armStatusExpiry (re)starts the status-expiry tick chain when it isn't
+// already going (the statusExpiryTicking guard — no duplicate concurrent
+// chains) and there is actually a status to expire on either surface.
+// Returns nil when a chain is already active (the deadlines are refreshed by
+// the surface setters, so a running chain needs no re-arm) or when there is
+// nothing to blink/expire. The chain is stopped by the tick handler itself
+// once no status remains. Callers with their own cmd should `tea.Batch` it
+// with the result.
+func (a *App) armStatusExpiry() tea.Cmd {
+	if a.statusExpiryTicking {
+		return nil
+	}
+	if a.status == "" && (a.detail == nil || a.detail.status == "") {
+		return nil // nothing to blink/expire
+	}
+	a.statusExpiryTicking = true
+	return a.statusExpireCmd()
+}
+
+// setStatus sets the list footer status and, when non-empty, arms the
+// status-expiry chain so it blinks then clears. The status text itself is set
+// directly (callers and existing tests rely on the literal value, e.g.
+// `== "refreshed"`); arming is a no-op (nil cmd) when the chain is already
+// going. An empty s is a plain clear — no arming.
+func (a *App) setStatus(s string) tea.Cmd {
+	a.status = s
+	if s == "" {
+		a.statusBlinkOn = false
+		a.statusUntil = time.Time{}
+		return nil
+	}
+	a.statusBlinkOn = false
+	a.statusUntil = statusNow().Add(statusLifetime)
+	return a.armStatusExpiry()
+}
+
+// detailStatus sets the open detail view's footer status and arms the
+// status-expiry chain so it blinks then clears. Returns the arming cmd (nil
+// when the chain is already going or there is no detail view) for the caller
+// to `tea.Batch` with any cmd it was already returning.
+func (a *App) detailStatus(s string) tea.Cmd {
+	if a.detail == nil {
+		return nil
+	}
+	a.detail.setStatus(s)
+	return a.armStatusExpiry()
+}
+
+// statusVisible reports whether a transient status should currently be
+// rendered, given its deadline and blink phase: solid until the blink window
+// (statusBlinkWindow before until), then alternating visible/hidden as
+// blinkOn toggles during the window, and hidden once past until (the tick
+// handler clears the text around then). The text stays set in the caller's
+// field regardless; this only decides rendered visibility, so layout
+// (footerLines, bodyHeight) keys off the set text, not this toggle.
+func statusVisible(status string, until time.Time, blinkOn bool, now time.Time) bool {
+	if status == "" {
+		return false
+	}
+	if !now.Before(until) {
+		return false // past the deadline — hidden (the handler clears the text)
+	}
+	if !now.After(until.Add(-statusBlinkWindow)) {
+		return true // still in the solid hold period
+	}
+	return blinkOn // blink window: visible only during on toggles
+}
+
+// statusVisible reports the list footer status's current rendered visibility.
+func (a *App) statusVisible() bool {
+	return statusVisible(a.status, a.statusUntil, a.statusBlinkOn, statusNow())
+}
+
 // ringBell writes a bare terminal bell character. A BEL byte reaches the
 // terminal (and triggers whatever bell/notification behavior it's
 // configured for) regardless of Bubble Tea's alt-screen rendering state, so
@@ -698,8 +848,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// outside this session (its returned tick cmd is propagated below),
 		// and len(a.jobs) must reflect the re-read list, not the stale one.
 		spinnerCmd := a.refresh()
-		a.status = fmt.Sprintf("refreshed · %d job(s)", len(a.jobs))
-		return a, spinnerCmd
+		return a, tea.Batch(spinnerCmd, a.setStatus(fmt.Sprintf("refreshed · %d job(s)", len(a.jobs))))
 	case "enter", "l", "right":
 		if j, ok := a.list.selectedJob(a.jobs); ok {
 			a.detail = newDetailView(j, a.width, a.height)
@@ -723,20 +872,17 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if st.Agent != "" {
 				label += " @" + st.Agent
 			}
-			a.status = label
-			return a, nil
+			return a, a.setStatus(label)
 		}
 		if err := launch.Jdi(j.ID, a.root, a.settings.ProfileValue()); err != nil {
-			a.status = cmdErrorText(err)
-			return a, nil
+			return a, a.setStatus(cmdErrorText(err))
 		}
 		// Seed the stop-notification dedup as "running" right away (see
 		// updateDetail's "j" case for why), then start the activity-indicator
 		// tick chain if it isn't already going.
 		a.jdiSeen[j.Name] = job.JDIRunning
 		a.jdiSeenAt[j.Name] = jdiNow()
-		a.status = "→ mg jdi started in the background — see the list badge"
-		return a, a.startSpinnerIfRunning()
+		return a, tea.Batch(a.startSpinnerIfRunning(), a.setStatus("→ mg jdi started in the background — see the list badge"))
 	case "n":
 		// Create a new job via the host mg-job command.
 		a.newJob = newNewJobView(a.width, a.height)
@@ -1334,12 +1480,12 @@ func jdiStatusBadge(root string, j job.Job, spinnerStep int) string {
 }
 
 // footer is the App's bottom help/status line — the list view's footer,
-// rendering the dim key hint and, when a.status is set (e.g. right after
-// "ctrl+r"), the status alongside it rather than replacing it. Kept on App
-// because status is cross-view state; the list view renders the same footer
-// via listFooter.
+// rendering the dim key hint and, when a.status is set and currently visible
+// (e.g. right after "ctrl+r", and not in a blink-off toggle), the status
+// alongside it rather than replacing it. Kept on App because status is
+// cross-view state; the list view renders the same footer via listFooter.
 func (a *App) footer() string {
-	return listFooter(a.status)
+	return listFooter(a.status, a.statusVisible())
 }
 
 // --- helpers ----------------------------------------------------------------

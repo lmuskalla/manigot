@@ -13,10 +13,27 @@ var activityFrames = []string{
 }
 
 // activityInterval is how long each activity-indicator frame is shown — the
-// cadence of the app's one timer-driven redraw (see App's spinnerTickMsg).
-// ~100ms reads calm but clearly alive; anything below 60ms starts to look
-// frantic.
+// cadence of the app's activity-indicator timer redraw (see App's
+// spinnerTickMsg). ~100ms reads calm but clearly alive; anything below 60ms
+// starts to look frantic.
 const activityInterval = 100 * time.Millisecond
+
+// statusLifetime is how long a transient status message (the list footer's
+// status or the detail footer's status) stays before it blinks then clears —
+// see App's statusExpireMsg. Set at arm time (App.setStatus /
+// detailView.setStatus) as `statusNow() + statusLifetime`.
+const statusLifetime = 3 * time.Second
+
+// statusBlinkInterval is the cadence of the status-expiry timer: the interval
+// between statusExpireMsg ticks while a status is set, and how long each
+// blink toggle stays on/off.
+const statusBlinkInterval = 200 * time.Millisecond
+
+// statusBlinkWindow is the duration immediately before statusLifetime expiry
+// during which the status blinks (toggles visible/hidden) before being
+// cleared entirely. At the statusBlinkInterval cadence this ~600ms window
+// gives roughly three on/off toggles before the status disappears.
+const statusBlinkWindow = 600 * time.Millisecond
 
 // activityFrame returns the activity-indicator frame for step, cycling
 // safely through activityFrames for any step value: zero, negative (wraps

@@ -145,10 +145,12 @@ func listColumns() columnWidths {
 
 // render draws the list view — title, job rows (or the empty-state invite),
 // footer, and the recent-activity strip — given the data App owns: the job
-// list, the footer status message, the settings' recent-activity maximum, the
-// activity-indicator frame step for the running badges, and the viewport size
-// (App keeps the terminal dimensions; the list view takes what it needs).
-func (v *listView) render(jobs []job.Job, status string, maxRecent, spinnerStep, width, height int) string {
+// list, the footer status message, the footer status's current rendered
+// visibility (the blink-phase toggle, see statusVisible), the settings'
+// recent-activity maximum, the activity-indicator frame step for the running
+// badges, and the viewport size (App keeps the terminal dimensions; the list
+// view takes what it needs).
+func (v *listView) render(jobs []job.Job, status string, statusVisible bool, maxRecent, spinnerStep, width, height int) string {
 	w := width
 	if w == 0 {
 		w = 72
@@ -198,7 +200,7 @@ func (v *listView) render(jobs []job.Job, status string, maxRecent, spinnerStep,
 
 	// Footer.
 	b.WriteString("\n")
-	b.WriteString(listFooter(status))
+	b.WriteString(listFooter(status, statusVisible))
 
 	// Recent-activity strip: kept below the footer, out of the way, since
 	// it's read-only supplementary info rather than something the job list
@@ -293,12 +295,15 @@ func (v *listView) renderJobRow(j job.Job, cols columnWidths, selected bool, spi
 }
 
 // listFooter is the bottom help/status line of the list view: the dim key
-// hint and, when status is set (e.g. right after "ctrl+r"), the status
-// alongside it rather than replacing it — a status message must never leave
-// the user not knowing what keys exist.
-func listFooter(status string) string {
+// hint and, when status is set and visible (e.g. right after "ctrl+r"), the
+// status alongside it rather than replacing it — a status message must never
+// leave the user not knowing what keys exist. visible is the blink-phase
+// rendering decision (see statusVisible): during the blink window of a
+// transient status the text stays set (so the footer doesn't jitter) but is
+// hidden on the "off" toggles.
+func listFooter(status string, visible bool) string {
 	hint := "↑/↓ navigate · enter view · j just do it · o quick · a agent · n new · s settings · ctrl+r refresh · q quit"
-	if status != "" {
+	if status != "" && visible {
 		return dimStyle.Render(hint) + "  " + statusStyle.Render(status)
 	}
 	return dimStyle.Render(hint)

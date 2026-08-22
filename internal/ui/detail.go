@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -79,6 +80,15 @@ type detailView struct {
 	// status, when non-empty, replaces the footer's key hint — used to confirm
 	// an agent launch or report a launch error.
 	status string
+
+	// statusUntil is when the current footer status blinks then clears (see
+	// the App's statusExpireMsg handler). statusBlinkOn toggles the footer's
+	// *rendered* visibility during the blink window immediately before
+	// statusUntil; the underlying status text stays set throughout the blink
+	// (statusVisible decides rendering) so footerLines()/bodyHeight()/
+	// syncViewerSize() layout budgets stay stable.
+	statusUntil   time.Time
+	statusBlinkOn bool
 
 	// spinnerStep is the current activity-indicator frame index (see
 	// activity.go), threaded in from the App by the spinnerTickMsg handler so
