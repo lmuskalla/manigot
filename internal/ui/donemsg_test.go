@@ -28,9 +28,12 @@ func TestDoneMsgSuccessReturnsToList(t *testing.T) {
 	// Simulate the job having been archived by the finish-job.sh run.
 	os.RemoveAll(jobDir)
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	model, cmd := a.Update(doneMsg{err: nil})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
+	if cmd == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 
@@ -92,10 +95,13 @@ func TestDoneMsgErrorSurfacesAndReturnsToList(t *testing.T) {
 	a.detail = newDetailView(a.jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	wantErr := errors.New("exit status 1")
 	model, cmd := a.Update(doneMsg{err: wantErr})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
+	if cmd == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 

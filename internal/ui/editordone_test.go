@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lmuskalla/manigot/internal/job"
 )
 
@@ -71,10 +72,12 @@ func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
 		t.Fatal("expected a follow-up auto-commit cmd, got nil")
 	}
 
-	msg := cmd()
-	commitM, ok := msg.(commitMsg)
+	// The auto-commit cmd is now batched alongside the status-expiry arming
+	// cmd (see App.setStatus/armStatusExpiry), so unwrap the batch to find
+	// the commitMsg among its results.
+	commitM, ok := findCommitMsg(t, cmd())
 	if !ok {
-		t.Fatalf("expected commitMsg, got %T", msg)
+		t.Fatalf("expected a commitMsg somewhere in the follow-up cmd's results")
 	}
 	if commitM.err != nil {
 		t.Fatalf("auto-commit failed: %v", commitM.err)
@@ -111,6 +114,30 @@ func TestEditorDoneMsgAutoCommitsBrief(t *testing.T) {
 	if strings.Contains(string(mainLog), "[ab0001] brief: edit via TUI") {
 		t.Errorf("auto-commit leaked into the main worktree's history:\n%s", mainLog)
 	}
+}
+
+// findCommitMsg runs msg (and, when it's a tea.BatchMsg, every cmd it
+// carries) looking for a commitMsg — a batched cmd's messages arrive
+// unordered relative to each other, so callers that need one particular
+// message out of a batch (e.g. the auto-commit alongside the status-expiry
+// arming cmd — see App.setStatus/armStatusExpiry) use this instead of
+// assuming the batch is a single cmd.
+func findCommitMsg(t *testing.T, msg tea.Msg) (commitMsg, bool) {
+	t.Helper()
+	switch m := msg.(type) {
+	case commitMsg:
+		return m, true
+	case tea.BatchMsg:
+		for _, c := range m {
+			if c == nil {
+				continue
+			}
+			if found, ok := findCommitMsg(t, c()); ok {
+				return found, true
+			}
+		}
+	}
+	return commitMsg{}, false
 }
 
 // TestEditorDoneMsgCreatesMissingFile verifies that editing a tab whose file

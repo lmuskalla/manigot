@@ -26,7 +26,7 @@ func TestRenderListShowsCurrentBranch(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, def) {
 		t.Errorf("renderList output does not mention the current branch %q:\n%s", def, got)
 	}
@@ -52,7 +52,7 @@ func TestRenderListOmitsBranchOnNonRepo(t *testing.T) {
 		t.Fatalf("currentBranch = %q on a non-repo project, want empty", a.list.currentBranch)
 	}
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if strings.Contains(got, " - on ") {
 		t.Errorf("renderList should render no branch tag on a non-repo project:\n%s", got)
 	}
@@ -117,7 +117,7 @@ func TestRenderListRecentActivityShowsMostRecentAcrossBranches(t *testing.T) {
 	// clamping the strip to its floor of 1 entry.
 	a.width, a.height = 80, 6
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 
 	// def (the checked-out branch) alone doesn't have ZZFEATURECOMMIT in its
 	// history — only its presence proves the strip looks across all local
@@ -163,7 +163,7 @@ func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 		t.Fatalf("recentActivityShown() = %d, want the configured max 7 given ample spare room", got)
 	}
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if n := strings.Count(got, def); n < 1 {
 		t.Errorf("renderList at generous height should show multiple activity entries; def branch %q not found:\n%s", def, got)
 	}
@@ -195,7 +195,7 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 		t.Errorf("recentActivityShown() = %d, want the floor %d when the list already fills the screen", got, recentActivityFloor)
 	}
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	// Every job row must still be present — the strip must never have pushed
 	// one off the rendered output. The rows' briefs are frontmatter-only, so
 	// job.Stage() reads them as unwritten → define; the status+stage+type
@@ -222,7 +222,7 @@ func TestRenderListZeroHeightDoesNotPanic(t *testing.T) {
 	a := NewApp(dir, jobs)
 	// a.width, a.height left at zero.
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if got == "" {
 		t.Fatal("renderList returned nothing for a zero-height App")
 	}
@@ -245,7 +245,7 @@ func TestRenderListRecentActivityEmptyOnFreshRepo(t *testing.T) {
 	if len(a.list.recentCommits) != 0 {
 		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.list.recentCommits)
 	}
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if got == "" {
 		t.Fatal("renderList returned nothing")
 	}
@@ -275,7 +275,7 @@ func TestRenderListZeroHeightNoCommitsDoesNotPanic(t *testing.T) {
 		t.Fatalf("recentCommits on a fresh empty repo = %+v, want empty", a.list.recentCommits)
 	}
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if got == "" {
 		t.Fatal("renderList returned nothing for a zero-height App on a commit-less repo")
 	}
@@ -378,7 +378,7 @@ func TestRenderListEmptyStateInvitesNewJob(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, "press n") {
 		t.Errorf("empty-list state should invite the user to press n:\n%s", got)
 	}
@@ -413,7 +413,7 @@ func TestRenderListShowsJDIRunningBadge(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, "running @developer") {
 		t.Errorf("renderList missing the running badge:\n%s", got)
 	}
@@ -432,7 +432,7 @@ func TestRenderListShowsJDINeedsHumanBadge(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	if !strings.Contains(got, "needs human") {
 		t.Errorf("renderList missing the needs-human badge:\n%s", got)
 	}
@@ -447,7 +447,7 @@ func TestRenderListOmitsJDIBadgeWhenNoStatus(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24
 
-	got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 	for _, badge := range []string{"[running", "[finished]", "[needs human]"} {
 		if strings.Contains(got, badge) {
 			t.Errorf("renderList should not render the %s badge with no status sidecar:\n%s", badge, got)
@@ -545,7 +545,7 @@ func TestRenderListShowsStageColumn(t *testing.T) {
 		if row := a.list.renderJobRow(j, cols, false, a.spinnerStep); !strings.Contains(row, want) {
 			t.Errorf("stage=%s: job row missing the %q stage cell:\n%s", stage, want, row)
 		}
-		got := a.list.render(a.jobs, a.status, a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
+		got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
 		if !strings.Contains(got, want) {
 			t.Errorf("stage=%s: renderList missing the %q stage column:\n%s", stage, want, got)
 		}

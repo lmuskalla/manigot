@@ -441,13 +441,21 @@ func (d *detailView) resize(width, height int) {
 	d.syncViewerSize()
 }
 
-// setStatus sets the footer status line and, since a multi-line status (e.g.
-// cmdErrorText's resolution diagnosis) changes how many chrome rows the
-// footer needs, resizes the viewers so the total rendered height still fits
-// the terminal — otherwise the alt-screen viewport clips the bottom of the
-// status instead of shrinking the body.
+// setStatus sets the footer status line, arms its blink-then-expire deadline
+// (mirroring App.setStatus for the list footer — see statusExpireMsg), and,
+// since a multi-line status (e.g. cmdErrorText's resolution diagnosis)
+// changes how many chrome rows the footer needs, resizes the viewers so the
+// total rendered height still fits the terminal — otherwise the alt-screen
+// viewport clips the bottom of the status instead of shrinking the body.
 func (d *detailView) setStatus(s string) {
 	d.status = s
+	if s == "" {
+		d.statusBlinkOn = false
+		d.statusUntil = time.Time{}
+	} else {
+		d.statusBlinkOn = false
+		d.statusUntil = statusNow().Add(statusLifetime)
+	}
 	d.syncViewerSize()
 }
 
@@ -882,10 +890,11 @@ func (d *detailView) renderTabs(width int) string {
 	return dimStyle.Render("docs:") + "  " + bar
 }
 
-// renderFooter draws the scroll position, key hint, and (when set) the
-// status message — a status must coexist with the hint, not replace it, so a
-// user who just pressed "ctrl+r" or launched an agent still knows what keys
-// exist.
+// renderFooter draws the scroll position, key hint, and (when set and
+// currently visible — see statusVisible/the blink window this footer shares
+// with the list footer) the status message — a status must coexist with the
+// hint, not replace it, so a user who just pressed "ctrl+r" or launched an
+// agent still knows what keys exist.
 //
 // The one exception is a multi-line status (cmdErrorText's resolution
 // diagnosis for a failed host-command lookup — see footerLines): that's a
@@ -893,6 +902,11 @@ func (d *detailView) renderTabs(width int) string {
 // this coexistence handles, and appending the (fairly long) hint to it risks
 // overflowing narrow terminals on top of an already multi-line block. It
 // keeps replacing the hint entirely, same as before.
+//
+// During a blink-off toggle the status text itself stays set (so
+// footerLines()/bodyHeight() layout never jitters — see setStatus) but is
+// rendered as blank space of the same line count instead, exactly mirroring
+// how listFooter hides (not shrinks) a blinked-off list status.
 func (d *detailView) renderFooter() string {
 	pos := d.current().viewer.Position()
 	hint := "tab/1-6 files"
@@ -910,8 +924,15 @@ func (d *detailView) renderFooter() string {
 	hint += " · g git · x/del remove job · ctrl+r refresh · esc back · q quit"
 
 	if d.status != "" {
+		visible := statusVisible(d.status, d.statusUntil, d.statusBlinkOn, statusNow())
 		if strings.Contains(d.status, "\n") {
+			if !visible {
+				return strings.Repeat("\n", strings.Count(d.status, "\n"))
+			}
 			return statusStyle.Render(d.status)
+		}
+		if !visible {
+			return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint))
 		}
 		return dimStyle.Render(fmt.Sprintf("%s   %s", pos, hint)) + "  " + statusStyle.Render(d.status)
 	}

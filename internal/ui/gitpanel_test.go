@@ -70,9 +70,12 @@ func TestGitKeyWithoutBranchIsNoop(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting the "no branch known" status arms the blink-then-expire timer
+	// (see App.setStatus/statusExpireMsg), so a follow-up cmd is expected —
+	// not the panel opening, just the status-expiry arming.
 	_, cmd := a.updateDetail(keyMsg("g"))
-	if cmd != nil {
-		t.Error("expected no tea.Cmd when the job has no known branch")
+	if cmd == nil {
+		t.Error("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	if a.state != stateDetail {
 		t.Errorf("state = %v, want stateDetail (panel must not open)", a.state)
@@ -382,9 +385,12 @@ func TestGitPanelMergeBringsBaseCommitsIntoJobWorktree(t *testing.T) {
 	}
 
 	// Feeding the mergeMsg back through Update reports the success status.
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	model2, followUp := a.Update(mergeM)
-	if followUp != nil {
-		t.Errorf("expected no follow-up cmd from mergeMsg handling, got one")
+	if followUp == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got2 := model2.(*App)
 	if got2.detail == nil {
@@ -447,10 +453,13 @@ func TestGitPanelMergeConflictSurfacesInStatus(t *testing.T) {
 	}
 
 	// Feeding the mergeMsg back through Update surfaces it as a status error
-	// without crashing or closing the detail view.
+	// without crashing or closing the detail view. Setting a non-empty status
+	// arms the blink-then-expire timer (see App.setStatus/armStatusExpiry),
+	// so a follow-up cmd is now expected — unlike before that mechanism
+	// existed.
 	model, followUp := a.Update(mergeM)
-	if followUp != nil {
-		t.Errorf("expected no follow-up cmd from a failed merge, got one")
+	if followUp == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 	if got.detail == nil {
@@ -475,10 +484,13 @@ func TestMergeMsgErrorSurfacesInDetailStatus(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	wantErr := errors.New("git merge main: exit status 128: fatal: something failed")
 	model, cmd := a.Update(mergeMsg{base: "main", err: wantErr})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
+	if cmd == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 	if got.detail == nil {

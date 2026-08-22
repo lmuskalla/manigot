@@ -346,11 +346,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// otherwise reject. Any other future editable tab is left
 				// alone, same as before this behavior existed.
 				if filepath.Base(msg.path) == "brief.md" {
-					return a, a.commitBriefCmd()
+					return a, tea.Batch(a.commitBriefCmd(), a.armStatusExpiry())
 				}
 			}
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	case commitMsg:
 		if a.detail != nil {
 			if msg.err != nil {
@@ -359,7 +359,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.detail.setStatus("edited and committed brief.md")
 			}
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	case doneMsg:
 		// The lifecycle outcome is not a reliable done signal: a declined
 		// confirmation (ErrCancelled) and a real failure both carry an error,
@@ -399,7 +399,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.detail.setStatus("→ pushed " + msg.branch + " to origin")
 			}
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	case commitAllMsg:
 		if a.detail != nil {
 			switch {
@@ -420,7 +420,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.detail.setStatus(cmdErrorText(msg.err))
 			}
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	case mergeMsg:
 		// A merge changes what the detail view shows exactly like a commit
 		// does — the job branch moved, so the bottom git-log strip
@@ -437,7 +437,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.detail.refreshCommits(a.settings.RecentActivityCountValue())
 			}
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	case spinnerTickMsg:
 		// Advance the activity indicator. The step always moves (even on the
 		// tick that observes the run has ended — the check below happens
@@ -1082,7 +1082,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+r":
 		spinnerCmd := a.refresh()
 		a.detail.setStatus("refreshed")
-		return a, spinnerCmd
+		return a, tea.Batch(spinnerCmd, a.armStatusExpiry())
 	case "e":
 		// Only the tabs marked editable in jobFiles (currently brief.md
 		// only) respond — for any other tab this falls through to the
@@ -1091,7 +1091,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmd, err := a.editCmd()
 			if err != nil {
 				a.detail.setStatus(cmdErrorText(err))
-				return a, nil
+				return a, a.armStatusExpiry()
 			}
 			return a, cmd
 		}
@@ -1122,11 +1122,11 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				label += " @" + st.Agent
 			}
 			a.detail.setStatus(label)
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		if err := launch.Jdi(a.detail.job.ID, a.root, a.settings.ProfileValue()); err != nil {
 			a.detail.setStatus(cmdErrorText(err))
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		// Seed the stop-notification dedup as "running" right
 		// away rather than waiting for the first poll to discover it —
@@ -1140,9 +1140,9 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// animates immediately — the sidecar doesn't exist yet, but the
 		// jdiSeen entry seeded above is enough for anyJDIRunning (via
 		// jdiAlreadyRunning's fallback). startSpinnerIfRunning is a no-op
-		// (nil cmd) when a chain is already going, keeping this a plain
-		// `return a, nil` in that case.
-		return a, a.startSpinnerIfRunning()
+		// (nil cmd) when a chain is already going, batched with the status's
+		// own arming cmd (also nil when a chain is already going).
+		return a, tea.Batch(a.startSpinnerIfRunning(), a.armStatusExpiry())
 	case "delete", "x":
 		// Permanently delete the job. Bound to both the physical Delete/Entf
 		// key and "x": the forward-delete key's escape sequence (CSI 3~) is
@@ -1162,7 +1162,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// working tree.
 		if a.detail.job.Branch == "" {
 			a.detail.setStatus("no branch known for this job")
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		return a, a.pushCmd(a.detail.job.Branch)
 	case "t":
@@ -1175,11 +1175,11 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// doomed pane.
 		if !a.detail.tigAvailable {
 			a.detail.setStatus("tig is not installed on the host — install it, or use the diff tab")
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		if a.detail.job.Branch == "" {
 			a.detail.setStatus("no branch known for this job")
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		// The job is passed by Name (id_slug), not ID: `mg diff` resolves the
 		// job's branch via an exact match on that tail segment (see launch.
@@ -1191,7 +1191,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.detail.setStatus("→ tig in " + desc)
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	case "c":
 		// Commit all uncommitted changes in this job's worktree — a
 		// catch-all sweep for the files agents sometimes leave behind, which
@@ -1200,7 +1200,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// own worktree so it lands on the job branch (see commitAllCmd).
 		if a.detail.job.Branch == "" {
 			a.detail.setStatus("no branch known for this job")
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		return a, a.commitAllCmd()
 	case "g":
@@ -1215,7 +1215,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// job's worktree branch.
 		if a.detail.job.Branch == "" {
 			a.detail.setStatus("no branch known for this job")
-			return a, nil
+			return a, a.armStatusExpiry()
 		}
 		a.gitPanel = newGitPanelView(a.width, a.height)
 		a.state = stateGitPanel
@@ -1230,7 +1230,7 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			a.detail.setStatus("→ " + agent + " in " + desc)
 		}
-		return a, nil
+		return a, a.armStatusExpiry()
 	}
 	a.detail.setStatus("")
 	a.detail.update(msg)

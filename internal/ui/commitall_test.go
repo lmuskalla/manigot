@@ -83,9 +83,12 @@ func TestCommitAllKeyCommitsDirtyWorktree(t *testing.T) {
 		t.Errorf("commit-all leaked into the main worktree's history:\n%s", mainOut)
 	}
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	model, followUp := a.Update(commitAllM)
-	if followUp != nil {
-		t.Errorf("expected no follow-up cmd from commitAllMsg handling, got one")
+	if followUp == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 	if got.detail == nil {
@@ -110,9 +113,12 @@ func TestCommitAllMsgNothingToCommitStatus(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	model, cmd := a.Update(commitAllMsg{err: git.ErrNothingToCommit})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
+	if cmd == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 	if got.detail == nil {
@@ -137,10 +143,13 @@ func TestCommitAllMsgErrorSurfacesInDetailStatus(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	wantErr := errors.New("git commit: exit status 128: some failure")
 	model, cmd := a.Update(commitAllMsg{err: wantErr})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
+	if cmd == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 	if got.detail == nil {
@@ -175,9 +184,12 @@ func TestCommitAllKeyWithoutBranchIsNoop(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting the "no branch known" status arms the blink-then-expire timer
+	// (see App.setStatus/statusExpireMsg), so a follow-up cmd is expected —
+	// not the commit itself, just the status-expiry arming.
 	_, cmd := a.updateDetail(keyMsg("c"))
-	if cmd != nil {
-		t.Error("expected no tea.Cmd when the job has no known branch")
+	if cmd == nil {
+		t.Error("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	if !strings.Contains(a.detail.status, "no branch known for this job") {
 		t.Errorf("status = %q, want it to explain the missing branch", a.detail.status)

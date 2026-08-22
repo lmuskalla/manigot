@@ -76,9 +76,12 @@ func TestPushKeyPushesBranchToOrigin(t *testing.T) {
 		t.Errorf("remote feature/psh10_p = %q, want %q (local)", remoteHash, localHash)
 	}
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	model, followUp := a.Update(pushM)
-	if followUp != nil {
-		t.Errorf("expected no follow-up cmd from pushMsg handling, got one")
+	if followUp == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 	if got.detail == nil {
@@ -102,10 +105,13 @@ func TestPushMsgErrorSurfacesInDetailStatus(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting a non-empty status arms the blink-then-expire timer (see
+	// App.setStatus/statusExpireMsg), so a follow-up cmd is now expected —
+	// unlike before that mechanism existed.
 	wantErr := errors.New("git push origin feature/cur10_c: exit status 128: fatal: 'origin' does not appear to be a git repository")
 	model, cmd := a.Update(pushMsg{branch: "feature/cur10_c", err: wantErr})
-	if cmd != nil {
-		t.Errorf("expected no follow-up cmd, got one")
+	if cmd == nil {
+		t.Errorf("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	got := model.(*App)
 
@@ -142,9 +148,12 @@ func TestPushKeyWithoutBranchIsNoop(t *testing.T) {
 	a.detail = newDetailView(jobs[0], 80, 24)
 	a.state = stateDetail
 
+	// Setting the "no branch known" status arms the blink-then-expire timer
+	// (see App.setStatus/statusExpireMsg), so a follow-up cmd is expected —
+	// not the git push itself, just the status-expiry arming.
 	_, cmd := a.updateDetail(keyMsg("P"))
-	if cmd != nil {
-		t.Error("expected no tea.Cmd when the job has no known branch")
+	if cmd == nil {
+		t.Error("expected a follow-up cmd arming the status-expiry timer, got nil")
 	}
 	if a.detail.status == "" {
 		t.Error("expected a status message explaining why \"P\" did nothing")
