@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/fs"
 )
 
@@ -789,6 +790,69 @@ func TestBuildTerminalEnvForwarding(t *testing.T) {
 		"-e", "WEZTERM_PANE=%1",
 		"-e", "WEZTERM_UNIX_SOCKET=/tmp/wezterm.sock",
 	)
+}
+
+// TestBuildTerminalEnvForwardingOpenCodeStripsTmux — OpenCode sessions must
+// NOT see TMUX/TMUX_PANE inside the container: when OpenCode sees TMUX set it
+// wraps its OSC 52 clipboard write in tmux's DCS-passthrough escape, which
+// default tmux configuration (allow-passthrough off) discards entirely — so
+// the host clipboard is never touched even with set-clipboard on. Stripping
+// TMUX makes OpenCode emit plain OSC 52, which tmux's set-clipboard on
+// handles. Every other terminal-identity var (TERM/COLORTERM/... plus
+// WEZTERM_*) is still forwarded, so the TUI still sees the real terminal.
+func TestBuildTerminalEnvForwardingOpenCodeStripsTmux(t *testing.T) {
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.Tool != config.ToolOpenCode {
+		t.Fatalf("zai profile tool = %q, want %q", info.Tool, config.ToolOpenCode)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("TERM_PROGRAM", "WezTerm")
+	t.Setenv("TERM_PROGRAM_VERSION", "20240203")
+	t.Setenv("VTE_VERSION", "6800")
+	t.Setenv("KITTY_WINDOW_ID", "42")
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%5")
+	t.Setenv("WT_SESSION", "abc123")
+	t.Setenv("WEZTERM_PANE", "%1")
+	t.Setenv("WEZTERM_UNIX_SOCKET", "/tmp/wezterm.sock")
+
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// The non-tmux identity vars are still forwarded.
+	containsAll(t, inv.Argv,
+		"-e", "TERM=xterm-256color",
+		"-e", "COLORTERM=truecolor",
+		"-e", "TERM_PROGRAM=WezTerm",
+		"-e", "TERM_PROGRAM_VERSION=20240203",
+		"-e", "VTE_VERSION=6800",
+		"-e", "KITTY_WINDOW_ID=42",
+		"-e", "WT_SESSION=abc123",
+		"-e", "WEZTERM_PANE=%1",
+		"-e", "WEZTERM_UNIX_SOCKET=/tmp/wezterm.sock",
+	)
+	// TMUX/TMUX_PANE are deliberately stripped for OpenCode.
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range []string{"TMUX=", "TMUX_PANE="} {
+		if strings.Contains(joined, "-e\n"+k) {
+			t.Errorf("opencode docker argv must not forward %s:\n%s", k, joined)
+		}
+	}
 }
 
 // fakeTmux puts an executable `tmux` first on PATH that prints output (or,

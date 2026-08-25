@@ -40,11 +40,20 @@ const dockerImageName = "manigot"
 // gate their copy/clipboard behavior on these: OSC 52 emission is decided
 // from terminal identity/capability vars (TERM, COLORTERM, TERM_PROGRAM,
 // TERM_PROGRAM_VERSION, VTE_VERSION, KITTY_WINDOW_ID, TMUX, TMUX_PANE,
-// WT_SESSION — plus the WEZTERM_* family, which WezTerm sets several of),
-// and OpenCode additionally switches to its tmux DCS-passthrough OSC 52 form
-// when TMUX is set. None of these were forwarded before, so the in-container
-// TUIs saw an unrecognized terminal and copying from agent output silently
-// failed (see the "Clipboard / copying from agent sessions" docs section).
+// WT_SESSION — plus the WEZTERM_* family, which WezTerm sets several of).
+// None of these were forwarded before, so the in-container TUIs saw an
+// unrecognized terminal and copying from agent output silently failed (see
+// the "Clipboard / copying from agent sessions" docs section).
+//
+// TMUX/TMUX_PANE are deliberately NOT forwarded for OpenCode sessions
+// (terminalEnvArgs skips them when the tool is OpenCode): when OpenCode sees
+// TMUX set it wraps its OSC 52 clipboard write in tmux's DCS-passthrough
+// escape, which default tmux configuration discards entirely
+// (allow-passthrough defaults to off), so the host clipboard is never
+// touched. Stripping TMUX makes OpenCode emit plain OSC 52, which tmux's
+// set-clipboard on handles correctly. Claude Code's container env stays
+// byte-identical — TMUX/TMUX_PANE are still forwarded for it.
+//
 // Each var is forwarded only when set and non-empty on the host — never an
 // empty value — so a session launched outside a terminal (CI, a script)
 // keeps a byte-identical argv to a build without this feature.
@@ -60,14 +69,26 @@ var terminalEnvVars = []string{
 	"WT_SESSION",
 }
 
+// tmuxEnvVars are the terminal-identity vars whose forwarding is gated on
+// the resolved tool: they are sent only to Claude Code, never to OpenCode
+// (see the comment on terminalEnvVars for why).
+var tmuxEnvVars = map[string]bool{
+	"TMUX":      true,
+	"TMUX_PANE": true,
+}
+
 // terminalEnvArgs returns the docker -e entries forwarding the host's
 // terminal identity into the container: every terminalEnvVars entry that is
 // set and non-empty on the host, plus every WEZTERM_* variable (also only
-// when set to a non-empty value). No var set → an empty slice, keeping the
+// when set to a non-empty value). TMUX/TMUX_PANE are skipped when tool is
+// OpenCode (see terminalEnvVars). No var set → an empty slice, keeping the
 // docker argv byte-identical to a session built without terminal forwarding.
-func terminalEnvArgs() []string {
+func terminalEnvArgs(tool string) []string {
 	var args []string
 	for _, key := range terminalEnvVars {
+		if tmuxEnvVars[key] && tool == config.ToolOpenCode {
+			continue
+		}
 		if v := os.Getenv(key); v != "" {
 			args = append(args, "-e", key+"="+v)
 		}
@@ -343,7 +364,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
-	argv = append(argv, terminalEnvArgs()...)
+	argv = append(argv, terminalEnvArgs(info.Tool)...)
 	argv = append(argv, info.KeyEnv...)
 	argv = append(argv, "-e", "GIT_AUTHOR_NAME_CFG="+gitName)
 	argv = append(argv, "-e", "GIT_AUTHOR_EMAIL_CFG="+gitEmail)

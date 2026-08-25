@@ -33,6 +33,10 @@ support it, and tmux needs `set-clipboard on` when the session runs inside
 tmux (mg forwards your terminal environment into the container and warns at
 session start when it detects tmux would swallow the clipboard writes — see
 the manigot README's "Clipboard / copying from agent sessions" section).
+One deliberate exception in that forwarding: OpenCode sessions never see
+`TMUX`/`TMUX_PANE`, because OpenCode's TMUX-gated tmux DCS-passthrough OSC 52
+form is discarded by default tmux config (`allow-passthrough` off) — stripping
+`TMUX` makes it emit plain OSC 52, which tmux's `set-clipboard on` handles.
 The `shot` tool (`/usr/local/bin/shot`, see the manigot README's PLAYWRIGHT
 doc) renders a URL to a PNG + model-free render report. The developer agent
 uses it to verify rendered work; read-only agents consume the artifacts and

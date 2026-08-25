@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lmuskalla/manigot/internal/config"
 )
 
 // fakeHostBinary makes hostLookPath succeed without requiring claude/opencode
@@ -132,6 +134,84 @@ func TestBuildHostOpenCodeProfile(t *testing.T) {
 		if m[k] != "" {
 			t.Errorf("opencode host env forwards %s=%q, want only the profile's own keys", k, m[k])
 		}
+	}
+}
+
+// TestBuildHostOpenCodeStripsTmux — the mg host OpenCode path shares the
+// docker path's root cause: opencode runs with the full host env (TMUX set),
+// so it would emit tmux's DCS-passthrough OSC 52 form, which default tmux
+// config (allow-passthrough off) discards. hostEnv must filter TMUX/TMUX_PANE
+// out of the OpenCode child env (Claude Code keeps the full host env).
+func TestBuildHostOpenCodeStripsTmux(t *testing.T) {
+	_, _ = docProject(t)
+	fakeHostBinary(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%5")
+	t.Setenv("TERM", "xterm-256color")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.Tool != config.ToolOpenCode {
+		t.Fatalf("zai profile tool = %q, want %q", info.Tool, config.ToolOpenCode)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	m := envMap(t, inv.Env)
+	if m["TMUX"] != "" {
+		t.Errorf("opencode host env must not carry TMUX (got %q)", m["TMUX"])
+	}
+	if m["TMUX_PANE"] != "" {
+		t.Errorf("opencode host env must not carry TMUX_PANE (got %q)", m["TMUX_PANE"])
+	}
+	// The rest of the host env passes through untouched.
+	if m["TERM"] != "xterm-256color" {
+		t.Errorf("host env TERM = %q, want xterm-256color", m["TERM"])
+	}
+	if m["ZHIPU_API_KEY"] != "z-secret" {
+		t.Errorf("host env ZHIPU_API_KEY = %q, want z-secret", m["ZHIPU_API_KEY"])
+	}
+}
+
+// TestBuildHostClaudeKeepsTmux — the Claude Code host env is byte-identical
+// to the host environment: TMUX/TMUX_PANE stay (its copy path is mostly
+// native mouse selection and must not be regressed).
+func TestBuildHostClaudeKeepsTmux(t *testing.T) {
+	_, _ = docProject(t)
+	fakeHostBinary(t)
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%5")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	m := envMap(t, inv.Env)
+	if m["TMUX"] != "/tmp/tmux-1000/default,1234,0" {
+		t.Errorf("claude host env must keep TMUX (got %q)", m["TMUX"])
+	}
+	if m["TMUX_PANE"] != "%5" {
+		t.Errorf("claude host env must keep TMUX_PANE (got %q)", m["TMUX_PANE"])
 	}
 }
 

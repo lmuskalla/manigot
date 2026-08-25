@@ -160,9 +160,15 @@ environment into the container: `TERM`, `COLORTERM`, `TERM_PROGRAM`,
 `TERM_PROGRAM_VERSION`, `VTE_VERSION`, `KITTY_WINDOW_ID`, `TMUX`, `TMUX_PANE`,
 `WT_SESSION`, and every `WEZTERM_*` variable, each forwarded only when set and
 non-empty on the host (no var set → a byte-identical argv to a build without
-this feature). OpenCode additionally switches to tmux's DCS-passthrough OSC 52
-form when `TMUX` is set. `mg host` sessions are unaffected — the CLI runs on
-the host with the full environment already present.
+this feature). One deliberate exception: `TMUX`/`TMUX_PANE` are forwarded for
+Claude Code but **not** for OpenCode — when OpenCode sees `TMUX` set it wraps
+its OSC 52 clipboard write in tmux's DCS-passthrough escape, which default
+tmux configuration discards entirely (`allow-passthrough` defaults to off),
+so the host clipboard is never touched even with `set-clipboard on`. Stripping
+`TMUX` makes OpenCode emit plain OSC 52, which tmux's `set-clipboard on`
+handles correctly. `mg host` sessions apply the same exception: the OpenCode
+child env is filtered of `TMUX`/`TMUX_PANE`, while Claude Code keeps the full
+host environment.
 
 ### Container cleanup
 

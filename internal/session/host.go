@@ -172,6 +172,14 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 // credentials the container path forwards. OPENCODE_MODEL is excluded: it is
 // forwarded as --model instead (see BuildHostInvocation), and opencode does
 // not read it from the environment.
+//
+// For OpenCode sessions, TMUX/TMUX_PANE are filtered out of the child env —
+// the same exception the docker path applies (see the terminalEnvVars comment
+// in docker.go): when OpenCode sees TMUX set it wraps its OSC 52 clipboard
+// write in tmux's DCS-passthrough escape, which default tmux configuration
+// discards entirely, so the host clipboard is never touched. Stripping TMUX
+// makes OpenCode emit plain OSC 52, which tmux's set-clipboard on handles.
+// Claude Code's host env stays the full host environment.
 func hostEnv(info ProfileInfo) []string {
 	env := os.Environ()
 	for i := 0; i+1 < len(info.KeyEnv); i += 2 {
@@ -183,6 +191,16 @@ func hostEnv(info ProfileInfo) []string {
 			continue
 		}
 		env = append(env, pair)
+	}
+	if info.Tool == config.ToolOpenCode {
+		var filtered []string
+		for _, kv := range env {
+			if strings.HasPrefix(kv, "TMUX=") || strings.HasPrefix(kv, "TMUX_PANE=") {
+				continue
+			}
+			filtered = append(filtered, kv)
+		}
+		env = filtered
 	}
 	return env
 }
