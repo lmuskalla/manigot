@@ -245,6 +245,34 @@ enumerated once at launch (`git.WorktreeGitDirs` via `git worktree list
 launch — acceptable, since the overlay list cannot be refreshed from inside
 the container.
 
+### Job worktrees are kept committed
+
+Every job-worktree session ends with a host-side sweep-commit of whatever the
+agent left uncommitted (`git add -A` + a `[<id>] chore: commit all` commit —
+the same message convention as the TUI's "c" key), so `mg done`'s clean-tree
+check is never tripped by agent leftovers. This is what makes "every agent
+always commits" true without trusting agent instructions: read-only agents'
+outputs — the analyst's `tasks.md` above all — are committed by the host
+right after their session ends, closing the "no agent feels responsible" gap.
+The sweep runs only for job-worktree sessions (`--job`, `mg jobs` launches,
+TUI launches, and every `mg jdi` --print invocation) and only when the
+container actually ran — a docker launch that never started an agent must not
+trigger a commit. It never runs against the main worktree, in either shape
+that can resolve `--job` there: the flat-scan fallback (a repo with no local
+branches, or a non-git project, where the job's files live directly in the
+main project root — there is no job worktree at all) and a pre-worktree job
+(the job's branch still checked out in the main worktree itself, an
+explicitly supported transitional state — `git.WorktreeForBranch` then
+resolves to the main worktree, not a linked one). Sweeping either would commit
+the user's own uncommitted work — an unignored `.env` included — onto the job
+branch; the gate is "the resolved worktree differs from the invocation root",
+which holds for a linked job worktree in every case. Plain sessions, where
+the user's own uncommitted work lives, are never swept, and `mg host` sessions
+are out of scope (no
+isolation by design). The sweep commit deliberately does not match the
+`[<id>] verdict:` pattern the mg-jdi state machine counts, so retry and
+re-review decisions are unaffected.
+
 ### Job lifecycle
 
 Each job lives in its own git worktree (created by `mg job`), at

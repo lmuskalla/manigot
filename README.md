@@ -551,8 +551,8 @@ mg job "add image gallery block"
 3.  @owner                              → SHIP / REVISIT / REJECT
 4.  @analyst                            → writes tasks.md
 5.  Review tasks.md yourself
-6.  @developer TASK-1                   → implements, commits [ID] TASK-1: ...
-7.  @developer TASK-2                   → implements, commits [ID] TASK-2: ...
+6.  @developer TASK-1                   → implements, commits as it goes
+7.  @developer TASK-2                   → implements, commits as it goes
 8.  @reviewer                           → reads diff, writes verdict.md
 9.  @security                           → appends security findings to verdict.md
 10. Fix anything blocking, re-run 8–9
@@ -561,6 +561,13 @@ mg job "add image gallery block"
 ```
 
 **For a bug fix, skip steps 3–4 and go straight to the developer.**
+
+Per-task commit hygiene is deliberately relaxed — `mg done` squashes the whole
+branch into one commit anyway. Whatever an agent leaves uncommitted is
+auto-committed when its session ends (a host-side sweep with a
+`[<id>] chore: commit all` commit), so `mg done`'s clean-tree check is never
+tripped by leftovers — including read-only agents' outputs like the
+analyst's `tasks.md`, which the agent itself cannot commit.
 
 `mg jobs` lists every open job and lets you pick one; the session then starts
 in the agent appropriate to the job's stage — `@analyst` while it's being
@@ -584,8 +591,9 @@ job workflow.
 4. **Case the job.** `@analyst` breaks it into a task list.
 5. **Read the plan yourself** before anyone touches code.
 6. **Send in the crew.** `mg crew` rounds up an agent — `@developer` does the
-   actual work, one task at a time, committing as it goes, safe inside its
-   own safehouse where nothing outside the project is reachable.
+   actual work, one task at a time, committing as it goes (anything left
+   uncommitted is auto-committed when the session ends), safe inside its own
+   safehouse where nothing outside the project is reachable.
 7. **Get it checked.** `@reviewer`, then `@security`, go over the work and
    write the verdict.
 8. **Clean up loose ends.** Fix what's blocking, run it past them again.

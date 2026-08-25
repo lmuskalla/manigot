@@ -391,8 +391,15 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 
 // Run executes the assembled docker invocation, wiring stdin/stdout/stderr
 // through so Ctrl+C reaches the container, and returns docker's exit code.
+// The second return value reports whether docker was actually exec'd — false
+// only when the launch itself failed before docker ran (docker missing on
+// PATH, permission denied, ...). It is the "did the container session
+// happen" signal the job-worktree sweep keys off (see SweepJobWorktree): an
+// agent that never ran must not trigger a sweep commit. An ExitError — docker
+// ran and exited non-zero — still counts as ran=true: the session happened,
+// even when the agent's exit code was non-zero.
 // The invocation's Cleanup hook (if any) runs after the container exits.
-func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
+func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) (int, bool) {
 	if d.Cleanup != nil {
 		defer d.Cleanup()
 	}
@@ -402,12 +409,12 @@ func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+			return exitErr.ExitCode(), true
 		}
 		fmt.Fprintf(stderr, "mg: %v\n", err)
-		return 1
+		return 1, false
 	}
-	return 0
+	return 0, true
 }
 
 // findEnvFiles lists every .env / .env.* file under root (recursively),

@@ -22,6 +22,15 @@ declare `commit: true` in their frontmatter; agents that never commit declare
 `commit: false` and get a read-only git mount. The default — no agent named,
 file missing, or marker absent/unknown — is a writable git mount, so a
 committing agent is never broken by a missing marker.
+Every job-worktree session ends with a host-side sweep-commit of leftover
+changes (a `[<id>] chore: commit all` commit), so read-only agents' outputs
+(like the analyst's tasks.md) are committed after their session and `mg done`
+is never blocked by uncommitted leftovers. The sweep never runs for plain
+sessions, `mg host` sessions, or any `--job` resolution that stays on the main
+worktree — the flat-scan fallback (a repo with no local branches, or a
+non-git project — there is no job worktree to sweep) and a pre-worktree job
+(its branch still checked out in the main worktree itself) alike — since the
+main project root holds the user's own uncommitted work.
 Agent sessions also restrict git to reading history and making commits (the
 session git shim): worktree management, branch deletes, resets, checkouts,
 pushes, and the other destructive subcommands are refused.
