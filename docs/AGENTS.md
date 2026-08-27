@@ -20,7 +20,10 @@ configured with `mg setup`.
 - Host-side logic: Go packages under `internal/` (`session`, `job`, `git`,
   `ui`, `orchestrate`, `config`, `agentlist`, `cli`, `home`, `launch`,
   `markdown`, `project`, `editor`)
-- Agent definitions: Markdown files in `agents/`, baked into the image at build time
+- Agent definitions: Markdown files in `agents/`, delivered into every session
+  from the manigot checkout (mounted read-only into the container at the CLI's
+  global agent location; for `mg host`, symlinked into Claude Code's config
+  dir or written as converted copies into OpenCode's)
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
@@ -43,12 +46,13 @@ The seam between the orchestrator (host-side Go) and the agent environment
   profile/tool resolution, auth validation, project-root + `--job` worktree
   resolution, docker argv/mount/env construction, and the run itself.
   The TUI and mg-jdi call it directly. For OpenCode sessions it also converts
-  project-level `docs/agents/*.md` to OpenCode's schema at launch (the same
-  `name`/`tools` strip the Dockerfile applies to the built-in agents — a
+  agent files (`docs/agents/*.md` and the mounted global `agents/*.md`) to
+  OpenCode's schema at launch (the same
+  `name`/`tools` strip the Dockerfile used to apply to the baked-in agents — a
   `permission:` block passes through untouched, which is how the read-only
   agents express their restriction under OpenCode), writing
-  the converted copies to a temp dir shadow-mounted over the docs mount's
-  `agents/` subpath — the host's `docs/agents/` is never modified, and the
+  the converted copies to a temp dir shadow-mounted over the target
+  `agents/` subpath — the host's source files are never modified, and the
   temp dir is cleaned up after the run. It also decides the job git-common-dir
   mount mode from the resolved agent's `commit:` frontmatter marker (see
   "Read-only git mount for non-committing agents").
@@ -82,12 +86,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
   `opencode run <message> --agent <agent> --auto --format json`. It also
   installs a PATH-first `git` shim that restricts agents to read + commit git
   commands (see "Session git shim" below).
-- `Dockerfile` — builds the image; installs both agent CLIs, bakes the global
-  `agents/` in (twice: verbatim for Claude Code, and for OpenCode with the
-  `name`/`tools` frontmatter keys stripped — the same strip the session
-  launcher applies at launch to project `docs/agents/` overrides; a
-  `permission:` block passes through, carrying the read-only agents'
-  restriction into OpenCode's schema), and
+- `Dockerfile` — builds the image; installs both agent CLIs (the image is
+  purely isolation for workspaces — the global `agents/` are no longer baked
+  in, they are mounted from the host at session launch), and
   pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
   `GOTOOLCHAIN=local` a stale path breaks the build).
 
@@ -497,8 +498,12 @@ either way.
   job's host path. The CLI must be installed on the host, and it keeps its
   normal per-tool confirmation prompts — the container path's auto-approval
   flags (`--dangerously-skip-permissions`/`--auto`) are deliberately not
-  passed, since host sessions have no isolation. For work that must touch
-  the host itself (thematic alias: `mg wild`, same command/behavior)
+  passed, since host sessions have no isolation. The global agents are still
+  available: mg delivers the checkout's `agents/*.md` into the CLI's own host
+  config dir — symlinks for Claude Code, converted copies for OpenCode (which
+  hard-errors on the list form) — never clobbering an existing name. For work
+  that must touch the host itself (thematic alias: `mg wild`, same
+  command/behavior)
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:

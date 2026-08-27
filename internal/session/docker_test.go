@@ -298,6 +298,132 @@ func TestBuildNoAgentsConversionMount(t *testing.T) {
 	}
 }
 
+// TestBuildClaudeGlobalAgentsMountedReadOnly: the global agents dir
+// (<home>/agents/) is mounted read-only into the container at Claude's global
+// agent location (~/.claude/agents/), replacing the old image bake — so the
+// container uses the host's agents but cannot modify them.
+func TestBuildClaudeGlobalAgentsMountedReadOnly(t *testing.T) {
+	_, home := docProject(t)
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Global reviewer.\ntools: Read, Write, Grep, Glob, Bash\ncommit: true\n---\n\nBody.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// Claude mounts the host's global agents verbatim, read-only, at
+	// ~/.claude/agents/ (no conversion — list form is Claude's native schema).
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "agents")+":/home/claude/.claude/agents:ro",
+	)
+	// No temp dir was created for the Claude mount, so no cleanup is needed.
+	if inv.Cleanup != nil {
+		t.Error("claude global-agents mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildOpenCodeGlobalAgentsConvertedMount: OpenCode reads global agents
+// from ~/.config/opencode/agents/, so the mounted global agents must be
+// converted (name:/tools: stripped, permission: passed through — see
+// convertAgents) before the container sees them, shadow-mounted over the CLI's
+// global agents path, read-only, with the invocation owning cleanup.
+func TestBuildOpenCodeGlobalAgentsConvertedMount(t *testing.T) {
+	_, _ = docProject(t)
+	// A zai checkout whose agents/ dir carries a global agent (the effective
+	// home — docProject's own checkout is replaced by this one).
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Global reviewer.\ntools: Read, Write, Grep, Glob, Bash\ncommit: true\n---\n\nBody.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// OpenCode's global agents mount lands at ~/.config/opencode/agents and is
+	// read-only; the converted copy is cleaned up after the run.
+	containsAll(t, inv.Argv, "/home/claude/.config/opencode/agents:ro")
+	if inv.Cleanup == nil {
+		t.Error("opencode global-agents invocation must carry a Cleanup hook")
+	}
+	// The host's global agents source tree is never modified — the raw
+	// list-form file is still in place for Claude Code sessions.
+	data, err := os.ReadFile(filepath.Join(home, "agents", "reviewer.md"))
+	if err != nil || !strings.Contains(string(data), "tools: Read") {
+		t.Errorf("global agents source was modified: %v", err)
+	}
+}
+
+// TestBuildNoGlobalAgentsNoMount: with no agents/ dir in the manigot checkout
+// there is nothing to mount — no global-agent mount, and (for OpenCode) no
+// cleanup hook and no converted mount.
+func TestBuildNoGlobalAgentsNoMount(t *testing.T) {
+	// Claude: docProject's fake home has no agents/ dir.
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "/home/claude/.claude/agents") {
+		t.Errorf("claude invocation must not mount global agents when agents/ is absent:\n%s", joined)
+	}
+
+	// OpenCode with no global agents: no conversion, no mount, no cleanup.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "/home/claude/.config/opencode/agents") {
+		t.Errorf("opencode invocation must not mount global agents when agents/ is absent:\n%s", joined2)
+	}
+	if inv2.Cleanup != nil {
+		t.Error("no-global-agents opencode invocation must not carry a Cleanup hook")
+	}
+}
+
 func TestBuildJobWorktreeGitCommonDirMount(t *testing.T) {
 	_, home := docProject(t)
 	_ = home

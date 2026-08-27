@@ -9,7 +9,10 @@ wherever the selected tool looks for it
 (/workspace/AGENTS.md for OpenCode, /workspace/.claude/CLAUDE.md for Claude
 Code). Those mount paths are read-only: to change this context, edit this
 file (docs/AGENTS.md), never the mount paths.
-The same global agents are available under @name either way, and custom
+The same global agents (from the manigot checkout — mounted read-only into
+the container at the CLI's global agent location, or delivered into the host
+CLI's config for `mg host`: symlinked for Claude Code, converted for OpenCode)
+are available under @name either way, and custom
 project agents in docs/agents/ work under both tools — write them in the
 built-in format (name:, description:, tools: Read, Grep, ...), no per-tool
 format needed. To make a custom agent read-only under OpenCode, add a

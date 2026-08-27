@@ -95,22 +95,19 @@ ENV NODE_PATH=/usr/local/lib/node_modules
 COPY --chown=claude:claude scripts/shot.js /usr/local/bin/shot
 RUN chmod +x /usr/local/bin/shot
 
-# Global agents — baked into the image, available in every project.
-# Project-level agents (mounted at runtime) override these if same name.
-COPY --chown=claude:claude agents/ /home/claude/.claude/agents/
-
-# Same agents for OpenCode, which reads global agents from ~/.config/opencode/agents/.
-# The markdown body is identical; only the frontmatter differs — OpenCode takes the
-# agent name from the filename and expects `tools` to be a map, not a list, and passes
-# unknown keys through to the provider. So drop `name:` and `tools:` from this copy —
-# a `permission:` block passes through untouched, which is how the read-only agents
-# (reviewer/security/analyst/owner) express their restriction under OpenCode.
-RUN mkdir -p /home/claude/.config/opencode/agents \
-    && for f in /home/claude/.claude/agents/*.md; do \
-        awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools):/{next} {print}' "$f" \
-            > "/home/claude/.config/opencode/agents/$(basename "$f")"; \
-    done \
-    && chown -R claude:claude /home/claude/.config
+# Global agents — no longer baked into the image. They live on the host in the
+# manigot checkout (agents/) and are mounted read-only into the container at
+# session launch (see internal/session/docker.go), which keeps the image purely
+# isolation for workspaces and makes the same agents available to `mg host`.
+#
+# The CLI config dirs the agents mount into (~/.claude and
+# ~/.config/opencode) must still exist in the image, writable by any session
+# UID — docker would otherwise create the mount-target parents as root-owned
+# when the -v mount lands, and the entrypoint's opencode.json write (and the
+# CLIs' own state under ~/.claude) would fail for the non-root session user.
+# The agents subdirs themselves are provided by the read-only mounts.
+RUN mkdir -p /home/claude/.claude /home/claude/.config/opencode \
+    && chown -R claude:claude /home/claude/.claude /home/claude/.config
 
 # Entrypoint script — writes claude.json to bypass onboarding before Claude starts
 COPY --chown=claude:claude scripts/entrypoint.sh /home/claude/entrypoint.sh

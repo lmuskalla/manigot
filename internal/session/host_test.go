@@ -350,3 +350,259 @@ func TestHostInvocationRun(t *testing.T) {
 		t.Errorf("Run did not apply Env:\n%s", out.String())
 	}
 }
+
+// TestInstallHostGlobalAgents — mg host runs the CLI directly with no
+// mounts, so the manigot checkout's global agents are surfaced by symlinking
+// them into the host CLI's global agents dir, without clobbering an existing
+// host agent of the same name.
+func TestInstallHostGlobalAgents(t *testing.T) {
+	home := checkout(t, "")
+	writeAgent(t, home, "analyst.md", "---\nname: analyst\ndescription: Analyst.\n---\n\nBody.\n")
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Reviewer.\n---\n\nBody.\n")
+
+	// Point $HOME at a temp dir so symlinks land there, not the real home.
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	n, err := installHostGlobalAgents(config.ToolClaudeCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalAgents: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("installed = %d, want 2", n)
+	}
+
+	// Claude links into ~/.claude/agents/.
+	target := filepath.Join(hostHome, ".claude", "agents")
+	for _, name := range []string{"analyst.md", "reviewer.md"} {
+		link := filepath.Join(target, name)
+		dest, err := os.Readlink(link)
+		if err != nil {
+			t.Fatalf("expected symlink %s: %v", link, err)
+		}
+		if dest != filepath.Join(home, "agents", name) {
+			t.Errorf("symlink %s -> %q, want %q", link, dest, filepath.Join(home, "agents", name))
+		}
+	}
+}
+
+// TestInstallHostGlobalAgentsOpenCodeTarget — OpenCode cannot load the raw
+// list-form agents (it hard-errors on the tools: key), so the host target
+// gets a CONVERTED COPY (name:/tools: stripped, permission: passed through)
+// written into ~/.config/opencode/agents/ — not a symlink to the raw file —
+// and an existing host agent is never clobbered.
+func TestInstallHostGlobalAgentsOpenCodeTarget(t *testing.T) {
+	home := checkout(t, "")
+	writeAgent(t, home, "analyst.md", "---\nname: analyst\ndescription: Analyst.\ntools: Read, Grep, Glob\n---\n\nBody.\n")
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Reviewer.\ntools: Read, Grep, Glob\npermission: bash\n---\n\nBody.\n")
+
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	// A user's own host agent of the same name — must survive untouched.
+	existing := filepath.Join(hostHome, ".config", "opencode", "agents", "analyst.md")
+	if err := os.MkdirAll(filepath.Dir(existing), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userContent := "---\ndescription: user's own.\n---\n"
+	if err := os.WriteFile(existing, []byte(userContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := installHostGlobalAgents(config.ToolOpenCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalAgents: %v", err)
+	}
+	// Only reviewer.md is installed — analyst.md exists already and is preserved.
+	if n != 1 {
+		t.Errorf("installed = %d, want 1 (analyst already exists)", n)
+	}
+	if data, err := os.ReadFile(existing); err != nil || string(data) != userContent {
+		t.Errorf("existing host agent was modified: %q, %v", string(data), err)
+	}
+	// The installed reviewer.md is a REGULAR FILE (not a symlink) containing
+	// the CONVERTED content: name:/tools: stripped, permission: passed through.
+	installed := filepath.Join(hostHome, ".config", "opencode", "agents", "reviewer.md")
+	fi, err := os.Lstat(installed)
+	if err != nil {
+		t.Fatalf("reviewer.md was not installed: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("opencode target must be a regular converted file, not a symlink to the raw agent")
+	}
+	data, err := os.ReadFile(installed)
+	if err != nil {
+		t.Fatalf("read installed reviewer.md: %v", err)
+	}
+	converted := string(data)
+	if strings.Contains(converted, "name:") || strings.Contains(converted, "tools:") {
+		t.Errorf("installed opencode agent still carries the raw list-form keys:\n%s", converted)
+	}
+	if !strings.Contains(converted, "permission: bash") {
+		t.Errorf("installed opencode agent lost the permission: block:\n%s", converted)
+	}
+	if !strings.Contains(converted, "Body.") {
+		t.Errorf("installed opencode agent lost the body:\n%s", converted)
+	}
+}
+
+// TestInstallHostGlobalAgentsOpenCodeReplacesStaleRawSymlink — a symlink the
+// pre-fix installer placed (pointing at the checkout's agents/<name>) would
+// still hard-error OpenCode; the installer must replace its own stale raw
+// link with a converted copy, while leaving a foreign symlink alone.
+func TestInstallHostGlobalAgentsOpenCodeReplacesStaleRawSymlink(t *testing.T) {
+	home := checkout(t, "")
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Reviewer.\ntools: Read, Grep, Glob\npermission: bash\n---\n\nBody.\n")
+	writeAgent(t, home, "security.md", "---\nname: security\ndescription: Security.\ntools: Read\n---\n\nBody.\n")
+
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	targetDir := filepath.Join(hostHome, ".config", "opencode", "agents")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The pre-fix state: a raw symlink pointing at the checkout's agents dir.
+	stale := filepath.Join(targetDir, "reviewer.md")
+	if err := os.Symlink(filepath.Join(home, "agents", "reviewer.md"), stale); err != nil {
+		t.Fatal(err)
+	}
+	// A foreign symlink (the user's own link elsewhere) — must survive.
+	foreign := filepath.Join(targetDir, "security.md")
+	if err := os.Symlink("/some/other/place/security.md", foreign); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := installHostGlobalAgents(config.ToolOpenCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalAgents: %v", err)
+	}
+	// Only the stale raw link is replaced; the foreign symlink is skipped.
+	if n != 1 {
+		t.Errorf("installed = %d, want 1 (only the stale raw link replaced)", n)
+	}
+	if dest, err := os.Readlink(foreign); err != nil || dest != "/some/other/place/security.md" {
+		t.Errorf("foreign symlink was touched: %q, %v", dest, err)
+	}
+	// The stale symlink is gone; a regular converted file sits in its place.
+	fi, err := os.Lstat(stale)
+	if err != nil {
+		t.Fatalf("target missing after replace: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("stale raw symlink was not replaced with a regular converted file")
+	}
+	data, err := os.ReadFile(stale)
+	if err != nil {
+		t.Fatalf("read replaced target: %v", err)
+	}
+	converted := string(data)
+	if strings.Contains(converted, "tools:") || strings.Contains(converted, "name:") {
+		t.Errorf("replaced target still carries the raw list-form keys:\n%s", converted)
+	}
+	if !strings.Contains(converted, "permission: bash") {
+		t.Errorf("replaced target lost the permission: block:\n%s", converted)
+	}
+}
+
+// TestInstallHostGlobalAgentsNoAgents — with no agents/ dir in the checkout,
+// nothing is installed and no host config dir is created (no side effects on
+// the user's home).
+func TestInstallHostGlobalAgentsNoAgents(t *testing.T) {
+	checkout(t, "")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	if n, err := installHostGlobalAgents(config.ToolClaudeCode); err != nil || n != 0 {
+		t.Errorf("no-agents install = (%d, %v), want (0, nil)", n, err)
+	}
+	if _, err := os.Stat(filepath.Join(hostHome, ".claude", "agents")); !os.IsNotExist(err) {
+		t.Errorf("no-agents install created a host config dir: %v", err)
+	}
+}
+
+// TestBuildHostLinksGlobalAgents — BuildHostInvocation surfaces the checkout's
+// global agents into the host CLI's config dir and reports it on diag.
+func TestBuildHostLinksGlobalAgents(t *testing.T) {
+	_, _ = docProject(t)
+	// Re-point the home at a checkout that has agents, and $HOME at a temp dir
+	// so the symlinks land somewhere isolated.
+	home := checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-token\nCLAUDE_ACCOUNT_UUID=uuid-1\nCLAUDE_EMAIL=me@x.io\nCLAUDE_ORG_UUID=org-1\n")
+	writeAgent(t, home, "analyst.md", "---\nname: analyst\ndescription: Analyst.\n---\n\nBody.\n")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildHostInvocation(Options{}, info, r, &diag); err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	if _, err := os.Readlink(filepath.Join(hostHome, ".claude", "agents", "analyst.md")); err != nil {
+		t.Errorf("host invocation did not link the global agent: %v", err)
+	}
+	if !strings.Contains(diag.String(), "Installed : 1 global agent(s)") {
+		t.Errorf("missing Installed diag line:\n%s", diag.String())
+	}
+}
+
+// TestBuildHostOpenCodeWritesConvertedGlobalAgents — under an opencode
+// profile, BuildHostInvocation delivers CONVERTED copies (not raw symlinks)
+// into ~/.config/opencode/agents/, so the host CLI can actually load the
+// global agents.
+func TestBuildHostOpenCodeWritesConvertedGlobalAgents(t *testing.T) {
+	_, _ = docProject(t)
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Reviewer.\ntools: Read, Grep, Glob\npermission: bash\n---\n\nBody.\n")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildHostInvocation(Options{}, info, r, &diag); err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	installed := filepath.Join(hostHome, ".config", "opencode", "agents", "reviewer.md")
+	fi, err := os.Lstat(installed)
+	if err != nil {
+		t.Fatalf("host invocation did not install the converted agent: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("opencode host target must be a regular converted file, not a raw symlink")
+	}
+	data, err := os.ReadFile(installed)
+	if err != nil {
+		t.Fatalf("read installed agent: %v", err)
+	}
+	converted := string(data)
+	if strings.Contains(converted, "tools:") || strings.Contains(converted, "name:") {
+		t.Errorf("installed opencode agent carries the raw list-form keys:\n%s", converted)
+	}
+	if !strings.Contains(converted, "permission: bash") {
+		t.Errorf("installed opencode agent lost the permission: block:\n%s", converted)
+	}
+	if !strings.Contains(diag.String(), "Installed : 1 global agent(s)") {
+		t.Errorf("missing Installed diag line:\n%s", diag.String())
+	}
+}

@@ -218,6 +218,41 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		agentCleanup = func() { os.RemoveAll(tmp) }
 	}
 
+	// ── Global agents ─────────────────────────────────────────────────────
+	// The global agents dir (<home>/agents/) is no longer baked into the
+	// image — it lives on the host in the manigot checkout and is mounted
+	// read-only into the container at the CLI's global agent location, so the
+	// container can use the host's agents but cannot modify them. This keeps
+	// the image purely isolation for workspaces and makes the same agents
+	// available to `mg host` (see host.go). Project agents (docs/agents/,
+	// above) still ride the docs mount and override global agents of the same
+	// name, exactly as before.
+	//
+	// Claude Code reads global subagents from ~/.claude/agents/ and takes the
+	// list-form frontmatter natively, so the host's files mount verbatim.
+	// OpenCode reads global agents from ~/.config/opencode/agents/ and
+	// hard-errors on the list-form tools: key, so the mounted files are
+	// converted first (name:/tools: stripped, permission: passed through —
+	// see convertAgents) into a temp dir shadow-mounted over the CLI's global
+	// agents path, cleaned up via the invocation's Cleanup hook.
+	var globalAgentMount []string
+	var globalAgentCleanup func()
+	if homeDir := home.Root(); homeDir != "" {
+		globalAgentsDir := filepath.Join(homeDir, "agents")
+		if fs.IsDir(globalAgentsDir) {
+			if info.Tool == config.ToolOpenCode {
+				if tmp, hasAgents, err := convertAgents(globalAgentsDir, info.Tool); err != nil {
+					return DockerInvocation{}, fmt.Errorf("convert global agents: %w", err)
+				} else if hasAgents {
+					globalAgentMount = []string{"-v", tmp + ":/home/claude/.config/opencode/agents:ro"}
+					globalAgentCleanup = func() { os.RemoveAll(tmp) }
+				}
+			} else {
+				globalAgentMount = []string{"-v", globalAgentsDir + ":/home/claude/.claude/agents:ro"}
+			}
+		}
+	}
+
 	// ── Job prompt ──────────────────────────────────────────────────────────
 	initialPrompt := ""
 	if root.Job != "" {
@@ -361,6 +396,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, gitOverlayMounts...)
 	argv = append(argv, docsMount...)
 	argv = append(argv, agentMount...)
+	argv = append(argv, globalAgentMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
@@ -386,7 +422,21 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 
-	return DockerInvocation{Argv: append([]string{"docker"}, argv...), Cleanup: agentCleanup}, nil
+	// Combine the project- and global-agent temp-dir cleanups (whichever are
+	// non-nil) into a single hook run after the container exits.
+	var cleanup func()
+	if agentCleanup != nil || globalAgentCleanup != nil {
+		cleanup = func() {
+			if agentCleanup != nil {
+				agentCleanup()
+			}
+			if globalAgentCleanup != nil {
+				globalAgentCleanup()
+			}
+		}
+	}
+
+	return DockerInvocation{Argv: append([]string{"docker"}, argv...), Cleanup: cleanup}, nil
 }
 
 // Run executes the assembled docker invocation, wiring stdin/stdout/stderr

@@ -43,7 +43,7 @@ manigot/
   .env                    ← your credentials + default profile (gitignored, never committed)
   .gitignore
   README.md
-  agents/                 ← global agents, baked into the image for both tools
+  agents/                 ← global agents, mounted into the container (and delivered for mg host)
     analyst.md
     developer.md
     reviewer.md
@@ -297,8 +297,9 @@ cp -r manigot/project-template/docs/ your-project/docs/
 $EDITOR your-project/docs/AGENTS.md
 ```
 
-Either way, that's it. The global agents are already in the image — nothing
-else to copy.
+Either way, that's it. The global agents come from the manigot checkout and are
+delivered into sessions automatically (mounted into the container, or delivered
+into the host CLI's config for `mg host`) — nothing else to copy.
 
 `docs/AGENTS.md` is the one project context file, and it works for both tools:
 manigot mounts it read-only at whatever path the selected CLI reads context
@@ -389,14 +390,20 @@ A profile bundles the agent CLI with the subscription it is billed against.
 | Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go / OpenCode Zen subscription |
 | Non-interactive (`--print` / `mg jdi`) | supported | supported |
 
-Both tools get the same `agents/*.md` files baked in at build time. The
-OpenCode copies are generated from the same sources with the `name` and `tools`
-frontmatter keys removed, since OpenCode derives the agent name from the
-filename and uses a different schema for tool permissions. Custom project
-agents in `your-project/docs/agents/` are written in the same list form and
-converted the same way at session launch — manigot strips `name`/`tools` from
-the mounted copies before an OpenCode session sees them (OpenCode hard-errors
-on the list form, so this is what keeps one file working under both CLIs).
+Both tools get the same `agents/*.md` files, delivered from the manigot
+checkout into every session rather than baked into the image at build time.
+For a container session the global agents dir is mounted read-only at the
+CLI's global agent location (`~/.claude/agents/` for Claude Code,
+`~/.config/opencode/agents/` for OpenCode — see the table above), so the
+container uses the host's agents but cannot modify them; project
+`docs/agents/` overrides a same-named global agent. The OpenCode copies are
+converted from the same sources with the `name` and `tools` frontmatter keys
+removed, since OpenCode derives the agent name from the filename and uses a
+different schema for tool permissions. Custom project agents in
+`your-project/docs/agents/` are written in the same list form and converted
+the same way at session launch — manigot strips `name`/`tools` from the
+mounted copies before an OpenCode session sees them (OpenCode hard-errors on
+the list form, so this is what keeps one file working under both CLIs).
 Your `docs/agents/` source files are never modified.
 
 The read-only agents — `@reviewer`, `@security`, `@analyst` and `@owner` —
@@ -435,9 +442,16 @@ launcher for work that must touch the host itself.
   because the container is isolated and ephemeral. On the host there is no
   isolation, so `mg host` deliberately does not pass them: the CLI keeps its
   normal per-tool confirmation prompts and you supervise every action.
-- **Agents.** manigot's global agents are baked into the container image,
-  not installed on the host — `--agent` works only if the host's own CLI has
-  that agent installed (it errors clearly otherwise).
+- **Agents.** manigot's global agents are available to `mg host` too: at
+  launch mg delivers the checkout's `agents/*.md` files into the host CLI's
+  own global agents dir (`~/.claude/agents/` for Claude Code,
+  `~/.config/opencode/agents/` for OpenCode), so `--agent` works without the
+  image. Claude Code gets symlinks to the live checkout files; OpenCode gets
+  converted copies — the `name`/`tools` frontmatter keys stripped and
+  `permission:` passed through, the same conversion the container path
+  applies, since OpenCode hard-errors on the list-form `tools:` key. mg never
+  clobbers existing host agent config — a name you already have in that dir is
+  left untouched (your own agent wins).
 - **OpenCode model.** The zai/opencode-go/opencode-zen profiles' plan model is
   forwarded via opencode's `--model` flag; mg never writes your host's opencode
   config.

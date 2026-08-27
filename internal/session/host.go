@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/lmuskalla/manigot/internal/config"
+	"github.com/lmuskalla/manigot/internal/home"
 )
 
 // HostInvocation is a fully assembled direct CLI invocation for host mode.
@@ -79,6 +80,24 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 	binary := hostBinaryName(info.Tool)
 	if _, err := hostLookPath(binary); err != nil {
 		return HostInvocation{}, fmt.Errorf("%s is not installed on the host — mg host runs the CLI directly, without a container.\nInstall it, or use the docker session (bare mg) instead.", binary)
+	}
+
+	// ── Global agents ─────────────────────────────────────────────────────
+	// mg host runs the CLI directly with no image/mounts, so the host CLI
+	// cannot see the manigot checkout's global agents (<home>/agents/) the way
+	// the container path mounts them. Surface them into the CLI's own global
+	// agents dir (~/.claude/agents/ for Claude Code,
+	// ~/.config/opencode/agents/ for OpenCode) — symlinked raw for Claude Code
+	// (the list form is its native schema), converted copies for OpenCode
+	// (which hard-errors on the list-form tools: key — see convertAgentFile).
+	// Non-destructive: a name already present in the target dir is left
+	// untouched (the user's own host agent wins), and nothing happens when the
+	// checkout has no agents/ dir — so a best-effort failure only warns and
+	// never blocks the session.
+	if n, err := installHostGlobalAgents(info.Tool); err != nil {
+		fmt.Fprintf(diag, "Warning: could not make global agents available to %s on the host: %v\n", binary, err)
+	} else if n > 0 {
+		fmt.Fprintf(diag, "  Installed : %d global agent(s) into %s's host config\n", n, binary)
 	}
 
 	// ── Job prompt ──────────────────────────────────────────────────────────
@@ -203,6 +222,119 @@ func hostEnv(info ProfileInfo) []string {
 		env = filtered
 	}
 	return env
+}
+
+// hostGlobalAgentsDir resolves the host CLI's global agents directory for a
+// tool: ~/.claude/agents/ for Claude Code, ~/.config/opencode/agents/ for
+// OpenCode (the same locations the container path mounts the global agents
+// into). The dir is derived from $HOME (os.UserHomeDir), so tests can point it
+// at a temp dir.
+func hostGlobalAgentsDir(tool string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = os.Getenv("HOME")
+	}
+	if tool == config.ToolOpenCode {
+		return filepath.Join(homeDir, ".config", "opencode", "agents")
+	}
+	return filepath.Join(homeDir, ".claude", "agents")
+}
+
+// installHostGlobalAgents surfaces the manigot checkout's global agents
+// (<home>/agents/) to the host CLI — the host equivalent of the container
+// path's read-only mount (mg host runs the CLI directly, with no mounts).
+//
+// Delivery is per-tool, mirroring the container path's conversion split:
+//
+//   - Claude Code: each agent file is symlinked into ~/.claude/agents/ raw —
+//     the list-form frontmatter (name:/description:/tools: Read, Grep, ...)
+//     is Claude's native subagent schema. The symlinks point at the live
+//     checkout files, so edits to agents/ are reflected without re-installing.
+//   - OpenCode: OpenCode hard-errors on the list-form tools: key, so the raw
+//     file cannot be symlinked — each agent is converted first (name:/tools:
+//     stripped, permission: passed through — see convertAgentFile) and the
+//     converted copy is written into ~/.config/opencode/agents/.
+//
+// It never clobbers existing host agent config: a name already present in the
+// target dir is left untouched (the user's own host agent wins, mirroring the
+// project-overrides-global precedence). One exception: a symlink pointing at
+// the checkout's own agents/<name> is this installer's stale raw OpenCode link
+// from before the conversion fix, and is replaced with a converted copy so it
+// stops hard-erroring OpenCode. Nothing is created when the checkout has no
+// agents/ dir or no home can be located. Returns the number of agents
+// installed.
+func installHostGlobalAgents(tool string) (int, error) {
+	homeDir := home.Root()
+	if homeDir == "" {
+		return 0, nil
+	}
+	srcDir := filepath.Join(homeDir, "agents")
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	if len(names) == 0 {
+		return 0, nil
+	}
+
+	targetDir := hostGlobalAgentsDir(tool)
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return 0, err
+	}
+	installed := 0
+	for _, name := range names {
+		target := filepath.Join(targetDir, name)
+		if tool == config.ToolOpenCode {
+			// OpenCode hard-errors on the list-form tools: key (see
+			// convertAgents), so the raw checkout file cannot be symlinked:
+			// the host target gets a converted copy instead. Never clobber an
+			// existing host agent — except this installer's own stale raw
+			// symlink (one pointing at the checkout's agents/<name>), which is
+			// replaced with the converted copy.
+			if fi, err := os.Lstat(target); err == nil {
+				if fi.Mode()&os.ModeSymlink != 0 {
+					if dest, rerr := os.Readlink(target); rerr == nil && dest == filepath.Join(srcDir, name) {
+						os.Remove(target) // our stale raw link — replaced below
+					} else {
+						continue // a foreign symlink — the user's setup wins
+					}
+				} else {
+					continue // a regular file — the user's own agent wins
+				}
+			}
+			data, rerr := os.ReadFile(filepath.Join(srcDir, name))
+			if rerr != nil {
+				continue
+			}
+			if werr := os.WriteFile(target, convertAgentFile(data), 0o644); werr != nil {
+				continue
+			}
+			installed++
+			continue
+		}
+		// Claude Code — raw symlink (list form is Claude's native schema).
+		// Never clobber an existing host agent config — the user's own file
+		// (or an existing symlink, dangling or not) wins.
+		if _, err := os.Lstat(target); err == nil {
+			continue
+		}
+		if err := os.Symlink(filepath.Join(srcDir, name), target); err != nil {
+			// Skip names we couldn't link but keep going for the rest.
+			continue
+		}
+		installed++
+	}
+	return installed, nil
 }
 
 // Run executes the assembled CLI invocation, wiring stdin/stdout/stderr
