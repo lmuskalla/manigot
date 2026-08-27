@@ -9,7 +9,11 @@ author: Leander Muskalla
 
 ## What
 
-<!-- What needs to be done? Be specific. -->
+Can we introduce a system-wide meta prompt that always gets injected into each mg session?
+We would put something like general character goals etc in there.
+So we have a system-wide "do this, do that", then agents, skills, etc.
+Needs to go into a sensible and accessible location and can just be a .md file.
+Do create it for this repo as well.
 
 ## Why
 
