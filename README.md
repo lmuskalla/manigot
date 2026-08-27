@@ -157,8 +157,8 @@ cd manigot/
 make build
 
 # 2. Put the launchers on your PATH
-make install                            # /usr/local/bin — may need sudo
-# make install PREFIX="$HOME/.local"    # ...or somewhere you own
+make install                            # ~/.local/bin — no sudo needed (default)
+# make install PREFIX=/usr/local        # ...or a system-wide location (may need sudo)
 ```
 
 ### `claude-pro` — Claude Code, Claude Pro subscription
@@ -304,7 +304,7 @@ uninstall` removes it again.
 
 ### Installing without symlinks
 
-If you would rather not write to `/usr/local/bin`, define a shell alias
+If you would rather not use `make install` at all, define a shell alias
 instead:
 
 ```bash

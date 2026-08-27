@@ -25,7 +25,7 @@ mg: ## Build the host-side mg binary into bin/
 		-ldflags "-X main.version=$(VERSION) -X main.tuiVersion=$(VERSION) -X main.jdiVersion=$(VERSION)" \
 		-o "$(CURDIR)/$(MG_BIN)" ./cmd/mg
 	@echo "Built $(MG_BIN) ($(VERSION))"
-	@echo "Install:  make install   (or: make install PREFIX=\$$HOME/.local)"
+	@echo "Install:  make install   (into ~/.local/bin; override with PREFIX=...)"
 
 # ── Run ─────────────────────────────────────────────────────────────────────────
 
@@ -37,13 +37,13 @@ run: mg ## Start manigot in the current project (requires docs/ in project root)
 # `git pull` + rebuild updates the installed command too. Never a prerequisite
 # of another target — this is the only thing here that writes outside the repo.
 #
-#   make install                      → /usr/local/bin (may need sudo)
-#   make install PREFIX=$HOME/.local  → ~/.local/bin, no sudo needed
+#   make install                      → ~/.local/bin, no sudo needed (default)
+#   make install PREFIX=/usr/local    → system-wide, may need sudo
 
-PREFIX  ?= /usr/local
+PREFIX  ?= $(HOME)/.local
 BINDIR  := $(PREFIX)/bin
 
-install: mg ## Symlink the mg binary into PREFIX/bin (default /usr/local)
+install: mg ## Symlink the mg binary into PREFIX/bin (default ~/.local/bin)
 	@mkdir -p "$(BINDIR)"
 	@ln -sf "$(CURDIR)/$(MG_BIN)" "$(BINDIR)/mg" \
 		&& echo "  $(BINDIR)/mg -> $(MG_BIN)"

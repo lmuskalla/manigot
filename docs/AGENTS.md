@@ -514,7 +514,7 @@ either way.
 - `make rebuild` — force rebuild with no cache, after a Claude Code / OpenCode update
 - `make mg` — build the host-side `bin/mg` binary
 - `make install` / `make uninstall` — symlink the single `mg` binary into
-  `PREFIX/bin` (default `/usr/local`)
+  `PREFIX/bin` (default `~/.local/bin`)
 - `mg` — start an isolated session from inside any project directory; `docs/`
   is optional (see Architecture above)
 - `mg --profile <name>` — same, but under the given subscription profile
