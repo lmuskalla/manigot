@@ -290,6 +290,33 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		}
 	}
 
+	// ── Global meta prompt ─────────────────────────────────────────────────
+	// The meta prompt (<home>/meta.md) is a system-wide instruction file that
+	// sits *above* agents and skills in the instruction hierarchy: it is
+	// injected into every session, regardless of agent, project, or
+	// interactive/--print mode. Each CLI loads it from its *global
+	// instruction* location — ~/.claude/CLAUDE.md for Claude Code (the
+	// user-global memory file, loaded before the project context at
+	// /workspace/.claude/CLAUDE.md) and ~/.config/opencode/AGENTS.md for
+	// OpenCode (the global rules file, loaded alongside the project context
+	// mount) — so the project context still wins on conflict.
+	//
+	// Like skills, the file is plain markdown native to both CLIs, so no
+	// conversion and no temp dir are needed (and thus no Cleanup hook): the
+	// checkout file is mounted read-only at the per-tool target. A checkout
+	// without meta.md yields no mount (it is optional, like skills).
+	var globalMetaMount []string
+	if homeDir := home.Root(); homeDir != "" {
+		metaFile := filepath.Join(homeDir, "meta.md")
+		if fs.IsFile(metaFile) {
+			if info.Tool == config.ToolOpenCode {
+				globalMetaMount = []string{"-v", metaFile + ":/home/claude/.config/opencode/AGENTS.md:ro"}
+			} else {
+				globalMetaMount = []string{"-v", metaFile + ":/home/claude/.claude/CLAUDE.md:ro"}
+			}
+		}
+	}
+
 	// ── Project skills ────────────────────────────────────────────────────
 	// Project skills (docs/skills/<name>/SKILL.md) need no staging or shadow
 	// mount: the docs bind mount above maps the whole docs/ dir, so
@@ -447,6 +474,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, agentMount...)
 	argv = append(argv, globalAgentMount...)
 	argv = append(argv, globalSkillMount...)
+	argv = append(argv, globalMetaMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
