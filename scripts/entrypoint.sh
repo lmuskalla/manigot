@@ -265,7 +265,7 @@ chmod +x "$MANIGOT_BIN/git"
 export PATH="$MANIGOT_BIN:$PATH"
 
 # --print mode expects a clean stdout stream (see run.sh and the
-# --output-format json branch below) — this quote is purely cosmetic, so
+# --output-format stream-json branch below) — this quote is purely cosmetic, so
 # it's skipped there rather than risking a caller mis-parsing it as part
 # of the agent's own output. Printed in italics (raw ANSI, not tput/ncurses
 # — not guaranteed present in this slim image) with a trailing blank line.
@@ -291,7 +291,7 @@ if [[ "$TOOL" == "opencode" ]]; then
         # reporting the assistant's response in a "text"-typed event's
         # part.text) instead of interactive TUI output — parsed by
         # tui/internal/orchestrate.ResultText/DetectSignal the same way
-        # Claude's --output-format json "result" field is.
+        # Claude's --output-format stream-json "result" event is.
         OC_AGENT=""
         OC_PROMPT=""
         OC_REST=()
@@ -333,15 +333,24 @@ else
     # and/or the positional job prompt).
     if [[ "${MANIGOT_PRINT:-false}" == "true" ]]; then
         # Non-interactive, one-shot mode (run.sh's --print flag, e.g. for
-        # mg-jdi): no attached terminal, so the caller gets the agent's final
-        # response back on stdout instead. --output-format json is used
-        # (confirmed supported by the pinned claude version, whose result is
-        # a single JSON object with a "result" field carrying the final
-        # response text) so callers parse a clean field instead of scanning
-        # raw combined stdout, which could false-positive on the marker text
-        # (see docs/AGENTS.md) appearing incidentally inside a tool call's
-        # own output (e.g. a grep result).
-        exec claude --dangerously-skip-permissions --print --output-format json "$@"
+        # mg-jdi): no attached terminal, so the caller gets the agent's
+        # output back on stdout instead. --verbose --output-format
+        # stream-json emits a step-level JSONL event stream — system /
+        # assistant / user / result events, one object per line — whose
+        # final "result" event's "result" field carries the final response
+        # text. That is strictly more than the old single-result json form:
+        # the full stream is what mg-jdi persists to the job's session.log
+        # (see jdioutput.go's appendSessionLog), not just the final answer.
+        # --verbose is required: claude rejects stream-json under --print
+        # without it ("--output-format=stream-json requires --verbose"),
+        # verified against the installed version (2.1.247). Stream-json has
+        # been more version-volatile than the stable single-result shape, so
+        # internal/orchestrate keeps the plain result parse as a defensive
+        # fallback (see signal.go). Parsing the stream — instead of scanning
+        # raw combined stdout — also keeps the marker text (see
+        # docs/AGENTS.md) from false-positiving when it appears incidentally
+        # inside a tool call's own output (e.g. a grep result).
+        exec claude --dangerously-skip-permissions --print --verbose --output-format stream-json "$@"
     fi
     exec claude --dangerously-skip-permissions "$@"
 fi

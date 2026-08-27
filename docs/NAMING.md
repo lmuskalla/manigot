@@ -111,7 +111,7 @@ regardless, which didn't track.
    depends on the thematic wording existing. If there's ever no appetite
    for it, dropping it costs nothing.
 4. **Flavor text stays out of machine-readable output.** Anything written
-   under `--print`/`--output-format json` (see the session launcher's
+   under `--print`/`--output-format stream-json` (see the session launcher's
    `--print` path) is technical wording only.
 5. **New thematic surface needs its own brief.** This file documents what
    shipped in `tt45uz_naming-features`; it isn't a standing invitation to

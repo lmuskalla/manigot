@@ -98,6 +98,15 @@ obsoleted by the machinery built since.
 
 ### 5. Event-streaming subsystem — designed against a real consumer, now in scope
 
+**Status: PARTIALLY addressed** — the writer side landed in
+`health_capture-non-interactive-agent-sessions`: every non-interactive
+invocation's raw step-level output is persisted to the job's own
+`session.log` (and claude-pro's `--print` path now emits the full
+stream-json event stream), superseding the README's honest "final answer
+only" limitation. The item's *reader side in the TUI* — a richer step-level
+view off that capture — remains open (the TUI log tab stays on `run.log`
+for now; rendering/tailing `session.log` is a separate, later job).
+
 The polling model tells you the *stage*, not what the agent is *doing*. The
 old fear ("wire-format commitment") is answered by building it against a
 concrete need rather than as an abstraction: the first consumer in scope is

@@ -77,6 +77,65 @@ func initTestRepo(t *testing.T) (root string, j job.Job) {
 	return root, j
 }
 
+// initLinkedWorktreeRepo creates a fresh git repo whose job branch is checked
+// out in a REAL linked worktree — the production shape `mg job` produces —
+// unlike initTestRepo's pre-worktree shape (branch checked out in the main
+// worktree itself). Run-level session.log tests use this shape so the
+// loop-exit sweep's CommitAll runs against the job's own worktree and the
+// REQUIRED clean-tree assertion actually exercises it (in the pre-worktree
+// shape the sweep is gated off by design — see TestRunDoesNotSweepMainWorktree).
+//
+// Returns the main project root (matching job.Discover's semantics: a Job's
+// Root is always the main root, never its own worktree), the job's linked
+// worktree path, and the job.Job.
+func initLinkedWorktreeRepo(t *testing.T) (root, wt string, j job.Job) {
+	t.Helper()
+	root = t.TempDir()
+	runGit(t, root, "init", "-q", "-b", "main")
+	runGit(t, root, "config", "user.email", "t@example.com")
+	runGit(t, root, "config", "user.name", "Test")
+	runGit(t, root, "config", "commit.gpgsign", "false")
+
+	if err := os.MkdirAll(filepath.Join(root, "docs", "jobs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "README"), []byte("init\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "add", "README")
+	runGit(t, root, "commit", "-q", "-m", "init")
+
+	const jobName = "aaaa01_test-job"
+	const branch = "feature/aaaa01_test-job"
+	jobDir := filepath.Join(root, "docs", "jobs", jobName)
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	brief := "# Brief: test job\n\nstatus: open\ntype: feature\nid: aaaa01\nbranch: " + branch + "\n\n" +
+		"## What\n\nsomething substantial enough to count as written\nand a second line so isWritten's rule is satisfied\n"
+	if err := os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte(brief), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "checkout", "-q", "-b", branch)
+	runGit(t, root, "add", "-A")
+	runGit(t, root, "commit", "-q", "-m", "[aaaa01] scaffold job")
+
+	// Back to main, then add the job's own linked worktree — the shape mg
+	// job creates for a normal (post-worktree) job.
+	runGit(t, root, "checkout", "-q", "main")
+	wt = filepath.Join(root, ".manigot-worktrees", jobName)
+	runGit(t, root, "worktree", "add", "-q", wt, branch)
+
+	j = job.Job{
+		Name:   jobName,
+		Dir:    filepath.Join(wt, "docs", "jobs", jobName),
+		Root:   root, // the main project root — job.Discover's semantics
+		ID:     "aaaa01",
+		Branch: branch,
+	}
+	return root, wt, j
+}
+
 // writeJobFile writes content to one of the job's four files.
 func writeJobFile(t *testing.T, j job.Job, filename, content string) {
 	t.Helper()
@@ -1042,6 +1101,188 @@ func TestCommandAgentRunnerPruneFailureDoesNotAbort(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "executable file not found") {
 		t.Errorf("the invocation must proceed past a prune failure (docker attempted):\n%v", err)
+	}
+}
+
+// TestRunWritesSessionLogPerInvocation pins TASK-1's session.log persistence
+// at the loop level: Run appends one section per invocation — header
+// (agent + attempt + timestamp) followed by the raw captured output — to
+// docs/jobs/<id>_<slug>/session.log, for every invocation in order. REQUIRED
+// (TASK-5): the git-level assertion that the worktree is clean after Run —
+// the final section must have been committed by the loop-exit sweep, or mg
+// done's clean-tree check would refuse a just-finished run. The job runs in
+// a REAL linked worktree (initLinkedWorktreeRepo), the production shape, so
+// the sweep actually commits the final section into the job's own worktree
+// and the clean-tree assertion exercises it meaningfully.
+func TestRunWritesSessionLogPerInvocation(t *testing.T) {
+	root, wt, j := initLinkedWorktreeRepo(t)
+	r := &fakeRunner{t: t, root: wt, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		switch agent {
+		case "analyst":
+			writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
+			commit(t, root, "[aaaa01] tasks: add breakdown")
+		case "developer":
+			writeJobFile(t, j, "implementation.md", "# Implementation\n\nTASK-1: did the thing\n")
+			commit(t, root, "[aaaa01] TASK-1: do the thing")
+		case "reviewer":
+			writeJobFile(t, j, "verdict.md", "# Verdict\n\nTASK-1: PASS\n\n## Overall\n\nAPPROVED\n")
+			commit(t, root, "[aaaa01] verdict: approved")
+		}
+		return []byte("raw " + agent + " output\n")
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopFinished {
+		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
+	}
+
+	data, err := os.ReadFile(filepath.Join(j.Dir, "session.log"))
+	if err != nil {
+		t.Fatalf("reading session.log: %v", err)
+	}
+	out := string(data)
+	// Exactly one section per invocation, headers and raw content in order.
+	assertLogOrder(t, out, []string{
+		"analyst (attempt 1)",
+		"raw analyst output",
+		"developer (attempt 1)",
+		"raw developer output",
+		"reviewer (attempt 1)",
+		"raw reviewer output",
+	})
+	if n := sectionHeaderCount(out); n != 3 {
+		t.Errorf("session.log has %d section headers, want 3 (one per invocation)", n)
+	}
+
+	// REQUIRED: the loop-exit sweep must have committed the final session.log
+	// section in the job's linked worktree, so `git status --porcelain` is
+	// empty there — mg done's clean-tree check (git.WorkingTreeDirty) can
+	// never refuse a just-finished run.
+	if status := mgGit(t, wt, "status", "--porcelain"); status != "" {
+		t.Errorf("job worktree not clean after Run (final session.log section must be committed by the loop-exit sweep):\n%s", status)
+	}
+}
+
+// TestRunDoesNotSweepMainWorktree pins the loop-exit sweep's main-worktree
+// gate: for a pre-worktree job (the job branch checked out in the MAIN
+// worktree itself — initTestRepo's shape, an explicitly supported state) the
+// sweep must be skipped entirely. Without the gate, git.CommitAll on the
+// main worktree would stage and commit the user's own uncommitted work — an
+// unexcluded .env included — as [<id>] chore: commit all on the job branch:
+// precisely the hazard session.SweepJobWorktree's
+// ProjectRoot == InvocationRoot gate exists for. The test plants an
+// untracked .env in the main worktree and runs a marker-stop loop (a single
+// invocation whose output the fake runner never commits, so the ONLY thing
+// that could commit the .env is the loop-exit sweep), then asserts the .env
+// is still untracked with its content untouched and that no sweep commit
+// landed on the branch. (The final session.log section staying uncommitted
+// here is the accepted trade-off — the host never sweeps the main worktree,
+// by design.)
+func TestRunDoesNotSweepMainWorktree(t *testing.T) {
+	root, j := initTestRepo(t)
+
+	// The user's own uncommitted work in the main worktree — the exact file
+	// the gate exists to keep off the job branch.
+	const envContent = "CLAUDE_CODE_OAUTH_TOKEN=secret-token\n"
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte(envContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		return []byte("NEEDS-HUMAN-INPUT: which auth provider should this use?\n")
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopNeedsHuman {
+		t.Fatalf("Run.Kind = %v, want StopNeedsHuman (reason: %s)", got.Kind, got.Reason)
+	}
+	if len(r.calls) != 1 {
+		t.Fatalf("calls = %v, want exactly one invocation (marker stop)", r.calls)
+	}
+
+	// The .env must still be untracked — the fake runner never runs
+	// `git add -A`, so the only thing that could have committed it is the
+	// loop-exit sweep, and the gate must have skipped it.
+	status := mgGit(t, root, "status", "--porcelain")
+	if !strings.Contains(status, "?? .env") {
+		t.Errorf("main worktree status does not show .env as untracked, want it left untouched (the loop-exit sweep must skip the main worktree):\n%s", status)
+	}
+	for _, line := range strings.Split(mgGit(t, root, "log", "--oneline"), "\n") {
+		if strings.Contains(line, "chore: commit all") {
+			t.Errorf("branch log contains a sweep commit the main-worktree gate should have prevented: %s", line)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".env"))
+	if err != nil {
+		t.Fatalf("reading .env: %v", err)
+	}
+	if string(data) != envContent {
+		t.Errorf(".env content changed: %q, want %q", data, envContent)
+	}
+}
+
+// TestRunStopsOnNeedsHumanMarkerInClaudeStreamJSON proves the marker
+// detection holds at the loop level against the real
+// `claude --print --verbose --output-format stream-json` shape — a JSONL
+// stream of system/assistant/user/result events whose response prose lives
+// in assistant events' message.content text blocks (see
+// orchestrate.realClaudeStreamJSONL, captured live against claude 2.1.247) —
+// not just against the plain-text / Claude-JSON / opencode-JSONL shapes the
+// other marker tests use. It also pins the run.log contract for a
+// stream-json-driven run: the log shows the extracted prose (ResultText),
+// never the raw JSONL, while session.log holds the raw stream — and the
+// loop-exit sweep leaves the job's linked worktree clean (the marker stop is
+// the first invocation, so ONLY the loop-exit sweep can have committed the
+// section — the per-invocation sweep in commandAgentRunner.Run never runs
+// for the fake runner).
+func TestRunStopsOnNeedsHumanMarkerInClaudeStreamJSON(t *testing.T) {
+	root, wt, j := initLinkedWorktreeRepo(t)
+
+	// A minimal but real stream-json output with the marker inside an
+	// assistant text event's message.content and the result event's result
+	// field (as a real marker response would carry it).
+	const streamShape = `{"type":"system","subtype":"init","session_id":"ses_test"}
+{"type":"assistant","message":{"id":"msg_01","role":"assistant","content":[{"type":"text","text":"Looked at tasks.md.\nNEEDS-HUMAN-INPUT: which auth provider should this use?"}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"TASK-1: do the thing"}]}}
+{"type":"assistant","message":{"id":"msg_02","role":"assistant","content":[{"type":"text","text":"Asking the human."}]}}
+{"type":"result","subtype":"success","result":"Looked at tasks.md.\nNEEDS-HUMAN-INPUT: which auth provider should this use?"}
+`
+
+	r := &fakeRunner{t: t, root: wt, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		return []byte(streamShape)
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopNeedsHuman {
+		t.Fatalf("Run.Kind = %v, want StopNeedsHuman", got.Kind)
+	}
+	if !strings.Contains(got.Reason, "which auth provider should this use?") {
+		t.Errorf("Reason = %q, want it to contain the marker's reason text", got.Reason)
+	}
+	if len(r.calls) != 1 {
+		t.Errorf("calls = %v, want exactly one invocation (stopped immediately)", r.calls)
+	}
+	out := log.String()
+	if strings.Contains(out, `"type":"assistant"`) || strings.Contains(out, `"type":"result"`) {
+		t.Errorf("run.log contains raw JSONL, want the extracted prose (ResultText):\n%s", out)
+	}
+	if !strings.Contains(out, "which auth provider should this use?") {
+		t.Errorf("run.log missing the marker reason prose, got:\n%s", out)
+	}
+	// session.log holds the raw stream (the truth, complementing run.log's
+	// summary), committed by the loop-exit sweep: the worktree is clean.
+	sess, err := os.ReadFile(filepath.Join(j.Dir, "session.log"))
+	if err != nil {
+		t.Fatalf("reading session.log: %v", err)
+	}
+	if !strings.Contains(string(sess), `"type":"result"`) {
+		t.Errorf("session.log missing the raw stream, got:\n%s", sess)
+	}
+	if status := mgGit(t, wt, "status", "--porcelain"); status != "" {
+		t.Errorf("job worktree not clean after Run (final session.log section must be committed by the loop-exit sweep):\n%s", status)
 	}
 }
 

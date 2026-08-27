@@ -242,3 +242,141 @@ func TestDetectSignalRealOpenCodeToolOutputIgnored(t *testing.T) {
 		t.Error("DetectSignal: matched inside a tool_use event's state.output, want no match")
 	}
 }
+
+// --- real `claude --print --output-format stream-json` output (captured live) --
+
+// realClaudeStreamJSONL is verbatim stdout from a real
+// `claude --print --verbose --output-format stream-json "say hi"`
+// invocation — claude-code 2.1.247, the version the Dockerfile installs
+// unpinned. The invocation failed auth (no credentials in the capture
+// environment), but the event stream is emitted in full regardless, which
+// pins the parser against the actual shape rather than an approximation:
+// a system event, an assistant event whose message.content is an array of
+// typed blocks (here one "text" block), and a final "result" event whose
+// "result" field carries the final response text. The marker text
+// "Not logged in · Please run /login" appears in both the assistant text
+// block and the result field — exactly where a real response would carry it.
+const realClaudeStreamJSONL = `{"type":"system","subtype":"init","cwd":"/workspace","session_id":"77e6849c-dd31-4c7c-8ae5-68e46a4036ca","tools":["Task","Bash","CronCreate","CronDelete","CronList","DesignSync","Edit","EnterWorktree","ExitWorktree","NotebookEdit","Read","ReportFindings","ScheduleWakeup","SendMessage","Skill","TaskOutput","TaskStop","ToolSearch","WebFetch","WebSearch","Workflow","Write"],"mcp_servers":[],"model":"claude-opus-5[1m]","permissionMode":"default","slash_commands":["deep-research","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompts","doctor","loop","claude-api","run","run-skill-generator","agents","auto-mode-setup","autocompact","clear","color","compact","config","context","effort","fast","heapdump","init","mcp","model","__remote-workflow","workflow-launch-exec","reload-skills","rename","security-review","usage","insights","recap","goal","design","design-consent","design-revoke","team-onboarding"],"terminal_slash_commands":["doctor","color"],"apiKeySource":"none","claude_code_version":"2.1.247","output_style":"default","agents":["claude","Explore","general-purpose","Plan","statusline-setup"],"skills":["deep-research","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompts","doctor","loop","claude-api","run","run-skill-generator"],"plugins":[],"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"],"analytics_disabled":false,"product_feedback_disabled":false,"uuid":"f24986f2-d508-4c10-b028-968a18b04ccf","memory_paths":{"auto":"/home/claude/.claude/projects/-workspace/memory/"},"fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required"}
+{"type":"assistant","message":{"diagnostics":null,"id":"4e00ecc7-57c0-48a8-8cbd-0ee551862004","container":null,"model":"<synthetic>","role":"assistant","stop_details":null,"stop_reason":"stop_sequence","stop_sequence":"","type":"message","usage":{"output_tokens_details":null,"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":null,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":null,"iterations":null,"speed":null},"content":[{"type":"text","text":"Not logged in · Please run /login"}],"context_management":null},"parent_tool_use_id":null,"session_id":"77e6849c-dd31-4c7c-8ae5-68e46a4036ca","uuid":"79356088-8f50-4794-8170-15001867d8b5","timestamp":"2026-08-27T20:09:10.926Z","error":"authentication_failed","is_api_error_message":true}
+{"is_error":true,"duration_api_ms":0,"num_turns":1,"stop_reason":"stop_sequence","session_id":"77e6849c-dd31-4c7c-8ae5-68e46a4036ca","total_cost_usd":0,"usage":{"output_tokens_details":{"thinking_tokens":0},"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[],"speed":"standard"},"modelUsage":{},"permission_denials":[],"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"subtype":"success","api_error_status":null,"result":"Not logged in · Please run /login","type":"result","duration_ms":89,"uuid":"01fe2225-59d2-4f4d-8459-ffdb79106698","queued_turn_count":0}
+`
+
+// The real stream must extract to just the final result event's text — not
+// the raw blob, and not an opencode-style extraction (a claude stream never
+// satisfies opencodeResultText: its text lives in message.content, not
+// part.text).
+func TestResultTextRealClaudeStream(t *testing.T) {
+	got := ResultText([]byte(realClaudeStreamJSONL))
+	if got != "Not logged in · Please run /login" {
+		t.Errorf("ResultText(real claude stream) = %q, want %q", got, "Not logged in · Please run /login")
+	}
+}
+
+// The marker printed by the agent inside an assistant text event must be
+// detected — exactly as it is in the Claude-JSON "result" field and the
+// opencode "text" event. Both occurrences of the prose (assistant text block
+// and result field) are replaced, matching how a real marker response would
+// carry it.
+func TestDetectSignalRealClaudeStreamTextEvent(t *testing.T) {
+	raw := strings.Replace(realClaudeStreamJSONL, "Not logged in · Please run /login", "Done reviewing.\\nNEEDS-HUMAN-INPUT: TASK-3 contradicts TASK-5, need a call.", -1)
+	got, ok := DetectSignal([]byte(raw))
+	if !ok {
+		t.Fatal("DetectSignal: expected a match on the marker in the real-shape assistant text event, got none")
+	}
+	want := "TASK-3 contradicts TASK-5, need a call."
+	if got.Reason != want {
+		t.Errorf("DetectSignal.Reason = %q, want %q", got.Reason, want)
+	}
+}
+
+// DetectSignal scans the assistant events' text content blocks for a claude
+// stream — NOT the result event's "result" field. A marker that appears only
+// in an assistant text event, with a clean result field, must still match;
+// and ResultText must still return the result field's text for the same raw,
+// pinning the two extractions apart.
+func TestDetectSignalClaudeStreamScansAssistantTextNotResult(t *testing.T) {
+	raw := []byte(`{"type":"system","subtype":"init"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"NEEDS-HUMAN-INPUT: which auth provider should this use?"}]}}
+{"type":"result","result":"Everything is fine."}`)
+
+	if got := ResultText(raw); got != "Everything is fine." {
+		t.Errorf("ResultText = %q, want the result event's text %q", got, "Everything is fine.")
+	}
+	got, ok := DetectSignal(raw)
+	if !ok {
+		t.Fatal("DetectSignal: expected a match on the marker in the assistant text event, got none")
+	}
+	want := "which auth provider should this use?"
+	if got.Reason != want {
+		t.Errorf("DetectSignal.Reason = %q, want %q", got.Reason, want)
+	}
+}
+
+// A tool_use content block's own payload and a user tool_result event's
+// content must not be scanned — only assistant "text" blocks are the agent
+// talking, mirroring how the opencode path only scans "text" events and the
+// Claude-JSON path only scans the "result" field.
+func TestDetectSignalClaudeStreamIgnoresToolOutput(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		`{"type":"system","subtype":"init"}`,
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01","name":"Grep","input":{"pattern":"NEEDS-HUMAN-INPUT:"}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"grep found: NEEDS-HUMAN-INPUT: this is inside a code comment, not the agent talking"}]}}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"All done, no issues."}]}}`,
+		`{"type":"result","result":"All done, no issues."}`,
+	}, "\n"))
+
+	_, ok := DetectSignal(raw)
+	if ok {
+		t.Error("DetectSignal: matched inside a tool_use block or user tool_result, want no match")
+	}
+}
+
+// A stream truncated to a single result event — or emitted with no newlines —
+// must still parse through the stable single-result fallback (the first
+// branch of ResultText), for both extraction and marker detection.
+func TestResultTextSingleResultLineFallback(t *testing.T) {
+	raw := []byte(`{"type":"result","result":"All done.","is_error":false,"duration_ms":88}`)
+	if got := ResultText(raw); got != "All done." {
+		t.Errorf("ResultText = %q, want %q (single-result fallback)", got, "All done.")
+	}
+	marker := []byte(`{"type":"result","result":"NEEDS-HUMAN-INPUT: which auth provider should this use?","is_error":false}`)
+	got, ok := DetectSignal(marker)
+	if !ok {
+		t.Fatal("DetectSignal: expected a match via the single-result fallback, got none")
+	}
+	if got.Reason != "which auth provider should this use?" {
+		t.Errorf("DetectSignal.Reason = %q, want %q", got.Reason, "which auth provider should this use?")
+	}
+}
+
+// A malformed/partial stream — a line that doesn't parse as a JSON event —
+// falls back to raw, exactly like the opencode JSONL path does: ResultText
+// returns the raw bytes unchanged rather than guessing at a partial match.
+func TestResultTextClaudeStreamMalformedFallsBackToRaw(t *testing.T) {
+	raw := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"partial output"}]}}
+not json at all
+{"type":"result","result":"hi"}`)
+	got := ResultText(raw)
+	if got != string(raw) {
+		t.Errorf("ResultText = %q, want raw returned unchanged (not a valid claude stream)", got)
+	}
+	if _, ok := DetectSignal(raw); ok {
+		t.Error("DetectSignal: matched on a malformed stream, want no match")
+	}
+}
+
+// The two JSONL shapes must never cross-detect: a claude stream has no
+// part.text events (so opencodeResultText fails and the claude branch wins,
+// keyed off a "result" event), and an opencode stream has no "result" event
+// (so parseClaudeStream fails and the opencode branch wins).
+func TestClaudeStreamAndOpenCodeJSONLNotCrossDetected(t *testing.T) {
+	if got := ResultText([]byte(realClaudeStreamJSONL)); got != "Not logged in · Please run /login" {
+		t.Errorf("ResultText(claude stream) = %q, want the result event's text (not mis-detected as opencode)", got)
+	}
+	if got := ResultText([]byte(realOpenCodeJSONL)); got != "DONE" {
+		t.Errorf("ResultText(opencode stream) = %q, want %q (not mis-detected as claude)", got, "DONE")
+	}
+	if _, ok := DetectSignal([]byte(realClaudeStreamJSONL)); ok {
+		t.Error("DetectSignal: matched on a clean real claude stream, want no match")
+	}
+}

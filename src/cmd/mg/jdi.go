@@ -22,6 +22,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -296,8 +297,11 @@ func resolveJob(root, arg string) (job.Job, error) {
 
 // AgentRunner runs one non-interactive agent invocation for job j and
 // returns its captured output (the session launcher's --print path — a
-// `claude --output-format json` payload when available, otherwise plain
-// text; see internal/orchestrate.DetectSignal, which handles both).
+// `claude --print --verbose --output-format stream-json` event stream, an
+// `opencode run --format json` event stream, or plain text; see
+// internal/orchestrate.DetectSignal, which handles all three). Run's loop
+// persists the raw bytes to the job's session.log (appendSessionLog) and
+// extracts the response prose for run.log via orchestrate.ResultText.
 //
 // Implemented by commandAgentRunner for real invocations; the tests use a
 // fake instead of spawning real containers.
@@ -465,7 +469,33 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 	// includeReason is normally true; it's false only for the
 	// stop-before-any-agent-ran case below, whose reason was already printed
 	// by logImmediateStop a line above — see logJobFinished's own doc.
+	//
+	// Loop-exit sweep first: the per-invocation sweep
+	// (session.SweepJobWorktree inside commandAgentRunner.Run) runs BEFORE
+	// the loop's session.log append, so the final section would otherwise
+	// stay an uncommitted tracked modification — session.log is untracked
+	// when iteration 1 appends it, iteration 2's sweep `git add -A` commits
+	// it (now TRACKED), every later append is a tracked modification, and
+	// git.WorkingTreeDirty DOES report tracked modifications, so mg done's
+	// clean-tree check (finish.go) would refuse to finish the job. Commit
+	// everything left — the final session.log section above all — with the
+	// sweep's own message. Linked worktrees only: for a pre-worktree job
+	// (branch checked out in the MAIN worktree itself — an explicitly
+	// supported, Discover-visible state) the resolved worktree IS j.Root,
+	// where the user's own uncommitted work lives — sweeping there would
+	// commit it, an unexcluded .env included, onto the job branch, the
+	// exact hazard session.SweepJobWorktree's ProjectRoot == InvocationRoot
+	// gate exists for — so the sweep is skipped when WorktreeForBranch
+	// resolves to the main worktree. The stop-before-any-agent path has
+	// nothing to commit and ErrNothingToCommit is swallowed.
 	finish := func(kind orchestrate.Kind, reason string, includeReason bool) LoopResult {
+		if wt, ok, err := git.WorktreeForBranch(j.Root, j.Branch); err != nil {
+			fmt.Fprintf(log, "mg jdi: warning: could not resolve worktree for the final session-log sweep: %v\n", err)
+		} else if ok && filepath.Clean(wt) != filepath.Clean(j.Root) {
+			if err := git.CommitAll(wt, fmt.Sprintf("[%s] chore: commit all", j.ID)); err != nil && !errors.Is(err, git.ErrNothingToCommit) && !errors.Is(err, git.ErrNotARepo) {
+				fmt.Fprintf(log, "mg jdi: warning: could not commit the session log: %v\n", err)
+			}
+		}
 		report(jdiTerminalState(kind), lastAgent)
 		logJobFinished(log, kind, reason, includeReason)
 		return LoopResult{Kind: kind, Reason: reason}
@@ -540,6 +570,19 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		// directly (it does its own JSON extraction), independent of what
 		// logInvocation writes for a human to read.
 		logInvocation(log, decision.Agent, attempts[decision.Agent], out, targetFile, targetContent)
+
+		// Session log: persist this invocation's raw captured output — the
+		// whole step-level event stream, not just the final answer — to the
+		// job's own session.log (docs/jobs/<id>_<slug>/session.log), for
+		// every invocation including failed ones, so what an agent did
+		// during an unattended run survives. Best-effort: a failure only
+		// warns through the log writer (Run has no stderr) and never aborts
+		// the loop. The section stays uncommitted until the finish closure's
+		// loop-exit sweep below — the per-invocation sweep inside
+		// commandAgentRunner.Run already ran before this append.
+		if err := appendSessionLog(filepath.Join(j.Dir, "session.log"), decision.Agent, attempts[decision.Agent], out); err != nil {
+			fmt.Fprintf(log, "mg jdi: warning: could not append to session log: %v\n", err)
+		}
 
 		if sig, ok := orchestrate.DetectSignal(out); ok {
 			lastAgent = decision.Agent

@@ -235,8 +235,8 @@ func normalizeWhitespace(s string) string {
 // invocation count within the run — per agent, not per run — so the first
 // call of every agent is attempt 1, and a bounced-back agent's second call
 // is attempt 2. Then the agent's extracted final-response text
-// (orchestrate.ResultText) — not the raw --output-format json blob, so a
-// human reading either destination sees prose, not JSON.
+// (orchestrate.ResultText) — not the raw --output-format stream-json blob,
+// so a human reading either destination sees prose, not JSON.
 //
 // Two blank lines separate the "finished" header from the agent's output
 // (brief: jdi logs new line): without them the output reads as glued to the
@@ -247,11 +247,13 @@ func normalizeWhitespace(s string) string {
 // omitted)" note below), so the separation is the same in every case.
 //
 // Honesty note (carried into scripts/entrypoint.sh's own comment): this is
-// exactly the agent's *final response text* per
-// invocation, not a blow-by-blow of every tool call/file edit — that's all
-// `claude --print` (json or plain-text form) actually returns. "See what
-// happens" means "see each agent's final answer as it's produced," not a
-// live diff of its work.
+// exactly the agent's *final response text* per invocation — the prose
+// ResultText extracts from whatever --print shape produced it — not a
+// blow-by-blow of every tool call/file edit. The blow-by-blow itself is not
+// lost anymore: the raw captured output (the full step-level event stream
+// since --output-format stream-json) is persisted verbatim to the job's
+// session.log by appendSessionLog — run.log is the summary, session.log is
+// the truth.
 //
 // targetFile/targetContent are the just-run agent's expected job
 // file and its content read fresh after the invocation (see
@@ -278,6 +280,49 @@ func logInvocation(w io.Writer, agent string, attempt int, raw []byte, targetFil
 		text += "\n"
 	}
 	fmt.Fprint(w, text)
+}
+
+// appendSessionLog persists one agent invocation's raw captured output to the
+// job's own session.log (docs/jobs/<id>_<slug>/session.log — the caller
+// passes the full path, which it derives from j.Dir) — the persistent
+// blow-by-blow of every non-interactive invocation in an mg-jdi run,
+// complementing run.log's per-invocation summary. It is called from Run's
+// loop for EVERY invocation, failed ones included, right after logInvocation.
+//
+// Each call opens the file per-section (O_CREATE|O_APPEND|O_WRONLY — a fresh
+// mg-jdi run continues the same job's session rather than truncating it) and
+// writes a "=== <timestamp> <agent> (attempt N) ===" header — the same
+// sectioned shape run.log uses — followed by the invocation's raw bytes
+// verbatim. A blank line separates each section from the previous one (never
+// a leading blank on a fresh file), and a trailing newline is guaranteed so
+// the next section's header never glues to raw output.
+func appendSessionLog(path, agent string, attempt int, raw []byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Blank-line separator between sections — the very first section ever
+	// written to a fresh file starts at the top instead.
+	if st, err := f.Stat(); err != nil {
+		return err
+	} else if st.Size() > 0 {
+		if _, err := io.WriteString(f, "\n"); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintf(f, "=== %s %s (attempt %d) ===\n", time.Now().Format(time.RFC3339), agent, attempt); err != nil {
+		return err
+	}
+
+	// Trailing-newline guarantee; the raw bytes are otherwise untouched.
+	if len(raw) > 0 && raw[len(raw)-1] != '\n' {
+		raw = append(raw, '\n')
+	}
+	_, err = f.Write(raw)
+	return err
 }
 
 // logImmediateStop writes an "immediate stop" note to w — orchestrate.Next

@@ -114,7 +114,7 @@ The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
   permission-bypass mode via `--dangerously-skip-permissions`; or checks for
   a provider API key and starts OpenCode in auto mode via `--auto`. When
   `manigot_PRINT` is set, each branch execs its CLI's non-interactive
-  invocation instead: `claude --print --output-format json`, or
+  invocation instead: `claude --print --verbose --output-format stream-json`, or
   `opencode run <message> --agent <agent> --auto --format json`. It also
   installs a PATH-first `git` shim that restricts agents to read + commit git
   commands (see "Session git shim" below).

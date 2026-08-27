@@ -856,12 +856,14 @@ no separate configuration needed there.
 
 **Watching a run.** A direct `mg jdi --job <id>` run streams each agent's
 output to its own terminal as each invocation completes, and rings the
-terminal bell when it stops. One honesty note: `claude --print` returns an
-agent's *final response text* per invocation, not a blow-by-blow of every
-tool call/file edit — so this is "see each agent's final answer as it comes
-in," not a live diff of its work. A TUI-launched run (see below) has no
-terminal of its own at all — the list's status badge and the detail view's
-log tab are how you watch it there instead.
+terminal bell when it stops. Every invocation's raw step-level output — the
+whole blow-by-blow of tool calls and intermediate messages, not just the
+final answer — is also persisted to the job's own `session.log`
+(`docs/jobs/<id>_<slug>/session.log`), so what an agent did during an
+unattended run survives and rides the job's branch into the archive
+(rendering/tailing it is a separate, later feature). A TUI-launched run (see
+below) has no terminal of its own at all — the list's status badge and the
+detail view's log tab are how you watch it there instead.
 
 **Getting notified.** When `mg jdi` runs unattended on a VPS, you don't want
 to watch the terminal for it to stop. Set `NTFY_TOPIC` in `manigot/.env`

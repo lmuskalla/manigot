@@ -21,10 +21,31 @@ type Signal struct {
 var needsHumanRe = regexp.MustCompile(`(?m)^NEEDS-HUMAN-INPUT:[ \t]*(.*)$`)
 
 // resultPayload is the shape of a `claude --print --output-format json`
-// response (see scripts/entrypoint.sh): a single JSON object whose "result"
+// response (the stable single-result form — kept as the defensive fallback
+// now that scripts/entrypoint.sh's claude --print branch uses stream-json,
+// which has been more version-volatile): a single JSON object whose "result"
 // field carries the agent's final response text.
 type resultPayload struct {
 	Type   string `json:"type"`
+	Result string `json:"result"`
+}
+
+// claudeStreamEvent is one line of `claude --print --output-format
+// stream-json` output (see scripts/entrypoint.sh): a stream of typed events
+// — system, assistant, user, result — one JSON object per line (JSONL).
+// Assistant events carry the agent's message.content blocks (type "text" or
+// "tool_use"); user events carry tool_result blocks; the final event is type
+// "result" with a "result" field carrying the final response text. Only the
+// fields parseClaudeStream needs are declared; every other field round-trips
+// as a zero value.
+type claudeStreamEvent struct {
+	Type    string `json:"type"`
+	Message struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"message"`
 	Result string `json:"result"`
 }
 
@@ -53,12 +74,23 @@ type opencodeEvent struct {
 // incidental tool-call output (e.g. a grep result containing the literal
 // string "NEEDS-HUMAN-INPUT:" while the agent reads the codebase), since
 // --output-format json separates the agent's actual final response from
-// everything else. If raw isn't valid JSON in that shape, DetectSignal falls
-// back to scanning the raw bytes directly — the plain `--print` fallback
-// path scripts/entrypoint.sh uses if a future claude version ever drops
-// --output-format json support.
+// everything else. When raw parses as Claude's --output-format stream-json
+// shape, only assistant events' text content blocks are scanned — never tool
+// output (a "tool_use" content block's or a user "tool_result" event's
+// payload could contain the marker string incidentally). If raw isn't valid
+// JSON in either shape, DetectSignal falls back to scanning the raw bytes
+// directly — the plain `--print` fallback path scripts/entrypoint.sh uses if
+// a future claude version ever drops --output-format stream-json support.
 func DetectSignal(raw []byte) (Signal, bool) {
 	text := ResultText(raw)
+	// The stream-json shape overrides ResultText's result-field extraction:
+	// the marker lives in what the assistant actually said, and only
+	// assistant text content blocks are the agent talking. A degenerate
+	// stream with no assistant text at all (a lone result event — the old
+	// single-result shape) keeps ResultText's result-field scan instead.
+	if stream, ok := parseClaudeStream(raw); ok && len(stream.assistant) > 0 {
+		text = strings.Join(stream.assistant, "\n")
+	}
 	m := needsHumanRe.FindStringSubmatch(text)
 	if m == nil {
 		return Signal{}, false
@@ -69,8 +101,10 @@ func DetectSignal(raw []byte) (Signal, bool) {
 // ResultText extracts an agent invocation's final-response text from raw:
 // the "result" field of a `--output-format json` payload if raw parses as
 // one, the concatenated text of every "text" event if raw parses as an
-// `opencode run --format json` JSONL stream (see opencodeResultText),
-// otherwise raw itself (interpreted as plain text). Exported for mg-jdi's
+// `opencode run --format json` JSONL stream (see opencodeResultText), the
+// final "result" event's text if raw parses as Claude's --output-format
+// stream-json shape (see parseClaudeStream), otherwise raw itself
+// (interpreted as plain text). Exported for mg-jdi's
 // own logging: a human reading the run.log should see the agent's prose,
 // not a raw JSON blob.
 func ResultText(raw []byte) string {
@@ -81,7 +115,67 @@ func ResultText(raw []byte) string {
 	if text, ok := opencodeResultText(raw); ok {
 		return text
 	}
+	if stream, ok := parseClaudeStream(raw); ok {
+		if stream.result != "" {
+			return stream.result
+		}
+		return strings.Join(stream.assistant, "\n")
+	}
 	return string(raw)
+}
+
+// claudeStream is the parsed shape of a stream-json capture: the final
+// "result" event's "result" text, and the text content blocks of every
+// assistant event, in order.
+type claudeStream struct {
+	result    string
+	assistant []string
+}
+
+// parseClaudeStream parses raw as `claude --print --output-format
+// stream-json` output: one JSON object per non-blank line (JSONL), as
+// opposed to Claude's single top-level object (tried first, in ResultText)
+// and opencode's part-carrying JSONL (tried before this). ok is false unless
+// every non-blank line parses cleanly as a JSON object with a non-empty
+// "type" field and at least one type "result" event was found — the key-off
+// that keeps a claude stream from being mis-detected as opencode JSONL
+// (which never has a "result" event) and vice versa (opencode events carry
+// part.text, never message.content, so a claude stream never satisfies
+// opencodeResultText). Tool output is never collected: only assistant
+// "text" content blocks are, never "tool_use" blocks or user "tool_result"
+// events.
+func parseClaudeStream(raw []byte) (claudeStream, bool) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return claudeStream{}, false
+	}
+	var stream claudeStream
+	sawResult := false
+	for _, line := range strings.Split(trimmed, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var ev claudeStreamEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil || ev.Type == "" {
+			return claudeStream{}, false
+		}
+		switch ev.Type {
+		case "assistant":
+			for _, block := range ev.Message.Content {
+				if block.Type == "text" {
+					stream.assistant = append(stream.assistant, block.Text)
+				}
+			}
+		case "result":
+			sawResult = true
+			stream.result = ev.Result
+		}
+	}
+	if !sawResult {
+		return claudeStream{}, false
+	}
+	return stream, true
 }
 
 // opencodeResultText concatenates the text of every "text" event in raw,
