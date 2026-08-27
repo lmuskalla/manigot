@@ -32,6 +32,16 @@ configured with `mg setup`.
   `docs/skills/` ride the docs mount and override global skills of the same
   name. manigot ships no skills of its own — the mechanism is provisioned for
   user-supplied global + project skills.
+- Meta prompt: a system-wide instruction file `meta.md` at the checkout root,
+  injected into every session — the top of the instruction hierarchy
+  (meta prompt → agents → skills → project context). Delivered like global
+  skills: mounted read-only into the container at each CLI's *global
+  instruction* location (`~/.claude/CLAUDE.md` for Claude Code, the user-global
+  memory file; `~/.config/opencode/AGENTS.md` for OpenCode, the global rules
+  file), and for `mg host` copied — never symlinked — into the host CLI's own
+  global instruction file (a symlink would let Claude's `/memory` writes and
+  agent edits land back in the checkout). Non-clobbering and optional: a
+  checkout without `meta.md` yields no delivery.
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
@@ -66,7 +76,11 @@ The seam between the orchestrator (host-side Go) and the agent environment
   (`<home>/skills/`) are mounted read-only at the CLI's global skills
   location — verbatim for Claude Code, staged into a temp dir for OpenCode —
   and project skills (`docs/skills/`) ride the existing docs mount, overriding
-  global skills of the same name. It also decides the job git-common-dir
+  global skills of the same name. The system-wide meta prompt (`<home>/meta.md`)
+  is mounted read-only the same way at each CLI's *global instruction*
+  location (`~/.claude/CLAUDE.md` for Claude Code,
+  `~/.config/opencode/AGENTS.md` for OpenCode) — plain markdown, so no
+  conversion and no temp dir. It also decides the job git-common-dir
   mount mode from the resolved agent's `commit:` frontmatter marker (see
   "Read-only git mount for non-committing agents").
 - `internal/job` — the job lifecycle (was `new-job.sh`/`finish-job.sh`/
@@ -87,8 +101,8 @@ The seam between the orchestrator (host-side Go) and the agent environment
   settings, and manigot's `.env` read/write (`GetEnv`/`UpsertEnv`).
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
-  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` and
-  `project-template/`.
+  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/`, `meta.md`
+  and `project-template/`.
 - `scripts/entrypoint.sh` — the ONLY bash, container-side. Branches on
   `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's onboarding
   wizard, pre-accepts folder trust for `/workspace`, and starts it in
@@ -103,7 +117,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
   purely isolation for workspaces — the global `agents/` and `skills/` are no
   longer baked in, they are mounted from the host at session launch), and
   pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
-  `GOTOOLCHAIN=local` a stale path breaks the build).
+  `GOTOOLCHAIN=local` a stale path breaks the build). The meta-prompt mount
+  targets' parent dirs (`~/.claude` and `~/.config/opencode`) are pre-created
+  in the image.
 
 ### Session launch (bare `mg`)
 
@@ -516,7 +532,12 @@ either way.
   config dir — symlinks for Claude Code, converted copies for OpenCode (which
   hard-errors on the list form) — never clobbering an existing name. Global
   skills are delivered the same way: symlinked skill dirs for Claude Code,
-  copied dirs for OpenCode, never clobbering an existing skill name. For work
+  copied dirs for OpenCode, never clobbering an existing skill name. The
+  system-wide meta prompt (`meta.md`) is delivered into the CLI's own global
+  instruction file (`~/.claude/CLAUDE.md` for Claude Code,
+  `~/.config/opencode/AGENTS.md` for OpenCode) as a copy — never a symlink,
+  since a symlink would let Claude's `/memory` writes and agent edits land
+  back in the checkout — and never clobbering an existing host file. For work
   that must touch the host itself (thematic alias: `mg wild`, same
   command/behavior)
 
