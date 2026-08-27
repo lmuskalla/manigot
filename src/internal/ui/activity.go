@@ -35,6 +35,18 @@ const statusBlinkInterval = 200 * time.Millisecond
 // gives roughly three on/off toggles before the status disappears.
 const statusBlinkWindow = 600 * time.Millisecond
 
+// autoRefreshInterval is the cadence of the app's permanent auto-refresh
+// timer (see App's autoRefreshMsg): how often the TUI re-reads the job list,
+// project settings, open detail view, and git-log strip from disk so a TUI
+// left sitting in a tmux pane catches up on its own instead of needing a
+// manual ctrl+r. Unlike the spinner/status chains this one never
+// self-terminates — the tick handler always re-arms, so a single chain lives
+// for the app's whole lifetime. 1s per the brief's preference ("every 1s …
+// or every 5s or so" if that isn't performance-feasible); the TASK-3
+// performance check is what owns flipping it to 5s if a measured problem
+// demands it.
+const autoRefreshInterval = 1 * time.Second
+
 // activityFrame returns the activity-indicator frame for step, cycling
 // safely through activityFrames for any step value: zero, negative (wraps
 // backwards), or arbitrarily huge (modulo keeps it in range without

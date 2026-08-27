@@ -429,7 +429,13 @@ change per line — git output is not markdown — see the `mg diff` command
 above),
 edits `brief.md`, launches agents, and runs the job lifecycle directly —
 `mg job`, `mg done` and `mg delete` are function calls, not subprocesses, and
-the done/delete confirmations are in-TUI views with the scripts' wording. Its
+the done/delete confirmations are in-TUI views with the scripts' wording.
+The TUI also re-reads all of that state from disk on a permanent 1s
+auto-refresh timer — the same full refresh `ctrl+r` triggers, but silent (no
+status line) and skipped while a form/overlay (new-job, settings, agents
+picker, confirm, git panel) is open — so a TUI left sitting in a tmux pane
+catches up on its own instead of showing a stale job list and jdi badges
+until a manual refresh. Its
 "a" launch-an-agent picker behaves like the CLI's `mg agents` picker:
 ↑/↓/k/j navigate, type to filter (case-insensitive substring over the
 agent's name and description, narrowing the list until esc clears it), enter

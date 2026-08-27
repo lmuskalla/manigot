@@ -103,8 +103,9 @@ type App struct {
 	// statusExpireMsg is scheduled or in flight, so no second concurrent
 	// chain can be started (armStatusExpiry is a no-op while it's set).
 	// Cleared by the tick handler itself the moment no status remains on
-	// either surface — the chain self-terminates, returning the app to its
-	// idle (no timer) behaviour.
+	// either surface — the chain self-terminates (one of the two narrow
+	// self-terminating exceptions), leaving the permanent auto-refresh tick
+	// as the app's one always-running timer.
 	statusExpiryTicking bool
 
 	// jdiSeen tracks, per job Name, the last job.JDIState observed for that
@@ -143,27 +144,53 @@ type App struct {
 	// spinnerTickMsg is scheduled or in flight, so no second concurrent chain
 	// can be started (startSpinnerIfRunning is a no-op while it's set). Cleared
 	// by the tick handler itself the moment no job is running any more — the
-	// chain self-terminates, so a run ending is all it takes to stop the
-	// redraws and return the app to its idle (no timer) behaviour.
+	// chain self-terminates (one of the two narrow self-terminating
+	// exceptions), so a run ending is all it takes to stop the redraws,
+	// leaving the permanent auto-refresh tick as the app's one always-running
+	// timer.
 	spinnerTicking bool
+
+	// autoRefreshTicking guards the auto-refresh tick chain: true while an
+	// autoRefreshMsg is scheduled or in flight, so no second concurrent chain
+	// can be started (startAutoRefresh is a no-op while it's set). Unlike the
+	// spinner/status guards this one is never cleared — the chain is
+	// permanent, re-armed by the tick handler itself for the app's whole
+	// lifetime — so once set it stays set.
+	autoRefreshTicking bool
 }
 
-// spinnerTickMsg advances the activity indicator one frame. It is the app's
-// only timer-driven message — the one narrow exception to "no separate
-// timer-driven tick" (see pollJDIBell's doc, and the README's "mg jdi status
-// & log" section): a ~activityInterval redraw that exists only while an
-// mg-jdi run is active, so a watched run visibly indicates it's alive instead
-// of sitting as a static badge.
+// spinnerTickMsg advances the activity indicator one frame. It is one of the
+// app's three timer-driven messages — alongside statusExpireMsg and the
+// permanent autoRefreshMsg — and, together with statusExpireMsg, one of the
+// two narrow *self-terminating* exceptions to "no separate timer-driven
+// tick" (see pollJDIBell's doc, and the README's "mg jdi status & log"
+// section): a ~activityInterval redraw that exists only while an mg-jdi run
+// is active, so a watched run visibly indicates it's alive instead of
+// sitting as a static badge. Unlike autoRefreshMsg, the chain stops itself
+// the moment the run ends.
 type spinnerTickMsg struct{}
 
 // statusExpireMsg drives the blink-then-clear of transient status messages
-// (the list footer's status and the detail footer's status). It is the app's
-// second timer-driven message — alongside spinnerTickMsg, the other narrow
-// exception to "no separate timer-driven tick" — a ~statusBlinkInterval
-// redraw that exists only while a status is set, so a transient status
-// blinks a few times then disappears instead of persisting forever (see
-// armStatusExpiry and its Update handler).
+// (the list footer's status and the detail footer's status). It is one of
+// the app's three timer-driven messages — alongside spinnerTickMsg and the
+// permanent autoRefreshMsg — and, together with spinnerTickMsg, one of the
+// two narrow *self-terminating* exceptions to "no separate timer-driven
+// tick": a ~statusBlinkInterval redraw that exists only while a status is
+// set, so a transient status blinks a few times then disappears instead of
+// persisting forever (see armStatusExpiry and its Update handler). Unlike
+// autoRefreshMsg, the chain stops itself the moment no status remains.
 type statusExpireMsg struct{}
+
+// autoRefreshMsg drives the app's permanent auto-refresh timer: a
+// ~autoRefreshInterval tick that re-reads everything ctrl+r reads (job list,
+// project settings, open detail view, git-log strip) so a TUI left sitting
+// in a tmux pane catches up on its own — the brief's "get back to a mg tui
+// session and see what's happened" without a manual refresh. Unlike
+// spinnerTickMsg and statusExpireMsg it is not a narrow, self-terminating
+// exception: the chain is started once by Init (via startAutoRefresh) and
+// re-armed by the tick handler for the app's whole lifetime. See
+// autoRefreshMsg's Update handler for the state gating.
+type autoRefreshMsg struct{}
 
 // hostGitTimeout bounds the TUI's background git cmds (push-to-origin, the
 // auto-commit after a brief.md edit). These run off the UI goroutine, so an
@@ -237,13 +264,16 @@ func NewApp(root string, jobs []job.Job) *App {
 // Init starts the program. No initial commands are needed — except the
 // activity-indicator tick chain when an mg-jdi run is already active at
 // startup (startSpinnerIfRunning, so a TUI opened mid-run animates its badge
-// without waiting for a keypress or refresh) and the status-expiry chain when
+// without waiting for a keypress or refresh), the status-expiry chain when
 // a startup status was set in NewApp (armStatusExpiry, so a config-load error
-// surfaced in the footer blinks then clears like any other transient status).
-// Both are no-ops (nil) when there is nothing to animate, and tea.Batch
-// drops those nils.
+// surfaced in the footer blinks then clears like any other transient status),
+// and the permanent auto-refresh chain (startAutoRefresh, so the TUI re-reads
+// state from disk on its own from the very first second instead of only on
+// discrete events). The first two are no-ops (nil) when there is nothing to
+// animate, and tea.Batch drops those nils; the auto-refresh chain always
+// starts and never stops.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.startSpinnerIfRunning(), a.armStatusExpiry())
+	return tea.Batch(a.startSpinnerIfRunning(), a.armStatusExpiry(), a.startAutoRefresh())
 }
 
 // editorDoneMsg reports the outcome of the "e" edit-shortcut's tea.ExecProcess
@@ -409,7 +439,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// shows: the bottom git-log strip (refreshCommits) and the
 				// computed diff tab (recomputed by reload via loadTabs).
 				// Refresh both so the new commit appears immediately
-				// instead of on the next ctrl+r.
+				// instead of on the next refresh (auto or ctrl+r).
 				a.detail.reload()
 				a.detail.refreshCommits(a.settings.RecentActivityCountValue())
 			case errors.Is(msg.err, git.ErrNothingToCommit):
@@ -468,7 +498,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// on the detail surface — never jitters mid-blink; only at final
 		// expiry is the text cleared. The chain self-terminates (returns nil
 		// and clears the guard) the moment no status remains on either
-		// surface, so the app returns to its idle, no-timer behaviour.
+		// surface — one of the two narrow self-terminating exceptions,
+		// leaving the permanent auto-refresh tick as the app's one
+		// always-running timer.
 		now := statusNow()
 		if a.status != "" {
 			if !now.Before(a.statusUntil) {
@@ -495,6 +527,31 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, a.statusExpireCmd()
+	case autoRefreshMsg:
+		// The app's permanent auto-refresh tick: re-read everything ctrl+r
+		// reads (job list, project settings, open detail view, git-log strip)
+		// so a TUI left sitting in a tmux pane catches up on its own — the
+		// brief's "came back to the TUI and want to see what happened"
+		// outcome, with the jdi stop-bell (pollJDIBell, via refreshJobs)
+		// riding along for free. Deliberately silent: no status line, unlike
+		// ctrl+r's "refreshed · N job(s)" — a footer status every second
+		// would blink constantly and drown out real feedback.
+		//
+		// State gating: refresh() is skipped in the form/overlay states
+		// (stateNewJob, stateSettings, stateAgents, stateConfirm,
+		// stateGitPanel), where reloading the list or the detail view under
+		// an open form/picker/confirmation would be disruptive; the chain
+		// itself keeps ticking regardless, so a single chain lives for the
+		// app's lifetime. The spinner cmd refresh produced is propagated the
+		// way ctrl+r propagates it (a tick is a discovery point for runs
+		// started outside this session), and the chain always re-arms.
+		switch a.state {
+		case stateList, stateDetail:
+			spinnerCmd := a.refresh()
+			return a, tea.Batch(spinnerCmd, a.autoRefreshCmd())
+		default:
+			return a, a.autoRefreshCmd()
+		}
 	case tea.KeyMsg:
 		// Global keys handled in every state.
 		switch msg.String() {
@@ -610,13 +667,15 @@ func (a *App) refreshJobs() tea.Cmd {
 // mg-jdi run has no terminal of its own to
 // ring `\a` into (see cmd/mg/jdi.go's own CLI-path bell), so instead the TUI
 // rings it on its own next poll — this function, called from refreshJobs,
-// which is every "poll tick" this app has (ctrl+r, returning to list, a
-// checkout, etc.) — the first time it observes a job's status transition
-// into a stopped:* state it hadn't already notified for. The one exception
-// to "refresh-triggered polling only" is the activity indicator's
-// spinnerTickMsg: a narrow timer-driven redraw that runs only while an
-// mg-jdi run is active (see spinnerTickMsg's doc), deliberately kept out of
-// the notification path — a run stopping is exactly when that timer ends.
+// which is every "poll tick" this app has (ctrl+r, the permanent
+// auto-refresh tick, returning to list, a checkout, etc.) — the first time
+// it observes a job's status transition into a stopped:* state it hadn't
+// already notified for. The two narrow exceptions to "refresh-triggered
+// polling only" are the activity indicator's spinnerTickMsg and the
+// status-expiry statusExpireMsg: self-terminating timer-driven redraws that
+// run only while an mg-jdi run is active / a status is set (see
+// spinnerTickMsg's doc), deliberately kept out of the notification path — a
+// run stopping is exactly when the spinner timer ends.
 //
 // Dedup is in-memory (a.jdiSeen) and keyed by job Name: the first
 // observation of any given job only seeds the map, never rings, even if
@@ -745,6 +804,30 @@ func (a *App) armStatusExpiry() tea.Cmd {
 	return a.statusExpireCmd()
 }
 
+// autoRefreshCmd returns the tea.Cmd that delivers the next autoRefreshMsg
+// after autoRefreshInterval — one tick of the app's permanent auto-refresh
+// timer. The tick handler always re-arms with this (never self-terminating),
+// so the chain runs for the app's whole lifetime once started.
+func (a *App) autoRefreshCmd() tea.Cmd {
+	return tea.Tick(autoRefreshInterval, func(time.Time) tea.Msg {
+		return autoRefreshMsg{}
+	})
+}
+
+// startAutoRefresh starts the auto-refresh tick chain when it isn't already
+// going (the autoRefreshTicking guard — no duplicate concurrent chains).
+// Returns nil when a chain is already active. Unlike startSpinnerIfRunning /
+// armStatusExpiry there is no "nothing to do" condition: the chain is
+// permanent, started once by Init and re-armed by the tick handler itself,
+// so no separate stop call exists either.
+func (a *App) startAutoRefresh() tea.Cmd {
+	if a.autoRefreshTicking {
+		return nil
+	}
+	a.autoRefreshTicking = true
+	return a.autoRefreshCmd()
+}
+
 // setStatus sets the list footer status and, when non-empty, arms the
 // status-expiry chain so it blinks then clears. The status text itself is set
 // directly (callers and existing tests rely on the literal value, e.g.
@@ -810,16 +893,20 @@ var ringBell = func() {
 }
 
 // refresh does refreshJobs, plus reloads the open detail view's files (if
-// any) so changes an agent made outside the TUI show up — used by "ctrl+r".
+// any) so changes an agent made outside the TUI show up — used by "ctrl+r"
+// and by the permanent auto-refresh tick (autoRefreshMsg), which is the
+// whole point of the brief's "get back to a mg tui session and see what's
+// happened": the TUI re-reads on its own instead of waiting for a keypress.
 // It also re-reads the project settings, so a .manigot/manigot.json edited
 // outside the TUI (e.g. base branch changed by hand or pulled from origin)
 // is picked up without an app restart. The settings form's own submit path
 // is the only writer to a.projectSettings and it never runs concurrently
-// with refresh() — ctrl+r isn't routed here while the form is open.
+// with refresh() — the auto-refresh tick skips the form states, and ctrl+r
+// isn't routed here while the form is open.
 //
-// Returns the activity-indicator tick cmd refreshJobs produced (a ctrl+r is
-// a discovery point for runs started outside this session's "j" key), so the
-// callers can propagate it.
+// Returns the activity-indicator tick cmd refreshJobs produced (a ctrl+r or
+// an auto-refresh tick is a discovery point for runs started outside this
+// session's "j" key), so the callers can propagate it.
 func (a *App) refresh() tea.Cmd {
 	spinnerCmd := a.refreshJobs()
 	if ps, err := project.Load(a.root); err == nil {

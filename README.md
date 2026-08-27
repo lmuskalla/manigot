@@ -962,7 +962,7 @@ List view:
 | `a` | pick any agent and launch it as a quick session (no job) |
 | `n` | create a new job (runs the in-process job lifecycle) |
 | `s` | open settings (editor, subscription profile) |
-| `ctrl+r` | refresh — re-read job files from disk |
+| `ctrl+r` | refresh — re-read job files from disk (the TUI also refreshes itself automatically every second, so `ctrl+r` is mostly for an immediate catch-up) |
 | `q` | quit |
 
 Detail view:
@@ -981,7 +981,7 @@ Detail view:
 | `l` | tail this job's `mg jdi` `run.log` live — spawns `tail -f` in a tmux split pane / new terminal like agent launches; only available once an `mg jdi` run has happened for this job (the same gate as the log tab's real content) |
 | `c` | commit all uncommitted changes in this job's worktree (`git add -A` + `git commit` with a `[<id>] chore: commit all` message) — a catch-all sweep for the files agents sometimes leave behind, so `D`'s clean-tree check isn't tripped |
 | `g` | open the git panel — pick one of the detail view's git commands for this job's worktree: commit all, push to origin, or merge default branch (see below) |
-| `ctrl+r` | refresh |
+| `ctrl+r` | refresh (the TUI also refreshes itself automatically every second) |
 | `esc` | back to list |
 
 The **log** tab shows `mg jdi`'s `run.log` for this job — one section per
@@ -1002,15 +1002,17 @@ as `mg diff` does — the project's configured `baseBranch`, falling back to
 `origin/HEAD` → `main` — and the tab degrades instead of crashing: a job
 with no branch (not a git worktree job) or a git error shows a plain-text
 placeholder, and an undiverged branch reads "No changes on `<branch>`
-relative to `<base>`." It is recomputed on every `ctrl+r`, so newly
-committed changes appear on refresh. Never editable.
+relative to `<base>`." It is recomputed on every refresh (the automatic
+every-second refresh and `ctrl+r` alike), so newly committed changes appear
+without a manual refresh. Never editable.
 
 Below the footer, the job view also shows a **git-log strip** — the same dim
 `shortHash  subject  relTime  branch` lines the job list's recent-activity
 strip renders at the bottom of the screen, scoped to just this job's own
 branch (`git.BranchCommits`, the job-branch counterpart of the list's
 cross-branch `git.RecentCommits`). It is refreshed when the job opens and on
-`ctrl+r`, sized like the list's strip (up to the settings'
+every refresh (the automatic every-second refresh and `ctrl+r` alike), sized
+like the list's strip (up to the settings'
 recent-activity count, floor of one line), and disappears entirely for a
 job with no branch or a project that isn't a git repo.
 
@@ -1103,11 +1105,12 @@ keys above, this opens **no
 terminal window at all** — `mg jdi` has no interactive session for a human
 or a subprocess to attach to, so it runs fully detached in the background.
 Two places show you what it's doing instead, both polled the same
-refresh-triggered way as everything else in the TUI (pressing `ctrl+r`,
-returning to the list, etc. — no separate live-streaming subsystem), plus a
-live tail you can open yourself. The one
-exception is a narrow timer-driven redraw that runs *only while a run is
-active*, driving the animated indicator below:
+refresh-triggered way as everything else in the TUI (the automatic
+every-second refresh, pressing `ctrl+r`, returning to the list, etc. — no
+separate live-streaming subsystem), plus a live tail you can open yourself.
+The two narrow exceptions are self-terminating timer-driven redraws: the
+status blink/expiry timer while a status is set, and one that runs *only
+while a run is active*, driving the animated indicator below:
 
 - **List-row badge** — a `[running @<agent>]`, `[finished]`, or
   `[needs human]` tag next to a job's row.
