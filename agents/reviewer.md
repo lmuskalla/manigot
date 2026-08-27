@@ -83,8 +83,13 @@ The git diff is your primary review surface — not just the files the developer
 - Was anything refactored that wasn't part of the task? Flag it.
 
 **Commit discipline**
-- Each task has its own commit in the correct format: `[ID] TASK-N: description`
-- `implementation.md` has its own commit
+- Commit history is squashed into a single commit at `mg done`, so per-task
+  commit message/format hygiene is not a review criterion — do not flag
+  NEEDS WORK over a missing `[ID] TASK-N:` commit, a different message
+  format, or `implementation.md` not having its own commit.
+- The one load-bearing commit convention stays: `verdict.md` must be
+  committed with `[ID] verdict: <one-line summary>` (the mg-jdi state
+  machine counts those commits), and an uncommitted verdict blocks `mg done`.
 
 ## Output
 

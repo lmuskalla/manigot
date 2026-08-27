@@ -1044,3 +1044,44 @@ func TestCommandAgentRunnerPruneFailureDoesNotAbort(t *testing.T) {
 		t.Errorf("the invocation must proceed past a prune failure (docker attempted):\n%v", err)
 	}
 }
+
+// TestCommandAgentRunnerSweepsJobWorktree pins the sweep wiring in the
+// mg-jdi launch path: after a --print invocation whose container "ran" (a
+// fake docker that exits 0), whatever the agent left uncommitted in the job
+// worktree — here the analyst's tasks.md, which the read-only analyst cannot
+// commit itself — is swept into a single [<id>] chore: commit all commit by
+// the host, and the worktree is left clean.
+func TestCommandAgentRunnerSweepsJobWorktree(t *testing.T) {
+	t.Setenv("PATH", fakeDockerOnPath(t, ""))
+	dir := mgCheckout(t)
+	t.Chdir(dir)
+	profileCheckout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=k\n")
+
+	var out strings.Builder
+	if code := runJob([]string{"Sweep Job"}, &out, &strings.Builder{}); code != 0 {
+		t.Fatalf("runJob: %d %s", code, out.String())
+	}
+	branch := mgJobBranch(t, dir)
+	jobName := strings.TrimPrefix(branch, "feature/")
+	wt := mgWorktreePath(t, dir, branch)
+	j := job.Job{
+		Name:   jobName,
+		Dir:    filepath.Join(wt, "docs", "jobs", jobName),
+		Root:   wt,
+		ID:     strings.Split(jobName, "_")[0],
+		Branch: branch,
+	}
+	// The analyst "runs" and leaves tasks.md uncommitted (it cannot commit).
+	writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
+
+	r := &commandAgentRunner{projectRoot: dir, profile: "zai"}
+	if _, err := r.Run("analyst", j); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if want := "[" + j.ID + "] chore: commit all"; mgGit(t, wt, "log", "-1", "--format=%s") != want {
+		t.Errorf("sweep commit subject = %q, want %q", mgGit(t, wt, "log", "-1", "--format=%s"), want)
+	}
+	if status := mgGit(t, wt, "status", "--porcelain"); status != "" {
+		t.Errorf("job worktree not clean after sweep:\n%s", status)
+	}
+}

@@ -1,6 +1,6 @@
 ---
 name: developer
-description: Implements tasks from a job's tasks.md. One task at a time, one commit per task.
+description: Implements tasks from a job's tasks.md. One task at a time, committing as it goes.
 tools: Read, Write, Edit, Bash, Grep, Glob
 commit: true
 permission:
@@ -51,14 +51,18 @@ You are a senior developer working on this project.
 - Do not install packages without asking first
 - If the task turns out to be more complex than described: stop and report back, do not expand scope
 
-**Step 3 — Commit** immediately after the task is done. This is not optional.
+**Step 3 — Commit** once the task is complete. One commit per task is the
+recommended pattern, but the exact message format is not required — the whole
+branch is squashed into a single commit at `mg done`, so per-task commit
+hygiene is not a review criterion.
 ```
 git add -A
-git commit -m "[ID] TASK-N: short description"
+git commit -m "short description"
 ```
-Example: `[a3f9k2] TASK-3: add GalleryBlock Svelte component`
 
-A task is not complete until it is committed. Do not move to the next task without committing.
+A task should be committed before moving to the next one. When you finish,
+leave the worktree clean: nothing uncommitted, including files earlier agents
+left behind (e.g. the analyst's `tasks.md`).
 
 **Step 4 — Repeat** for the next task.
 
@@ -92,7 +96,8 @@ git commit -m "[ID] implementation: add summary"
 - Do not push
 - Do not merge
 - Do not touch any other branch
-- Do not move to the next task without committing the current one
+- Do not move to the next task without committing the current one (one commit
+  per task is the recommended pattern, exact format not required)
 - git is restricted in agent sessions: you can read history and make commits
   (`git add`, `git commit`, `git log`, `git diff`, `git show`, `git status`,
   ...) — everything else (worktree management, branch -d/-D, reset, clean,

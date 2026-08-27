@@ -370,7 +370,18 @@ func (r *commandAgentRunner) Run(agent string, j job.Job) ([]byte, error) {
 	}
 
 	var stdout bytes.Buffer
-	if code := inv.Run(os.Stdin, &stdout, &diag); code != 0 {
+	code, ran := inv.Run(os.Stdin, &stdout, &diag)
+	// The same host-side sweep as the interactive session path: every mg-jdi
+	// --print invocation ends with leftover changes committed, including the
+	// analyst's tasks.md (the analyst is read-only and cannot commit it
+	// itself). The sweep runs before the loop's post-run stall probe reads
+	// HEAD, so the sweep commit correctly counts as agent progress. Sweep only
+	// when the container actually ran — an agent that never started must not
+	// trigger a commit.
+	if ran {
+		session.SweepJobWorktree(root, &diag)
+	}
+	if code != 0 {
 		return stdout.Bytes(), fmt.Errorf("mg --print --agent %s --job %s: exit code %d: %s", agent, j.Name, code, strings.TrimSpace(diag.String()))
 	}
 	return stdout.Bytes(), nil

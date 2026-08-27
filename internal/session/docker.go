@@ -40,11 +40,20 @@ const dockerImageName = "manigot"
 // gate their copy/clipboard behavior on these: OSC 52 emission is decided
 // from terminal identity/capability vars (TERM, COLORTERM, TERM_PROGRAM,
 // TERM_PROGRAM_VERSION, VTE_VERSION, KITTY_WINDOW_ID, TMUX, TMUX_PANE,
-// WT_SESSION — plus the WEZTERM_* family, which WezTerm sets several of),
-// and OpenCode additionally switches to its tmux DCS-passthrough OSC 52 form
-// when TMUX is set. None of these were forwarded before, so the in-container
-// TUIs saw an unrecognized terminal and copying from agent output silently
-// failed (see the "Clipboard / copying from agent sessions" docs section).
+// WT_SESSION — plus the WEZTERM_* family, which WezTerm sets several of).
+// None of these were forwarded before, so the in-container TUIs saw an
+// unrecognized terminal and copying from agent output silently failed (see
+// the "Clipboard / copying from agent sessions" docs section).
+//
+// TMUX/TMUX_PANE are deliberately NOT forwarded for OpenCode sessions
+// (terminalEnvArgs skips them when the tool is OpenCode): when OpenCode sees
+// TMUX set it wraps its OSC 52 clipboard write in tmux's DCS-passthrough
+// escape, which default tmux configuration discards entirely
+// (allow-passthrough defaults to off), so the host clipboard is never
+// touched. Stripping TMUX makes OpenCode emit plain OSC 52, which tmux's
+// set-clipboard on handles correctly. Claude Code's container env stays
+// byte-identical — TMUX/TMUX_PANE are still forwarded for it.
+//
 // Each var is forwarded only when set and non-empty on the host — never an
 // empty value — so a session launched outside a terminal (CI, a script)
 // keeps a byte-identical argv to a build without this feature.
@@ -60,14 +69,26 @@ var terminalEnvVars = []string{
 	"WT_SESSION",
 }
 
+// tmuxEnvVars are the terminal-identity vars whose forwarding is gated on
+// the resolved tool: they are sent only to Claude Code, never to OpenCode
+// (see the comment on terminalEnvVars for why).
+var tmuxEnvVars = map[string]bool{
+	"TMUX":      true,
+	"TMUX_PANE": true,
+}
+
 // terminalEnvArgs returns the docker -e entries forwarding the host's
 // terminal identity into the container: every terminalEnvVars entry that is
 // set and non-empty on the host, plus every WEZTERM_* variable (also only
-// when set to a non-empty value). No var set → an empty slice, keeping the
+// when set to a non-empty value). TMUX/TMUX_PANE are skipped when tool is
+// OpenCode (see terminalEnvVars). No var set → an empty slice, keeping the
 // docker argv byte-identical to a session built without terminal forwarding.
-func terminalEnvArgs() []string {
+func terminalEnvArgs(tool string) []string {
 	var args []string
 	for _, key := range terminalEnvVars {
+		if tmuxEnvVars[key] && tool == config.ToolOpenCode {
+			continue
+		}
 		if v := os.Getenv(key); v != "" {
 			args = append(args, "-e", key+"="+v)
 		}
@@ -196,6 +217,117 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		agentMount = []string{"-v", tmp + ":/workspace/.opencode/agents:z"}
 		agentCleanup = func() { os.RemoveAll(tmp) }
 	}
+
+	// ── Global agents ─────────────────────────────────────────────────────
+	// The global agents dir (<home>/agents/) is no longer baked into the
+	// image — it lives on the host in the manigot checkout and is mounted
+	// read-only into the container at the CLI's global agent location, so the
+	// container can use the host's agents but cannot modify them. This keeps
+	// the image purely isolation for workspaces and makes the same agents
+	// available to `mg host` (see host.go). Project agents (docs/agents/,
+	// above) still ride the docs mount and override global agents of the same
+	// name, exactly as before.
+	//
+	// Claude Code reads global subagents from ~/.claude/agents/ and takes the
+	// list-form frontmatter natively, so the host's files mount verbatim.
+	// OpenCode reads global agents from ~/.config/opencode/agents/ and
+	// hard-errors on the list-form tools: key, so the mounted files are
+	// converted first (name:/tools: stripped, permission: passed through —
+	// see convertAgents) into a temp dir shadow-mounted over the CLI's global
+	// agents path, cleaned up via the invocation's Cleanup hook.
+	var globalAgentMount []string
+	var globalAgentCleanup func()
+	if homeDir := home.Root(); homeDir != "" {
+		globalAgentsDir := filepath.Join(homeDir, "agents")
+		if fs.IsDir(globalAgentsDir) {
+			if info.Tool == config.ToolOpenCode {
+				if tmp, hasAgents, err := convertAgents(globalAgentsDir, info.Tool); err != nil {
+					return DockerInvocation{}, fmt.Errorf("convert global agents: %w", err)
+				} else if hasAgents {
+					globalAgentMount = []string{"-v", tmp + ":/home/claude/.config/opencode/agents:ro"}
+					globalAgentCleanup = func() { os.RemoveAll(tmp) }
+				}
+			} else {
+				globalAgentMount = []string{"-v", globalAgentsDir + ":/home/claude/.claude/agents:ro"}
+			}
+		}
+	}
+
+	// ── Global skills ─────────────────────────────────────────────────────
+	// Skills follow the same global + project model as agents, applied to a
+	// different unit: a skill is a directory (SKILL.md plus support files),
+	// not a single file. Global skills live in the manigot checkout
+	// (<home>/skills/) and are mounted read-only into the container at the
+	// CLI's global skills location — ~/.claude/skills for Claude Code,
+	// ~/.config/opencode/skills for OpenCode — where both CLIs load skills at
+	// startup, independent of the active agent. That single global location is
+	// exactly what makes a skill available to every agent and to invocations
+	// that name no agent; project skills (docs/skills/, below) ride the docs
+	// mount and override global skills of the same name.
+	//
+	// Unlike agents, skills need no frontmatter conversion — both CLIs read
+	// SKILL.md and its frontmatter natively — so Claude Code gets the host's
+	// skills dir verbatim (a read-only bind, like its agents mount). OpenCode
+	// gets a staged copy instead (see stageGlobalSkills), mounted read-only
+	// and cleaned up via the invocation's Cleanup hook, so the CLI's skills
+	// dir is a fresh, disposable snapshot and the host's skills/ source tree
+	// is never touched. Skipped cleanly when the checkout has no skills dir.
+	var globalSkillMount []string
+	var globalSkillCleanup func()
+	if homeDir := home.Root(); homeDir != "" {
+		globalSkillsDir := filepath.Join(homeDir, "skills")
+		if fs.IsDir(globalSkillsDir) {
+			if info.Tool == config.ToolOpenCode {
+				if tmp, hasSkills, err := stageGlobalSkills(globalSkillsDir); err != nil {
+					return DockerInvocation{}, fmt.Errorf("stage global skills: %w", err)
+				} else if hasSkills {
+					globalSkillMount = []string{"-v", tmp + ":/home/claude/.config/opencode/skills:ro"}
+					globalSkillCleanup = func() { os.RemoveAll(tmp) }
+				}
+			} else {
+				globalSkillMount = []string{"-v", globalSkillsDir + ":/home/claude/.claude/skills:ro"}
+			}
+		}
+	}
+
+	// ── Global meta prompt ─────────────────────────────────────────────────
+	// The meta prompt (<home>/meta.md) is a system-wide instruction file that
+	// sits *above* agents and skills in the instruction hierarchy: it is
+	// injected into every session, regardless of agent, project, or
+	// interactive/--print mode. Each CLI loads it from its *global
+	// instruction* location — ~/.claude/CLAUDE.md for Claude Code (the
+	// user-global memory file, loaded before the project context at
+	// /workspace/.claude/CLAUDE.md) and ~/.config/opencode/AGENTS.md for
+	// OpenCode (the global rules file, loaded alongside the project context
+	// mount) — so the project context still wins on conflict.
+	//
+	// Like skills, the file is plain markdown native to both CLIs, so no
+	// conversion and no temp dir are needed (and thus no Cleanup hook): the
+	// checkout file is mounted read-only at the per-tool target. A checkout
+	// without meta.md yields no mount (it is optional, like skills).
+	var globalMetaMount []string
+	if homeDir := home.Root(); homeDir != "" {
+		metaFile := filepath.Join(homeDir, "meta.md")
+		if fs.IsFile(metaFile) {
+			if info.Tool == config.ToolOpenCode {
+				globalMetaMount = []string{"-v", metaFile + ":/home/claude/.config/opencode/AGENTS.md:ro"}
+			} else {
+				globalMetaMount = []string{"-v", metaFile + ":/home/claude/.claude/CLAUDE.md:ro"}
+			}
+		}
+	}
+
+	// ── Project skills ────────────────────────────────────────────────────
+	// Project skills (docs/skills/<name>/SKILL.md) need no staging or shadow
+	// mount: the docs bind mount above maps the whole docs/ dir, so
+	// docs/skills/ already lands at the project skills location inside the
+	// container (/workspace/.claude/skills for Claude Code,
+	// /workspace/.opencode/skills for OpenCode), and both CLIs natively prefer
+	// a project skill over a global skill of the same name. Skills differ from
+	// project agents here — agents needed a converted shadow mount over the
+	// docs mount's agents/ subpath for OpenCode (it hard-errors on the
+	// list-form tools: key), while skills need no conversion, so the plain
+	// docs mount is sufficient.
 
 	// ── Job prompt ──────────────────────────────────────────────────────────
 	initialPrompt := ""
@@ -340,10 +472,13 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, gitOverlayMounts...)
 	argv = append(argv, docsMount...)
 	argv = append(argv, agentMount...)
+	argv = append(argv, globalAgentMount...)
+	argv = append(argv, globalSkillMount...)
+	argv = append(argv, globalMetaMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
-	argv = append(argv, terminalEnvArgs()...)
+	argv = append(argv, terminalEnvArgs(info.Tool)...)
 	argv = append(argv, info.KeyEnv...)
 	argv = append(argv, "-e", "GIT_AUTHOR_NAME_CFG="+gitName)
 	argv = append(argv, "-e", "GIT_AUTHOR_EMAIL_CFG="+gitEmail)
@@ -365,13 +500,38 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 
-	return DockerInvocation{Argv: append([]string{"docker"}, argv...), Cleanup: agentCleanup}, nil
+	// Combine the project-agent, global-agent and global-skill temp-dir
+	// cleanups (whichever are non-nil) into a single hook run after the
+	// container exits.
+	var cleanup func()
+	if agentCleanup != nil || globalAgentCleanup != nil || globalSkillCleanup != nil {
+		cleanup = func() {
+			if agentCleanup != nil {
+				agentCleanup()
+			}
+			if globalAgentCleanup != nil {
+				globalAgentCleanup()
+			}
+			if globalSkillCleanup != nil {
+				globalSkillCleanup()
+			}
+		}
+	}
+
+	return DockerInvocation{Argv: append([]string{"docker"}, argv...), Cleanup: cleanup}, nil
 }
 
 // Run executes the assembled docker invocation, wiring stdin/stdout/stderr
 // through so Ctrl+C reaches the container, and returns docker's exit code.
+// The second return value reports whether docker was actually exec'd — false
+// only when the launch itself failed before docker ran (docker missing on
+// PATH, permission denied, ...). It is the "did the container session
+// happen" signal the job-worktree sweep keys off (see SweepJobWorktree): an
+// agent that never ran must not trigger a sweep commit. An ExitError — docker
+// ran and exited non-zero — still counts as ran=true: the session happened,
+// even when the agent's exit code was non-zero.
 // The invocation's Cleanup hook (if any) runs after the container exits.
-func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
+func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) (int, bool) {
 	if d.Cleanup != nil {
 		defer d.Cleanup()
 	}
@@ -381,12 +541,12 @@ func (d DockerInvocation) Run(stdin *os.File, stdout, stderr io.Writer) int {
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+			return exitErr.ExitCode(), true
 		}
 		fmt.Fprintf(stderr, "mg: %v\n", err)
-		return 1
+		return 1, false
 	}
-	return 0
+	return 0, true
 }
 
 // findEnvFiles lists every .env / .env.* file under root (recursively),

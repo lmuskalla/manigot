@@ -2,7 +2,6 @@
   <img src="assets/manigot.png" />
 </p>
 
-
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
@@ -45,7 +44,8 @@ manigot/
   .env                    ← your credentials + default profile (gitignored, never committed)
   .gitignore
   README.md
-  agents/                 ← global agents, baked into the image for both tools
+  assets/                 ← quotes.json (flavor quotes)
+  agents/                 ← global agents, mounted into the container (and delivered for mg host)
     analyst.md
     developer.md
     reviewer.md
@@ -59,6 +59,8 @@ manigot/
     devops.md
     sysadmin.md
     chat.md
+  skills/                 ← global skills (<name>/SKILL.md), delivered the same way as agents
+  meta.md                 ← system-wide meta prompt, injected into every session (see "Meta prompt")
   project-template/       ← copy this into each new project to get started (via `mg init`)
     docs/
       AGENTS.md
@@ -77,6 +79,7 @@ your-project/
                                   (CLAUDE.md still works as a fallback)
     agents/                     ← optional: override a global agent for this project only
       developer.md              ← same filename = this replaces the global one
+    skills/                     ← optional: project skills (<name>/SKILL.md), override global ones
     jobs/                     ← one directory per job
         a3f9k2_add-gallery/
           brief.md
@@ -315,7 +318,9 @@ cp -r manigot/project-template/docs/ your-project/docs/
 $EDITOR your-project/docs/AGENTS.md
 ```
 
-Either way, that's it. The global agents are already in the image — nothing
+Either way, that's it. The global agents and skills come from the manigot
+checkout and are delivered into sessions automatically (mounted into the
+container, or delivered into the host CLI's config for `mg host`) — nothing
 else to copy.
 
 `docs/AGENTS.md` is the one project context file, and it works for both tools:
@@ -402,22 +407,50 @@ profile:
 | Onboarding | bypassed by writing `~/.claude.json` | nothing to bypass |
 | Permissions | auto-approved via `--dangerously-skip-permissions` | auto-approved via `--auto` |
 | Global agents | `~/.claude/agents/` | `~/.config/opencode/agents/` |
+| Global skills | `~/.claude/skills/` | `~/.config/opencode/skills/` |
+| Global meta prompt | `~/.claude/CLAUDE.md` | `~/.config/opencode/AGENTS.md` |
 | `docs/` mounted at | `/workspace/.claude` | `/workspace/.opencode` |
 | Project agents | `/workspace/.claude/agents/` | `/workspace/.opencode/agents/` |
+| Project skills | `/workspace/.claude/skills/` | `/workspace/.opencode/skills/` |
 | `docs/AGENTS.md` mounted at | `/workspace/.claude/CLAUDE.md` | `/workspace/AGENTS.md` |
 | Initial job prompt | positional argument | `--prompt` |
 | Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go / OpenCode Zen subscription |
 | Non-interactive (`--print` / `mg jdi`) | supported | supported |
 
-Both tools get the same `agents/*.md` files baked in at build time. The
-OpenCode copies are generated from the same sources with the `name` and `tools`
-frontmatter keys removed, since OpenCode derives the agent name from the
-filename and uses a different schema for tool permissions. Custom project
-agents in `your-project/docs/agents/` are written in the same list form and
-converted the same way at session launch — manigot strips `name`/`tools` from
-the mounted copies before an OpenCode session sees them (OpenCode hard-errors
-on the list form, so this is what keeps one file working under both CLIs).
+Both tools get the same `agents/*.md` files, delivered from the manigot
+checkout into every session rather than baked into the image at build time.
+For a container session the global agents dir is mounted read-only at the
+CLI's global agent location (`~/.claude/agents/` for Claude Code,
+`~/.config/opencode/agents/` for OpenCode — see the table above), so the
+container uses the host's agents but cannot modify them; project
+`docs/agents/` overrides a same-named global agent. The OpenCode copies are
+converted from the same sources with the `name` and `tools` frontmatter keys
+removed, since OpenCode derives the agent name from the filename and uses a
+different schema for tool permissions. Custom project agents in
+`your-project/docs/agents/` are written in the same list form and converted
+the same way at session launch — manigot strips `name`/`tools` from the
+mounted copies before an OpenCode session sees them (OpenCode hard-errors on
+the list form, so this is what keeps one file working under both CLIs).
 Your `docs/agents/` source files are never modified.
+
+Skills are delivered the same way, at the same global + project locations
+(see the table above). Global skills (`skills/` in the manigot checkout) are
+mounted read-only at the CLI's global skills dir — verbatim for Claude Code,
+a staged copy for OpenCode (skills need no conversion, but the staged dir
+keeps the CLI's skills path a fresh, disposable snapshot) — so they are
+loaded at startup by every agent and by agentless invocations alike. Project
+skills in `docs/skills/` ride the `docs/` mount into the container and
+override a global skill of the same name — no conversion, no shadow mount,
+because skills are plain directories both CLIs read natively. Your
+`docs/skills/` source files are never modified.
+
+The system-wide meta prompt (`meta.md` in the manigot checkout — see
+["Meta prompt"](#meta-prompt)) is delivered the same way, at each CLI's
+*global instruction* file: `~/.claude/CLAUDE.md` for Claude Code,
+`~/.config/opencode/AGENTS.md` for OpenCode. For a container session the
+checkout file is mounted read-only at that path — plain markdown, so no
+conversion and no temp dir; a checkout without `meta.md` simply yields no
+mount.
 
 The read-only agents — `@reviewer`, `@security`, `@analyst` and `@owner` —
 express their restriction in both tools' schemas: the Claude-Code `tools:`
@@ -455,9 +488,28 @@ launcher for work that must touch the host itself.
   because the container is isolated and ephemeral. On the host there is no
   isolation, so `mg host` deliberately does not pass them: the CLI keeps its
   normal per-tool confirmation prompts and you supervise every action.
-- **Agents.** manigot's global agents are baked into the container image,
-  not installed on the host — `--agent` works only if the host's own CLI has
-  that agent installed (it errors clearly otherwise).
+- **Agents.** manigot's global agents are available to `mg host` too: at
+  launch mg delivers the checkout's `agents/*.md` files into the host CLI's
+  own global agents dir (`~/.claude/agents/` for Claude Code,
+  `~/.config/opencode/agents/` for OpenCode), so `--agent` works without the
+  image. Claude Code gets symlinks to the live checkout files; OpenCode gets
+  converted copies — the `name`/`tools` frontmatter keys stripped and
+  `permission:` passed through, the same conversion the container path
+  applies, since OpenCode hard-errors on the list-form `tools:` key. mg never
+  clobbers existing host agent config — a name you already have in that dir is
+  left untouched (your own agent wins).
+- **Skills.** Global skills are available to `mg host` too, delivered the same
+  way: at launch mg puts the checkout's `skills/` dirs into the host CLI's own
+  global skills dir (`~/.claude/skills/` for Claude Code,
+  `~/.config/opencode/skills/` for OpenCode) — symlinked skill dirs for Claude
+  Code, copied dirs for OpenCode — and never clobbers an existing host skill
+  of the same name (your own skill wins).
+- **Meta prompt.** The system-wide meta prompt (`meta.md`) is delivered into
+  the host CLI's own global instruction file (`~/.claude/CLAUDE.md` for Claude
+  Code, `~/.config/opencode/AGENTS.md` for OpenCode) as a **copy — never a
+  symlink** (a symlink would let Claude's `/memory` writes and agent edits land
+  back in the manigot checkout) — and never clobbers an existing host file
+  (your own file wins).
 - **OpenCode model.** The zai/opencode-go/opencode-zen/opencode-zen-free
   profiles' plan model is forwarded via opencode's `--model` flag; mg never
   writes your host's opencode config.
@@ -494,16 +546,21 @@ them key their copy/clipboard behavior off — mg forwards the host's terminal
 environment into the container: `TERM`, `COLORTERM`, `TERM_PROGRAM`,
 `TERM_PROGRAM_VERSION`, `VTE_VERSION`, `KITTY_WINDOW_ID`, `TMUX`, `TMUX_PANE`,
 `WT_SESSION`, and every `WEZTERM_*` variable, each forwarded only when set and
-non-empty on the host. OpenCode additionally switches to tmux's
-DCS-passthrough OSC 52 form when `TMUX` is set. `mg host` sessions are
-unaffected — the CLI runs on the host with the full environment already
-present.
+non-empty on the host. One deliberate exception: `TMUX`/`TMUX_PANE` are
+forwarded for Claude Code but **not** for OpenCode — when OpenCode sees `TMUX`
+set it wraps its OSC 52 clipboard write in tmux's DCS-passthrough escape,
+which default tmux configuration discards entirely (`allow-passthrough`
+defaults to off), so your host clipboard is never touched even with
+`set-clipboard on`. Stripping `TMUX` makes OpenCode emit plain OSC 52, which
+tmux's `set-clipboard on` handles correctly. `mg host` sessions apply the same
+exception: the OpenCode child env is filtered of `TMUX`/`TMUX_PANE`, while
+Claude Code keeps the full host environment.
 
 ---
 
 ## Agents
 
-Thirteen agents are available globally in every project. Call them with `@name`
+Fourteen agents are available globally in every project. Call them with `@name`
 in your session, or run `mg agents` (or its thematic alias, `mg crew`) from
 the host to list them (with any `docs/agents/` overrides) and pick one —
 via the interactive picker on a TTY — to start straight into.
@@ -523,6 +580,7 @@ via the interactive picker on a TTY — to start straight into.
 | `@devops` | Expert for pipelines and getting things running — CI/CD, builds | read + write |
 | `@sysadmin` | Manages and administers servers — services, TLS, updates, uptime | read + write |
 | `@chat` | General chat assistant, like ChatGPT — conversational and advisory | read-only |
+| `@git-solver` | Git expert for tricky states — broken worktrees, conflicts, cleanup | read + write |
 
 The Tools column is enforced under Claude Code; the read-only agents are
 enforced under OpenCode too, via the `permission:` frontmatter they carry —
@@ -533,6 +591,101 @@ in `your-project/docs/agents/`. Project agents take precedence over global ones.
 Write them in the same format as the built-ins (`name:`, `description:`,
 `tools: Read, Grep, ...`) — the OpenCode copy is generated from that file at
 launch, so you never need to hand-write OpenCode's object form.
+
+### Agent frontmatter and guardrails
+
+Every agent is a single markdown file whose frontmatter carries both its
+identity and its restrictions. The keys manigot understands:
+
+| Key | Effect | Enforced |
+|---|---|---|
+| `name:` | the agent's `@name` (must match the filename) | both CLIs |
+| `description:` | one line for `mg agents` and the TUI picker | both CLIs |
+| `tools:` | Claude Code tool allowlist (`Read, Grep, Glob, Write, Edit, Bash`) | Claude Code |
+| `commit:` | `true` → writable git mount; `false` → read-only gitdir, the hard boundary | both CLIs |
+| `permission:` | OpenCode deny/allow block (`edit`/`bash`/`task`/`webfetch`/`websearch`/`question`), last-match-wins | OpenCode |
+| `deny:` | command deny-list (e.g. keep an agent off a binary the image lacks) | *designed, not yet enforced* |
+| `network:` | session network isolation (`none`/`loopback`/`bridge`) | *designed, not yet enforced* |
+
+Beyond the frontmatter, every session is guarded regardless of agent: the git
+shim restricts git to read + commit, `commit: false` agents get the job's
+git-common-dir mounted read-only (with `GIT_OPTIONAL_LOCKS=0`), the gitdir's
+`hooks/` and other jobs' worktree gitdirs are read-only overlays, `.env` files
+are shadowed to `/dev/null`, profile credentials are pinned per profile, only
+committing agents may run `shot`, and `mg jdi` stops on a `NEEDS-HUMAN-INPUT:`
+marker or a verdict that isn't APPROVED.
+
+`docs/agent-template.md` is a copy-me reference agent showing every frontmatter
+key, every restriction, and the designed guardrails — copy it to
+`docs/agents/<name>.md` for a project agent or `agents/<name>.md` for a global
+one.
+
+---
+
+## Skills
+
+Skills are packaged instructions any agent can load on demand. Unlike agents
+(which are bound to a named `@agent`), skills are loaded globally at startup
+by both CLIs — `~/.claude/skills/` for Claude Code,
+`~/.config/opencode/skills/` for OpenCode — independent of the active agent,
+so a skill is available to **every** agent and to invocations that name no
+agent.
+
+A skill is a **directory** containing a `SKILL.md` (with `name:`/`description:`
+frontmatter, which both CLIs read natively) plus optional support files.
+manigot stores and delivers them exactly like agents, with the same global +
+project split:
+
+- **Global skills** live in the manigot checkout at `skills/<name>/SKILL.md`
+  (mirrors `agents/`). For a container session they are mounted read-only at
+  the CLI's global skills location; for `mg host` they are delivered into the
+  host CLI's own skills dir the same way agents are.
+- **Project skills** live in `your-project/docs/skills/<name>/SKILL.md`
+  (mirrors `docs/agents/`). They ride the existing `docs/` mount into the
+  container at the project skills location and override a global skill of the
+  same name — the same project-overrides-global precedence agents have.
+
+manigot ships one example skill, `skills/job-brief/`; drop yours into
+`skills/` in the checkout (or `docs/skills/` in a project) to make them
+available everywhere.
+
+---
+
+## Meta prompt
+
+The meta prompt (`meta.md` at the manigot checkout root) is a system-wide
+instruction file that is injected into **every** session — the top of the
+instruction hierarchy:
+
+```
+meta prompt (system-wide)  →  agents (per role)  →  skills (on demand)  →  project context (docs/AGENTS.md)
+```
+
+It carries the general "do this, do that" character and goals that apply
+regardless of agent, project, or interactive/`--print` mode — e.g. work inside
+the job's `docs/`, respect the job workflow and per-task commits, never touch
+`.env`/credentials, prefer small focused changes, verify rendered work with
+`shot`. The agent files remain the operative per-role instructions; the meta
+prompt is deliberately tool-neutral and does not duplicate their rules.
+
+Delivery mirrors the global agents/skills mechanism, at each CLI's **global
+instruction** location — the file both CLIs load in every session, independent
+of agent, project, or mode:
+
+- **Claude Code**: `~/.claude/CLAUDE.md` (the user-global memory file). It is
+  loaded before the project context at `/workspace/.claude/CLAUDE.md`, so the
+  project-level context still wins on conflict — the desired precedence.
+- **OpenCode**: `~/.config/opencode/AGENTS.md` (the global rules file), loaded
+  alongside the project `/workspace/AGENTS.md` context mount.
+
+For a container session the checkout's `meta.md` is mounted read-only at the
+per-tool target (no conversion — plain markdown is native to both CLIs). For
+`mg host` it is delivered into the host CLI's own global instruction file as a
+**copy, never a symlink** — `~/.claude/CLAUDE.md` is Claude's user-writable
+memory file, and a symlink would let `/memory` writes and agent edits land
+back in the checkout. Delivery is non-clobbering (an existing host file wins)
+and warn-only on failure, exactly like the agent/skill installers. A checkout
+without `meta.md` simply yields no delivery — the file is optional.
 
 ---
 
@@ -566,8 +719,8 @@ mg job "add image gallery block"
 3.  @owner                              → SHIP / REVISIT / REJECT
 4.  @analyst                            → writes tasks.md
 5.  Review tasks.md yourself
-6.  @developer TASK-1                   → implements, commits [ID] TASK-1: ...
-7.  @developer TASK-2                   → implements, commits [ID] TASK-2: ...
+6.  @developer TASK-1                   → implements, commits as it goes
+7.  @developer TASK-2                   → implements, commits as it goes
 8.  @reviewer                           → reads diff, writes verdict.md
 9.  @security                           → appends security findings to verdict.md
 10. Fix anything blocking, re-run 8–9
@@ -576,6 +729,13 @@ mg job "add image gallery block"
 ```
 
 **For a bug fix, skip steps 3–4 and go straight to the developer.**
+
+Per-task commit hygiene is deliberately relaxed — `mg done` squashes the whole
+branch into one commit anyway. Whatever an agent leaves uncommitted is
+auto-committed when its session ends (a host-side sweep with a
+`[<id>] chore: commit all` commit), so `mg done`'s clean-tree check is never
+tripped by leftovers — including read-only agents' outputs like the
+analyst's `tasks.md`, which the agent itself cannot commit.
 
 `mg jobs` lists every open job and lets you pick one; the session then starts
 in the agent appropriate to the job's stage — `@analyst` while it's being
@@ -599,8 +759,9 @@ job workflow.
 4. **Case the job.** `@analyst` breaks it into a task list.
 5. **Read the plan yourself** before anyone touches code.
 6. **Send in the crew.** `mg crew` rounds up an agent — `@developer` does the
-   actual work, one task at a time, committing as it goes, safe inside its
-   own safehouse where nothing outside the project is reachable.
+   actual work, one task at a time, committing as it goes (anything left
+   uncommitted is auto-committed when the session ends), safe inside its own
+   safehouse where nothing outside the project is reachable.
 7. **Get it checked.** `@reviewer`, then `@security`, go over the work and
    write the verdict.
 8. **Clean up loose ends.** Fix what's blocking, run it past them again.

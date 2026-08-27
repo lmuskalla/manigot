@@ -54,5 +54,16 @@ func runSession(args []string, stdin *os.File, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "mg: warning: could not prune orphaned containers: %v\n", err)
 	}
 
-	return inv.Run(stdin, stdout, stderr)
+	code, ran := inv.Run(stdin, stdout, stderr)
+
+	// Job-worktree sessions end with a host-side sweep-commit of whatever the
+	// agent left uncommitted — including read-only agents' outputs (the
+	// analyst's tasks.md), which the agent itself cannot commit — so mg done's
+	// clean-tree check isn't tripped by leftovers (see session.SweepJobWorktree).
+	// Sweep only when the container actually ran: an agent that never started
+	// must not trigger a commit.
+	if ran {
+		session.SweepJobWorktree(root, stderr)
+	}
+	return code
 }

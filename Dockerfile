@@ -95,27 +95,23 @@ ENV NODE_PATH=/usr/local/lib/node_modules
 COPY --chown=claude:claude scripts/shot.js /usr/local/bin/shot
 RUN chmod +x /usr/local/bin/shot
 
-# Global agents — baked into the image, available in every project.
-# Project-level agents (mounted at runtime) override these if same name.
-COPY --chown=claude:claude agents/ /home/claude/.claude/agents/
-
-# Same agents for OpenCode, which reads global agents from ~/.config/opencode/agents/.
-# The markdown body is identical; only the frontmatter differs — OpenCode takes the
-# agent name from the filename and expects `tools` to be a map, not a list, and passes
-# unknown keys through to the provider. So drop `name:`, `tools:` and `commit:` from
-# this copy — `commit:` is manigot's own git-mount-mode marker (see internal/session/
-# agentgit.go), meaningless to OpenCode's agent schema; left in, it rode along as an
-# extra top-level field into the chat completions request and got rejected outright by
-# OpenCode Zen's strict validator ("Extra inputs are not permitted, field: 'commit'").
-# A `permission:` block passes through untouched, which is how the read-only agents
-# (reviewer/security/analyst/owner) express their restriction under OpenCode — that key
-# is part of OpenCode's own agent schema, so it does not leak the same way.
-RUN mkdir -p /home/claude/.config/opencode/agents \
-    && for f in /home/claude/.claude/agents/*.md; do \
-        awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools|commit):/{next} {print}' "$f" \
-            > "/home/claude/.config/opencode/agents/$(basename "$f")"; \
-    done \
-    && chown -R claude:claude /home/claude/.config
+# Global agents and skills — no longer baked into the image. They live on the
+# host in the manigot checkout (agents/, skills/) and are mounted read-only
+# into the container at session launch (see internal/session/docker.go), which
+# keeps the image purely isolation for workspaces and makes the same agents and
+# skills available to `mg host`.
+#
+# The CLI config dirs the agents/skills mount into (~/.claude and
+# ~/.config/opencode) must still exist in the image, writable by any session
+# UID — docker would otherwise create the mount-target parents as root-owned
+# when the -v mount lands, and the entrypoint's opencode.json write (and the
+# CLIs' own state under ~/.claude) would fail for the non-root session user.
+# The agents/skills subdirs themselves are provided by the read-only mounts;
+# they are pre-created here (writable, claude-owned) so the skills mounts can
+# never land on root-owned parents either.
+RUN mkdir -p /home/claude/.claude /home/claude/.config/opencode \
+    && mkdir -p /home/claude/.claude/skills /home/claude/.config/opencode/skills \
+    && chown -R claude:claude /home/claude/.claude /home/claude/.config
 
 # Entrypoint script — writes claude.json to bypass onboarding before Claude starts
 COPY --chown=claude:claude scripts/entrypoint.sh /home/claude/entrypoint.sh

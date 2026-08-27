@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/fs"
 )
 
@@ -332,6 +333,132 @@ func TestBuildNoAgentsConversionMount(t *testing.T) {
 	}
 }
 
+// TestBuildClaudeGlobalAgentsMountedReadOnly: the global agents dir
+// (<home>/agents/) is mounted read-only into the container at Claude's global
+// agent location (~/.claude/agents/), replacing the old image bake — so the
+// container uses the host's agents but cannot modify them.
+func TestBuildClaudeGlobalAgentsMountedReadOnly(t *testing.T) {
+	_, home := docProject(t)
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Global reviewer.\ntools: Read, Write, Grep, Glob, Bash\ncommit: true\n---\n\nBody.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// Claude mounts the host's global agents verbatim, read-only, at
+	// ~/.claude/agents/ (no conversion — list form is Claude's native schema).
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "agents")+":/home/claude/.claude/agents:ro",
+	)
+	// No temp dir was created for the Claude mount, so no cleanup is needed.
+	if inv.Cleanup != nil {
+		t.Error("claude global-agents mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildOpenCodeGlobalAgentsConvertedMount: OpenCode reads global agents
+// from ~/.config/opencode/agents/, so the mounted global agents must be
+// converted (name:/tools: stripped, permission: passed through — see
+// convertAgents) before the container sees them, shadow-mounted over the CLI's
+// global agents path, read-only, with the invocation owning cleanup.
+func TestBuildOpenCodeGlobalAgentsConvertedMount(t *testing.T) {
+	_, _ = docProject(t)
+	// A zai checkout whose agents/ dir carries a global agent (the effective
+	// home — docProject's own checkout is replaced by this one).
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeAgent(t, home, "reviewer.md", "---\nname: reviewer\ndescription: Global reviewer.\ntools: Read, Write, Grep, Glob, Bash\ncommit: true\n---\n\nBody.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// OpenCode's global agents mount lands at ~/.config/opencode/agents and is
+	// read-only; the converted copy is cleaned up after the run.
+	containsAll(t, inv.Argv, "/home/claude/.config/opencode/agents:ro")
+	if inv.Cleanup == nil {
+		t.Error("opencode global-agents invocation must carry a Cleanup hook")
+	}
+	// The host's global agents source tree is never modified — the raw
+	// list-form file is still in place for Claude Code sessions.
+	data, err := os.ReadFile(filepath.Join(home, "agents", "reviewer.md"))
+	if err != nil || !strings.Contains(string(data), "tools: Read") {
+		t.Errorf("global agents source was modified: %v", err)
+	}
+}
+
+// TestBuildNoGlobalAgentsNoMount: with no agents/ dir in the manigot checkout
+// there is nothing to mount — no global-agent mount, and (for OpenCode) no
+// cleanup hook and no converted mount.
+func TestBuildNoGlobalAgentsNoMount(t *testing.T) {
+	// Claude: docProject's fake home has no agents/ dir.
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "/home/claude/.claude/agents") {
+		t.Errorf("claude invocation must not mount global agents when agents/ is absent:\n%s", joined)
+	}
+
+	// OpenCode with no global agents: no conversion, no mount, no cleanup.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "/home/claude/.config/opencode/agents") {
+		t.Errorf("opencode invocation must not mount global agents when agents/ is absent:\n%s", joined2)
+	}
+	if inv2.Cleanup != nil {
+		t.Error("no-global-agents opencode invocation must not carry a Cleanup hook")
+	}
+}
+
 func TestBuildJobWorktreeGitCommonDirMount(t *testing.T) {
 	_, home := docProject(t)
 	_ = home
@@ -484,6 +611,320 @@ func writeAgent(t *testing.T, dir, name, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(agentsDir, name), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestBuildClaudeGlobalSkillsMountedReadOnly: the global skills dir
+// (<home>/skills/) is mounted read-only into the container at Claude's global
+// skills location (~/.claude/skills/). Skills need no conversion (both CLIs
+// read SKILL.md frontmatter natively), so Claude gets the host's dir verbatim
+// as a read-only bind, exactly like its global-agents mount.
+func TestBuildClaudeGlobalSkillsMountedReadOnly(t *testing.T) {
+	_, home := docProject(t)
+	writeSkill(t, home, "review", map[string]string{"SKILL.md": "---\nname: review\ndescription: Review guide.\n---\n\nBody.\n"})
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "skills")+":/home/claude/.claude/skills:ro",
+	)
+	// No temp dir was created for the Claude mount, so no cleanup is needed.
+	if inv.Cleanup != nil {
+		t.Error("claude global-skills mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildOpenCodeGlobalSkillsStagedMount: OpenCode reads global skills from
+// ~/.config/opencode/skills/, so the mounted skills are staged into a temp
+// dir first (a plain copy — no conversion — see stageGlobalSkills) and
+// shadow-mounted read-only at the CLI's global skills path, with the
+// invocation owning cleanup.
+func TestBuildOpenCodeGlobalSkillsStagedMount(t *testing.T) {
+	_, _ = docProject(t)
+	// A zai checkout whose skills/ dir carries a global skill (the effective
+	// home — docProject's own checkout is replaced by this one).
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeSkill(t, home, "review", map[string]string{
+		"SKILL.md":  "---\nname: review\ndescription: Review guide.\n---\n\nBody.\n",
+		"helper.sh": "#!/bin/sh\n",
+	})
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// OpenCode's global skills mount lands at ~/.config/opencode/skills and is
+	// read-only; the staged copy is cleaned up after the run.
+	containsAll(t, inv.Argv, "/home/claude/.config/opencode/skills:ro")
+	if inv.Cleanup == nil {
+		t.Error("opencode global-skills invocation must carry a Cleanup hook")
+	}
+	// The host's global skills source tree is never modified — the raw
+	// SKILL.md and its support file are still in place.
+	data, err := os.ReadFile(filepath.Join(home, "skills", "review", "SKILL.md"))
+	if err != nil || !strings.Contains(string(data), "name: review") {
+		t.Errorf("global skills source was modified: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "skills", "review", "helper.sh")); err != nil {
+		t.Errorf("global skills support file was removed: %v", err)
+	}
+}
+
+// TestBuildNoGlobalSkillsNoMount: with no skills/ dir in the manigot checkout
+// there is nothing to mount — no global-skills mount, and (for OpenCode) no
+// cleanup hook and no staged mount.
+func TestBuildNoGlobalSkillsNoMount(t *testing.T) {
+	// Claude: docProject's fake home has no skills/ dir.
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "/home/claude/.claude/skills") {
+		t.Errorf("claude invocation must not mount global skills when skills/ is absent:\n%s", joined)
+	}
+
+	// OpenCode with no global skills: no stage, no mount, no cleanup.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "/home/claude/.config/opencode/skills") {
+		t.Errorf("opencode invocation must not mount global skills when skills/ is absent:\n%s", joined2)
+	}
+	if inv2.Cleanup != nil {
+		t.Error("no-global-skills opencode invocation must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildClaudeGlobalMetaMountedReadOnly: the global meta prompt
+// (<home>/meta.md>) is mounted read-only into the container at Claude Code's
+// user-global instruction location (~/.claude/CLAUDE.md). It needs no
+// conversion and no temp dir — plain markdown is native to Claude — so no
+// Cleanup hook is required.
+func TestBuildClaudeGlobalMetaMountedReadOnly(t *testing.T) {
+	_, home := docProject(t)
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "meta.md")+":/home/claude/.claude/CLAUDE.md:ro",
+	)
+	// No temp dir was created for the Claude mount, so no cleanup is needed.
+	if inv.Cleanup != nil {
+		t.Error("claude global-meta mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildOpenCodeGlobalMetaMountedReadOnly: OpenCode reads its global rules
+// from ~/.config/opencode/AGENTS.md, so the global meta prompt is mounted
+// read-only at that path. No conversion, no temp dir, no Cleanup hook.
+func TestBuildOpenCodeGlobalMetaMountedReadOnly(t *testing.T) {
+	_, _ = docProject(t)
+	// A zai checkout whose meta.md carries the system-wide meta prompt.
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "meta.md")+":/home/claude/.config/opencode/AGENTS.md:ro",
+	)
+	if inv.Cleanup != nil {
+		t.Error("opencode global-meta mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildNoGlobalMetaNoMount: with no meta.md in the manigot checkout there
+// is nothing to mount — no global-meta mount for either tool.
+func TestBuildNoGlobalMetaNoMount(t *testing.T) {
+	// Claude: docProject's fake home has no meta.md.
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "/home/claude/.claude/CLAUDE.md") {
+		t.Errorf("claude invocation must not mount the global meta when meta.md is absent:\n%s", joined)
+	}
+
+	// OpenCode with no meta.md: no mount.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "/home/claude/.config/opencode/AGENTS.md") {
+		t.Errorf("opencode invocation must not mount the global meta when meta.md is absent:\n%s", joined2)
+	}
+}
+
+// writeMeta writes a meta.md at the checkout root, creating the file.
+func writeMeta(t *testing.T, dir, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "meta.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestBuildProjectSkillsRideDocsMount: project skills (docs/skills/) need no
+// staging or shadow mount — the docs bind mount maps the whole docs/ dir, so
+// docs/skills/ already lands at the project skills location inside the
+// container (/workspace/.claude/skills for Claude Code,
+// /workspace/.opencode/skills for OpenCode), where both CLIs natively prefer a
+// project skill over a global one of the same name. The pin: the invocation
+// carries the plain docs mount (which carries docs/skills/) and no separate
+// skills mount.
+func TestBuildProjectSkillsRideDocsMount(t *testing.T) {
+	// Claude Code: docs/skills/ rides the docs mount at /workspace/.claude.
+	root, _ := docProject(t)
+	writeSkill(t, filepath.Join(root, "docs"), "mine", map[string]string{"SKILL.md": "---\nname: mine\n---\n"})
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// The docs mount is present (it carries docs/skills/), and no separate
+	// project-skills mount is added on top of it.
+	containsAll(t, inv.Argv, "-v", filepath.Join(root, "docs")+":/workspace/.claude:z")
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "skills") {
+		t.Errorf("claude invocation must not add a separate skills mount (docs/skills/ rides the docs mount):\n%s", joined)
+	}
+	if inv.Cleanup != nil {
+		t.Error("claude project-skills invocation must not carry a Cleanup hook")
+	}
+
+	// OpenCode: docs/skills/ rides the docs mount at /workspace/.opencode.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv2.Argv, "-v", filepath.Join(r2.DocsDir)+":/workspace/.opencode:z")
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "skills") {
+		t.Errorf("opencode invocation must not add a separate skills mount (docs/skills/ rides the docs mount):\n%s", joined2)
 	}
 }
 
@@ -824,6 +1265,69 @@ func TestBuildTerminalEnvForwarding(t *testing.T) {
 		"-e", "WEZTERM_PANE=%1",
 		"-e", "WEZTERM_UNIX_SOCKET=/tmp/wezterm.sock",
 	)
+}
+
+// TestBuildTerminalEnvForwardingOpenCodeStripsTmux — OpenCode sessions must
+// NOT see TMUX/TMUX_PANE inside the container: when OpenCode sees TMUX set it
+// wraps its OSC 52 clipboard write in tmux's DCS-passthrough escape, which
+// default tmux configuration (allow-passthrough off) discards entirely — so
+// the host clipboard is never touched even with set-clipboard on. Stripping
+// TMUX makes OpenCode emit plain OSC 52, which tmux's set-clipboard on
+// handles. Every other terminal-identity var (TERM/COLORTERM/... plus
+// WEZTERM_*) is still forwarded, so the TUI still sees the real terminal.
+func TestBuildTerminalEnvForwardingOpenCodeStripsTmux(t *testing.T) {
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.Tool != config.ToolOpenCode {
+		t.Fatalf("zai profile tool = %q, want %q", info.Tool, config.ToolOpenCode)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("TERM_PROGRAM", "WezTerm")
+	t.Setenv("TERM_PROGRAM_VERSION", "20240203")
+	t.Setenv("VTE_VERSION", "6800")
+	t.Setenv("KITTY_WINDOW_ID", "42")
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%5")
+	t.Setenv("WT_SESSION", "abc123")
+	t.Setenv("WEZTERM_PANE", "%1")
+	t.Setenv("WEZTERM_UNIX_SOCKET", "/tmp/wezterm.sock")
+
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// The non-tmux identity vars are still forwarded.
+	containsAll(t, inv.Argv,
+		"-e", "TERM=xterm-256color",
+		"-e", "COLORTERM=truecolor",
+		"-e", "TERM_PROGRAM=WezTerm",
+		"-e", "TERM_PROGRAM_VERSION=20240203",
+		"-e", "VTE_VERSION=6800",
+		"-e", "KITTY_WINDOW_ID=42",
+		"-e", "WT_SESSION=abc123",
+		"-e", "WEZTERM_PANE=%1",
+		"-e", "WEZTERM_UNIX_SOCKET=/tmp/wezterm.sock",
+	)
+	// TMUX/TMUX_PANE are deliberately stripped for OpenCode.
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range []string{"TMUX=", "TMUX_PANE="} {
+		if strings.Contains(joined, "-e\n"+k) {
+			t.Errorf("opencode docker argv must not forward %s:\n%s", k, joined)
+		}
+	}
 }
 
 // fakeTmux puts an executable `tmux` first on PATH that prints output (or,

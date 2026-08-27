@@ -21,7 +21,28 @@ and configured with `mg setup`.
 - Host-side logic: Go packages under `internal/` (`session`, `job`, `git`,
   `ui`, `orchestrate`, `config`, `agentlist`, `cli`, `home`, `launch`,
   `markdown`, `project`, `editor`)
-- Agent definitions: Markdown files in `agents/`, baked into the image at build time
+- Agent definitions: Markdown files in `agents/`, delivered into every session
+  from the manigot checkout (mounted read-only into the container at the CLI's
+  global agent location; for `mg host`, symlinked into Claude Code's config
+  dir or written as converted copies into OpenCode's)
+- Skills: directories in `skills/` (`<name>/SKILL.md`, mirroring `agents/`),
+  delivered into every session the same way — mounted read-only into the
+  container at the CLI's global skills location (both CLIs load skills at
+  startup, so every agent and every agentless invocation sees them), and for
+  `mg host` delivered into the host CLI's config dir. Project skills in
+  `docs/skills/` ride the docs mount and override global skills of the same
+  name. manigot ships one example skill, `skills/job-brief/`; the mechanism
+  is otherwise provisioned for user-supplied global + project skills.
+- Meta prompt: a system-wide instruction file `meta.md` at the checkout root,
+  injected into every session — the top of the instruction hierarchy
+  (meta prompt → agents → skills → project context). Delivered like global
+  skills: mounted read-only into the container at each CLI's *global
+  instruction* location (`~/.claude/CLAUDE.md` for Claude Code, the user-global
+  memory file; `~/.config/opencode/AGENTS.md` for OpenCode, the global rules
+  file), and for `mg host` copied — never symlinked — into the host CLI's own
+  global instruction file (a symlink would let Claude's `/memory` writes and
+  agent edits land back in the checkout). Non-clobbering and optional: a
+  checkout without `meta.md` yields no delivery.
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
@@ -44,13 +65,23 @@ The seam between the orchestrator (host-side Go) and the agent environment
   profile/tool resolution, auth validation, project-root + `--job` worktree
   resolution, docker argv/mount/env construction, and the run itself.
   The TUI and mg-jdi call it directly. For OpenCode sessions it also converts
-  project-level `docs/agents/*.md` to OpenCode's schema at launch (the same
-  `name`/`tools` strip the Dockerfile applies to the built-in agents — a
+  agent files (`docs/agents/*.md` and the mounted global `agents/*.md`) to
+  OpenCode's schema at launch (the same
+  `name`/`tools` strip the Dockerfile used to apply to the baked-in agents — a
   `permission:` block passes through untouched, which is how the read-only
   agents express their restriction under OpenCode), writing
-  the converted copies to a temp dir shadow-mounted over the docs mount's
-  `agents/` subpath — the host's `docs/agents/` is never modified, and the
-  temp dir is cleaned up after the run. It also decides the job git-common-dir
+  the converted copies to a temp dir shadow-mounted over the target
+  `agents/` subpath — the host's source files are never modified, and the
+  temp dir is cleaned up after the run. Skills need no such conversion (both
+  CLIs read `SKILL.md` frontmatter natively), so global skills
+  (`<home>/skills/`) are mounted read-only at the CLI's global skills
+  location — verbatim for Claude Code, staged into a temp dir for OpenCode —
+  and project skills (`docs/skills/`) ride the existing docs mount, overriding
+  global skills of the same name. The system-wide meta prompt (`<home>/meta.md`)
+  is mounted read-only the same way at each CLI's *global instruction*
+  location (`~/.claude/CLAUDE.md` for Claude Code,
+  `~/.config/opencode/AGENTS.md` for OpenCode) — plain markdown, so no
+  conversion and no temp dir. It also decides the job git-common-dir
   mount mode from the resolved agent's `commit:` frontmatter marker (see
   "Read-only git mount for non-committing agents").
 - `internal/job` — the job lifecycle (was `new-job.sh`/`finish-job.sh`/
@@ -71,8 +102,8 @@ The seam between the orchestrator (host-side Go) and the agent environment
   settings, and manigot's `.env` read/write (`GetEnv`/`UpsertEnv`).
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
-  the source of `.env`, `config/`, `agents/`, `assets/` and
-  `project-template/`.
+  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` (quotes.json),
+  `meta.md` and `project-template/`.
 - `scripts/entrypoint.sh` — the ONLY bash, container-side. Branches on
   `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's onboarding
   wizard, pre-accepts folder trust for `/workspace`, and starts it in
@@ -83,14 +114,13 @@ The seam between the orchestrator (host-side Go) and the agent environment
   `opencode run <message> --agent <agent> --auto --format json`. It also
   installs a PATH-first `git` shim that restricts agents to read + commit git
   commands (see "Session git shim" below).
-- `Dockerfile` — builds the image; installs both agent CLIs, bakes the global
-  `agents/` in (twice: verbatim for Claude Code, and for OpenCode with the
-  `name`/`tools` frontmatter keys stripped — the same strip the session
-  launcher applies at launch to project `docs/agents/` overrides; a
-  `permission:` block passes through, carrying the read-only agents'
-  restriction into OpenCode's schema), and
+- `Dockerfile` — builds the image; installs both agent CLIs (the image is
+  purely isolation for workspaces — the global `agents/` and `skills/` are no
+  longer baked in, they are mounted from the host at session launch), and
   pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
-  `GOTOOLCHAIN=local` a stale path breaks the build).
+  `GOTOOLCHAIN=local` a stale path breaks the build). The meta-prompt mount
+  targets' parent dirs (`~/.claude` and `~/.config/opencode`) are pre-created
+  in the image.
 
 ### Session launch (bare `mg`)
 
@@ -161,9 +191,15 @@ environment into the container: `TERM`, `COLORTERM`, `TERM_PROGRAM`,
 `TERM_PROGRAM_VERSION`, `VTE_VERSION`, `KITTY_WINDOW_ID`, `TMUX`, `TMUX_PANE`,
 `WT_SESSION`, and every `WEZTERM_*` variable, each forwarded only when set and
 non-empty on the host (no var set → a byte-identical argv to a build without
-this feature). OpenCode additionally switches to tmux's DCS-passthrough OSC 52
-form when `TMUX` is set. `mg host` sessions are unaffected — the CLI runs on
-the host with the full environment already present.
+this feature). One deliberate exception: `TMUX`/`TMUX_PANE` are forwarded for
+Claude Code but **not** for OpenCode — when OpenCode sees `TMUX` set it wraps
+its OSC 52 clipboard write in tmux's DCS-passthrough escape, which default
+tmux configuration discards entirely (`allow-passthrough` defaults to off),
+so the host clipboard is never touched even with `set-clipboard on`. Stripping
+`TMUX` makes OpenCode emit plain OSC 52, which tmux's `set-clipboard on`
+handles correctly. `mg host` sessions apply the same exception: the OpenCode
+child env is filtered of `TMUX`/`TMUX_PANE`, while Claude Code keeps the full
+host environment.
 
 ### Container cleanup
 
@@ -226,6 +262,19 @@ the destructive git set — `worktree`, `branch -d/-D`, `reset`, `clean`, `gc`,
 allows (OpenCode's rules are last-match-wins). Claude Code ignores these
 blocks entirely; it is covered by the git shim instead.
 
+The complete per-agent frontmatter surface is `name:` (must match the
+filename), `description:` (one line for `mg agents`/the TUI picker), `tools:`
+(the Claude Code allowlist — OpenCode strips it), `commit:` (the git mount
+mode above) and `permission:` (the OpenCode block above). Two further keys are
+part of the designed guardrail surface but **not yet enforced**: `deny:` — a
+command deny-list of OpenCode-style glob patterns (e.g. keep an agent off a
+binary the image lacks, like virtualenv), intended to expand into
+`permission.bash` denies under OpenCode and PATH-first shims (the git-shim
+pattern) under both CLIs — and `network:` — a per-session network isolation
+level (`none`/`loopback`/`bridge`, today's default being full egress).
+`docs/agent-template.md` is a copy-me reference agent showing every key, every
+restriction, and the designed guardrails.
+
 Job-worktree sessions also get read-only overlay mounts shadowing the gitdir's
 sensitive subpaths (each skipped when its source is missing — docker would
 otherwise create an empty, root-owned directory at the target):
@@ -239,6 +288,34 @@ enumerated once at launch (`git.WorktreeGitDirs` via `git worktree list
 --porcelain`), so a job created mid-session is not covered until the next
 launch — acceptable, since the overlay list cannot be refreshed from inside
 the container.
+
+### Job worktrees are kept committed
+
+Every job-worktree session ends with a host-side sweep-commit of whatever the
+agent left uncommitted (`git add -A` + a `[<id>] chore: commit all` commit —
+the same message convention as the TUI's "c" key), so `mg done`'s clean-tree
+check is never tripped by agent leftovers. This is what makes "every agent
+always commits" true without trusting agent instructions: read-only agents'
+outputs — the analyst's `tasks.md` above all — are committed by the host
+right after their session ends, closing the "no agent feels responsible" gap.
+The sweep runs only for job-worktree sessions (`--job`, `mg jobs` launches,
+TUI launches, and every `mg jdi` --print invocation) and only when the
+container actually ran — a docker launch that never started an agent must not
+trigger a commit. It never runs against the main worktree, in either shape
+that can resolve `--job` there: the flat-scan fallback (a repo with no local
+branches, or a non-git project, where the job's files live directly in the
+main project root — there is no job worktree at all) and a pre-worktree job
+(the job's branch still checked out in the main worktree itself, an
+explicitly supported transitional state — `git.WorktreeForBranch` then
+resolves to the main worktree, not a linked one). Sweeping either would commit
+the user's own uncommitted work — an unignored `.env` included — onto the job
+branch; the gate is "the resolved worktree differs from the invocation root",
+which holds for a linked job worktree in every case. Plain sessions, where
+the user's own uncommitted work lives, are never swept, and `mg host` sessions
+are out of scope (no
+isolation by design). The sweep commit deliberately does not match the
+`[<id>] verdict:` pattern the mg-jdi state machine counts, so retry and
+re-review decisions are unaffected.
 
 ### Job lifecycle
 
@@ -465,8 +542,19 @@ either way.
   job's host path. The CLI must be installed on the host, and it keeps its
   normal per-tool confirmation prompts — the container path's auto-approval
   flags (`--dangerously-skip-permissions`/`--auto`) are deliberately not
-  passed, since host sessions have no isolation. For work that must touch
-  the host itself (thematic alias: `mg wild`, same command/behavior)
+  passed, since host sessions have no isolation. The global agents are still
+  available: mg delivers the checkout's `agents/*.md` into the CLI's own host
+  config dir — symlinks for Claude Code, converted copies for OpenCode (which
+  hard-errors on the list form) — never clobbering an existing name. Global
+  skills are delivered the same way: symlinked skill dirs for Claude Code,
+  copied dirs for OpenCode, never clobbering an existing skill name. The
+  system-wide meta prompt (`meta.md`) is delivered into the CLI's own global
+  instruction file (`~/.claude/CLAUDE.md` for Claude Code,
+  `~/.config/opencode/AGENTS.md` for OpenCode) as a copy — never a symlink,
+  since a symlink would let Claude's `/memory` writes and agent edits land
+  back in the checkout — and never clobbering an existing host file. For work
+  that must touch the host itself (thematic alias: `mg wild`, same
+  command/behavior)
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:
@@ -517,5 +605,7 @@ way `@name` launches do.
   harmless.
 - Keep `agents/*.md` and `project-template/docs/AGENTS.md` in sync with
   whatever this file documents — they're meant to describe the same system
+  (the skills mechanism included, even though manigot ships no skills of its
+  own)
 - When scope is unclear: ask, don't guess
 - Do not refactor things unrelated to the current task
