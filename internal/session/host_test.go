@@ -702,6 +702,209 @@ func TestBuildHostDeliversGlobalSkills(t *testing.T) {
 	}
 }
 
+// TestInstallHostGlobalMetaClaudeCopies — mg host runs the CLI directly with
+// no mounts, so the manigot checkout's system-wide meta prompt (<home>/meta.md)
+// is surfaced by COPYING it into the host CLI's global instruction file
+// (~/.claude/CLAUDE.md). The delivered file is a regular file — never a
+// symlink into the checkout, so Claude's /memory writes and agent edits can
+// never land in the manigot checkout.
+func TestInstallHostGlobalMetaClaudeCopies(t *testing.T) {
+	home := checkout(t, "")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+
+	// Point $HOME at a temp dir so the copy lands there, not the real home.
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	n, err := installHostGlobalMeta(config.ToolClaudeCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalMeta: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("installed = %d, want 1", n)
+	}
+
+	// Claude's target is ~/.claude/CLAUDE.md.
+	target := filepath.Join(hostHome, ".claude", "CLAUDE.md")
+	fi, err := os.Lstat(target)
+	if err != nil {
+		t.Fatalf("CLAUDE.md was not installed: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("claude target must be a regular copied file, not a symlink into the checkout")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read installed CLAUDE.md: %v", err)
+	}
+	if !strings.Contains(string(data), "System-wide guidance.") {
+		t.Errorf("installed CLAUDE.md does not carry the meta prompt content:\n%s", string(data))
+	}
+}
+
+// TestInstallHostGlobalMetaOpenCodeTarget — OpenCode's global instruction file
+// is ~/.config/opencode/AGENTS.md; the meta prompt is copied there (a regular
+// file, not a symlink).
+func TestInstallHostGlobalMetaOpenCodeTarget(t *testing.T) {
+	home := checkout(t, "")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	n, err := installHostGlobalMeta(config.ToolOpenCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalMeta: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("installed = %d, want 1", n)
+	}
+
+	target := filepath.Join(hostHome, ".config", "opencode", "AGENTS.md")
+	fi, err := os.Lstat(target)
+	if err != nil {
+		t.Fatalf("AGENTS.md was not installed: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("opencode target must be a regular copied file, not a symlink into the checkout")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read installed AGENTS.md: %v", err)
+	}
+	if !strings.Contains(string(data), "System-wide guidance.") {
+		t.Errorf("installed AGENTS.md does not carry the meta prompt content:\n%s", string(data))
+	}
+}
+
+// TestInstallHostGlobalMetaNeverClobbers — an existing host instruction file
+// (the user's own ~/.claude/CLAUDE.md or ~/.config/opencode/AGENTS.md) wins:
+// the installer leaves it untouched and installs nothing.
+func TestInstallHostGlobalMetaNeverClobbers(t *testing.T) {
+	home := checkout(t, "")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	// A user's own host CLAUDE.md — must survive untouched.
+	target := filepath.Join(hostHome, ".claude", "CLAUDE.md")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userContent := "# user's own memory\n"
+	if err := os.WriteFile(target, []byte(userContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := installHostGlobalMeta(config.ToolClaudeCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalMeta: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("installed = %d, want 0 (the user's file wins)", n)
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != userContent {
+		t.Errorf("existing host CLAUDE.md was modified: %q, %v", string(data), err)
+	}
+}
+
+// TestInstallHostGlobalMetaNoMeta — with no meta.md in the checkout, nothing
+// is installed and no host config file is created (no side effects on the
+// user's home).
+func TestInstallHostGlobalMetaNoMeta(t *testing.T) {
+	checkout(t, "")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	if n, err := installHostGlobalMeta(config.ToolClaudeCode); err != nil || n != 0 {
+		t.Errorf("no-meta install = (%d, %v), want (0, nil)", n, err)
+	}
+	if _, err := os.Stat(filepath.Join(hostHome, ".claude", "CLAUDE.md")); !os.IsNotExist(err) {
+		t.Errorf("no-meta install created a host instruction file: %v", err)
+	}
+}
+
+// TestBuildHostDeliversGlobalMeta — BuildHostInvocation copies the checkout's
+// global meta prompt into the host CLI's global instruction file and reports
+// it on diag.
+func TestBuildHostDeliversGlobalMeta(t *testing.T) {
+	_, _ = docProject(t)
+	// Re-point the home at a checkout that has meta.md, and $HOME at a temp
+	// dir so the copy lands somewhere isolated.
+	home := checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-token\nCLAUDE_ACCOUNT_UUID=uuid-1\nCLAUDE_EMAIL=me@x.io\nCLAUDE_ORG_UUID=org-1\n")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildHostInvocation(Options{}, info, r, &diag); err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	target := filepath.Join(hostHome, ".claude", "CLAUDE.md")
+	fi, err := os.Lstat(target)
+	if err != nil {
+		t.Fatalf("host invocation did not install the global meta prompt: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("host meta target must be a regular copied file, not a symlink")
+	}
+	if !strings.Contains(diag.String(), "Installed : global meta prompt into claude's host config") {
+		t.Errorf("missing Installed diag line:\n%s", diag.String())
+	}
+}
+
+// TestBuildHostOpenCodeDeliversGlobalMeta — under an opencode profile,
+// BuildHostInvocation copies the meta prompt into
+// ~/.config/opencode/AGENTS.md (the OpenCode global instruction file).
+func TestBuildHostOpenCodeDeliversGlobalMeta(t *testing.T) {
+	_, _ = docProject(t)
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildHostInvocation(Options{}, info, r, &diag); err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	target := filepath.Join(hostHome, ".config", "opencode", "AGENTS.md")
+	fi, err := os.Lstat(target)
+	if err != nil {
+		t.Fatalf("host invocation did not install the global meta prompt: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("opencode host meta target must be a regular copied file, not a symlink")
+	}
+	if !strings.Contains(diag.String(), "Installed : global meta prompt into opencode's host config") {
+		t.Errorf("missing Installed diag line:\n%s", diag.String())
+	}
+}
+
 // TestBuildHostOpenCodeCopiesGlobalSkills — under an opencode profile,
 // BuildHostInvocation delivers COPIED skill dirs (not raw symlinks) into
 // ~/.config/opencode/skills/, so the host CLI can actually load the global

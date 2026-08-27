@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/lmuskalla/manigot/internal/config"
+	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/home"
 )
 
@@ -110,6 +111,19 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 		fmt.Fprintf(diag, "Warning: could not make global skills available to %s on the host: %v\n", binary, err)
 	} else if n > 0 {
 		fmt.Fprintf(diag, "  Installed : %d global skill(s) into %s's host config\n", n, binary)
+	}
+
+	// ── Global meta prompt ──────────────────────────────────────────────────
+	// The same delivery problem applies to the system-wide meta prompt
+	// (<home>/meta.md): the host CLI cannot see it without the image/mounts,
+	// so it is surfaced into the CLI's own global instruction file. Unlike
+	// agents/skills it is a single file copied, never symlinked, so Claude's
+	// /memory writes and agent edits can never reach the checkout. Non-
+	// clobbering and warn-only, exactly like the agents/skills installs above.
+	if n, err := installHostGlobalMeta(info.Tool); err != nil {
+		fmt.Fprintf(diag, "Warning: could not install the global meta prompt for %s on the host: %v\n", binary, err)
+	} else if n > 0 {
+		fmt.Fprintf(diag, "  Installed : global meta prompt into %s's host config\n", binary)
 	}
 
 	// ── Job prompt ──────────────────────────────────────────────────────────
@@ -424,6 +438,67 @@ func installHostGlobalSkills(tool string) (int, error) {
 		installed++
 	}
 	return installed, nil
+}
+
+// hostGlobalMetaFile resolves the host CLI's global instruction file for a
+// tool — the single file the CLI loads in every session at its *global
+// instruction* location: ~/.claude/CLAUDE.md for Claude Code (the user-global
+// memory file) and ~/.config/opencode/AGENTS.md for OpenCode (the global
+// rules file) — the same locations the container path mounts <home>/meta.md
+// into. The path is derived from $HOME (os.UserHomeDir), so tests can point it
+// at a temp dir.
+func hostGlobalMetaFile(tool string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = os.Getenv("HOME")
+	}
+	if tool == config.ToolOpenCode {
+		return filepath.Join(homeDir, ".config", "opencode", "AGENTS.md")
+	}
+	return filepath.Join(homeDir, ".claude", "CLAUDE.md")
+}
+
+// installHostGlobalMeta surfaces the manigot checkout's system-wide meta
+// prompt (<home>/meta.md) to the host CLI — the host equivalent of the
+// container path's read-only mount (mg host runs the CLI directly, with no
+// mounts).
+//
+// It delivers a single file by COPY, never a symlink: ~/.claude/CLAUDE.md is
+// Claude Code's user-writable memory file, so a symlink would let Claude's
+// /memory writes and agent edits land back in the manigot checkout. A copied
+// file keeps the host CLI's own global instruction file fully self-contained.
+//
+// It never clobbers an existing host file: a target that already exists (the
+// user's own CLAUDE.md / AGENTS.md) wins and nothing is written. Nothing is
+// created when the checkout has no meta.md or no home can be located. Returns
+// 1 when the file was installed, 0 otherwise.
+func installHostGlobalMeta(tool string) (int, error) {
+	homeDir := home.Root()
+	if homeDir == "" {
+		return 0, nil
+	}
+	src := filepath.Join(homeDir, "meta.md")
+	if !fs.IsFile(src) {
+		return 0, nil
+	}
+
+	target := hostGlobalMetaFile(tool)
+	// Never clobber an existing host instruction file — the user's own file
+	// wins.
+	if _, err := os.Lstat(target); err == nil {
+		return 0, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return 0, err
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return 0, err
+	}
+	if err := os.WriteFile(target, data, 0o644); err != nil {
+		return 0, err
+	}
+	return 1, nil
 }
 
 // Run executes the assembled CLI invocation, wiring stdin/stdout/stderr

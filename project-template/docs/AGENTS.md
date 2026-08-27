@@ -29,11 +29,22 @@ and to agentless invocations; custom project skills in `docs/skills/`
 tools the same way — write them in the standard format (a directory with a
 SKILL.md carrying name:/description: frontmatter, plus optional support
 files), no per-tool format needed.
+A system-wide meta prompt (from the manigot checkout's `meta.md` — mounted
+read-only into the container at each CLI's global instruction location
+`~/.claude/CLAUDE.md` for Claude Code, `~/.config/opencode/AGENTS.md` for
+OpenCode, or copied into the host CLI's own global instruction file for
+`mg host`) is injected into every session above the agents, skills and this
+project context. This file still wins on conflict — it is the most
+project-specific layer.
 Custom agents that must commit (like the built-in developer/reviewer/quality)
 declare `commit: true` in their frontmatter; agents that never commit declare
 `commit: false` and get a read-only git mount. The default — no agent named,
 file missing, or marker absent/unknown — is a writable git mount, so a
 committing agent is never broken by a missing marker.
+Agent files can also deny specific commands (`deny:` — a command deny-list)
+and declare a network isolation level (`network:`); both are designed but not
+yet enforced. `docs/agent-template.md` in the manigot checkout is a copy-me
+reference agent showing the full frontmatter surface and every guardrail.
 Every job-worktree session ends with a host-side sweep-commit of leftover
 changes (a `[<id>] chore: commit all` commit), so read-only agents' outputs
 (like the analyst's tasks.md) are committed after their session and `mg done`

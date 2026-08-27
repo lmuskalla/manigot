@@ -58,6 +58,7 @@ manigot/
     sysadmin.md
     chat.md
   skills/                 ← global skills (<name>/SKILL.md), delivered the same way as agents
+  meta.md                 ← system-wide meta prompt, injected into every session (see "Meta prompt")
   project-template/       ← copy this into each new project to get started (via `mg init`)
     docs/
       AGENTS.md
@@ -387,6 +388,7 @@ A profile bundles the agent CLI with the subscription it is billed against.
 | Permissions | auto-approved via `--dangerously-skip-permissions` | auto-approved via `--auto` |
 | Global agents | `~/.claude/agents/` | `~/.config/opencode/agents/` |
 | Global skills | `~/.claude/skills/` | `~/.config/opencode/skills/` |
+| Global meta prompt | `~/.claude/CLAUDE.md` | `~/.config/opencode/AGENTS.md` |
 | `docs/` mounted at | `/workspace/.claude` | `/workspace/.opencode` |
 | Project agents | `/workspace/.claude/agents/` | `/workspace/.opencode/agents/` |
 | Project skills | `/workspace/.claude/skills/` | `/workspace/.opencode/skills/` |
@@ -421,6 +423,14 @@ skills in `docs/skills/` ride the `docs/` mount into the container and
 override a global skill of the same name — no conversion, no shadow mount,
 because skills are plain directories both CLIs read natively. Your
 `docs/skills/` source files are never modified.
+
+The system-wide meta prompt (`meta.md` in the manigot checkout — see
+["Meta prompt"](#meta-prompt)) is delivered the same way, at each CLI's
+*global instruction* file: `~/.claude/CLAUDE.md` for Claude Code,
+`~/.config/opencode/AGENTS.md` for OpenCode. For a container session the
+checkout file is mounted read-only at that path — plain markdown, so no
+conversion and no temp dir; a checkout without `meta.md` simply yields no
+mount.
 
 The read-only agents — `@reviewer`, `@security`, `@analyst` and `@owner` —
 express their restriction in both tools' schemas: the Claude-Code `tools:`
@@ -474,6 +484,12 @@ launcher for work that must touch the host itself.
   `~/.config/opencode/skills/` for OpenCode) — symlinked skill dirs for Claude
   Code, copied dirs for OpenCode — and never clobbers an existing host skill
   of the same name (your own skill wins).
+- **Meta prompt.** The system-wide meta prompt (`meta.md`) is delivered into
+  the host CLI's own global instruction file (`~/.claude/CLAUDE.md` for Claude
+  Code, `~/.config/opencode/AGENTS.md` for OpenCode) as a **copy — never a
+  symlink** (a symlink would let Claude's `/memory` writes and agent edits land
+  back in the manigot checkout) — and never clobbers an existing host file
+  (your own file wins).
 - **OpenCode model.** The zai/opencode-go/opencode-zen profiles' plan model is
   forwarded via opencode's `--model` flag; mg never writes your host's opencode
   config.
@@ -556,6 +572,34 @@ Write them in the same format as the built-ins (`name:`, `description:`,
 `tools: Read, Grep, ...`) — the OpenCode copy is generated from that file at
 launch, so you never need to hand-write OpenCode's object form.
 
+### Agent frontmatter and guardrails
+
+Every agent is a single markdown file whose frontmatter carries both its
+identity and its restrictions. The keys manigot understands:
+
+| Key | Effect | Enforced |
+|---|---|---|
+| `name:` | the agent's `@name` (must match the filename) | both CLIs |
+| `description:` | one line for `mg agents` and the TUI picker | both CLIs |
+| `tools:` | Claude Code tool allowlist (`Read, Grep, Glob, Write, Edit, Bash`) | Claude Code |
+| `commit:` | `true` → writable git mount; `false` → read-only gitdir, the hard boundary | both CLIs |
+| `permission:` | OpenCode deny/allow block (`edit`/`bash`/`task`/`webfetch`/`websearch`/`question`), last-match-wins | OpenCode |
+| `deny:` | command deny-list (e.g. keep an agent off a binary the image lacks) | *designed, not yet enforced* |
+| `network:` | session network isolation (`none`/`loopback`/`bridge`) | *designed, not yet enforced* |
+
+Beyond the frontmatter, every session is guarded regardless of agent: the git
+shim restricts git to read + commit, `commit: false` agents get the job's
+git-common-dir mounted read-only (with `GIT_OPTIONAL_LOCKS=0`), the gitdir's
+`hooks/` and other jobs' worktree gitdirs are read-only overlays, `.env` files
+are shadowed to `/dev/null`, profile credentials are pinned per profile, only
+committing agents may run `shot`, and `mg jdi` stops on a `NEEDS-HUMAN-INPUT:`
+marker or a verdict that isn't APPROVED.
+
+`docs/agent-template.md` is a copy-me reference agent showing every frontmatter
+key, every restriction, and the designed guardrails — copy it to
+`docs/agents/<name>.md` for a project agent or `agents/<name>.md` for a global
+one.
+
 ---
 
 ## Skills
@@ -584,6 +628,44 @@ project split:
 manigot ships one example skill, `skills/job-brief/`; drop yours into
 `skills/` in the checkout (or `docs/skills/` in a project) to make them
 available everywhere.
+
+---
+
+## Meta prompt
+
+The meta prompt (`meta.md` at the manigot checkout root) is a system-wide
+instruction file that is injected into **every** session — the top of the
+instruction hierarchy:
+
+```
+meta prompt (system-wide)  →  agents (per role)  →  skills (on demand)  →  project context (docs/AGENTS.md)
+```
+
+It carries the general "do this, do that" character and goals that apply
+regardless of agent, project, or interactive/`--print` mode — e.g. work inside
+the job's `docs/`, respect the job workflow and per-task commits, never touch
+`.env`/credentials, prefer small focused changes, verify rendered work with
+`shot`. The agent files remain the operative per-role instructions; the meta
+prompt is deliberately tool-neutral and does not duplicate their rules.
+
+Delivery mirrors the global agents/skills mechanism, at each CLI's **global
+instruction** location — the file both CLIs load in every session, independent
+of agent, project, or mode:
+
+- **Claude Code**: `~/.claude/CLAUDE.md` (the user-global memory file). It is
+  loaded before the project context at `/workspace/.claude/CLAUDE.md`, so the
+  project-level context still wins on conflict — the desired precedence.
+- **OpenCode**: `~/.config/opencode/AGENTS.md` (the global rules file), loaded
+  alongside the project `/workspace/AGENTS.md` context mount.
+
+For a container session the checkout's `meta.md` is mounted read-only at the
+per-tool target (no conversion — plain markdown is native to both CLIs). For
+`mg host` it is delivered into the host CLI's own global instruction file as a
+**copy, never a symlink** — `~/.claude/CLAUDE.md` is Claude's user-writable
+memory file, and a symlink would let `/memory` writes and agent edits land
+back in the checkout. Delivery is non-clobbering (an existing host file wins)
+and warn-only on failure, exactly like the agent/skill installers. A checkout
+without `meta.md` simply yields no delivery — the file is optional.
 
 ---
 
