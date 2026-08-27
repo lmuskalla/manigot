@@ -1,11 +1,11 @@
 // Package home locates the manigot checkout the running binary belongs to —
 // the source of .env, config/tui-settings.json, agents/, skills/, assets/,
-// prompts/ (the system-wide meta prompt) and the project template. It replaced the resolve package's checkout derivation:
-// once the single `mg` binary became the whole host-side tool there were no
-// host scripts left to resolve, but the checkout that provides the binary's
-// data files still needs locating — for an installed symlink (whose real
-// target lives in a checkout), a checkout's own bin/mg, and `go run` from the
-// checkout root.
+// prompts/ (the system-wide meta prompt) and the project template. It
+// replaced the resolve package's checkout derivation: once the single `mg`
+// binary became the whole host-side tool there were no host scripts left to
+// resolve, but the checkout that provides the binary's data files still needs
+// locating — for an installed symlink (whose real target lives in a checkout),
+// a checkout's own bin/mg, and `go run` from the checkout root.
 package home
 
 import (
@@ -27,9 +27,9 @@ const EnvHome = "MANIGOT_HOME"
 //  2. the running binary's own location — bin/mg inside the checkout, or a
 //     symlinked install resolved back into it (the binary one directory
 //     below the checkout root, and the root itself);
-//  3. the working directory (covers `go run ./cmd/mg` from the checkout
-//     root, where the binary lives in a temp build dir that looks like
-//     nothing).
+//  3. the working directory (covers `cd src && go run ./cmd/mg` from the
+//     checkout root, where the binary lives in a temp build dir that looks
+//     like nothing).
 func Root() string {
 	if home := strings.TrimSpace(os.Getenv(EnvHome)); home != "" {
 		return absOrSame(home)

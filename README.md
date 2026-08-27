@@ -26,16 +26,17 @@ used by bare `mg` with `mg profiles`, and configure credentials with
 manigot/
   Dockerfile              ← build once, rebuild on Claude Code / OpenCode updates
   Makefile                ← build / rebuild / install / help; `make mg` builds bin/mg
-  cmd/mg/                 ← the one host-side binary ('mg'); every command is a subcommand
+  src/                    ← the Go module (module root: go.mod, cmd/, internal/)
+    cmd/mg/               ← the one host-side binary ('mg'); every command is a subcommand
                             (session, profiles, theme, setup, agents, job, done, delete, diff, init, tui, jdi)
-  internal/               ← the host-side logic as Go packages
-    session/              ← docker launch construction (mounts, env, profiles)
-    job/                  ← job lifecycle: create / finish / delete
-    git/                  ← worktree/branch operations
-    ui/                   ← the Bubble Tea TUI (reached via `mg tui`)
-    orchestrate/          ← the `mg jdi` state machine
-    config/               ← profiles table, .env, settings
-    ...                   ← agentlist, cli, editor, home, launch, markdown, project
+    internal/             ← the host-side logic as Go packages
+      session/            ← docker launch construction (mounts, env, profiles)
+      job/                ← job lifecycle: create / finish / delete
+      git/                ← worktree/branch operations
+      ui/                 ← the Bubble Tea TUI (reached via `mg tui`)
+      orchestrate/        ← the `mg jdi` state machine
+      config/             ← profiles table, .env, settings
+      ...                 ← agentlist, cli, editor, home, launch, markdown, project
   scripts/                ← one script only
     entrypoint.sh         ← runs inside the container before the agent CLI starts
     shot.js               ← the `shot` render tool (baked into the image as /usr/local/bin/shot;
@@ -1136,12 +1137,13 @@ make rebuild
 ```
 
 The image also ships `make` and the Go toolchain (Debian trixie's `golang-go`,
-currently Go 1.24) so the host-side tool in `cmd/` can be built and tested from
-inside a container. `GOTOOLCHAIN=local` is set, so if `go.mod` ever requires a
-newer Go than the image has, the build fails loudly instead of silently
-downloading one.
+currently Go 1.24) so the host-side tool in `src/cmd/` can be built and tested
+from inside a container. `GOTOOLCHAIN=local` is set, so if `src/go.mod` ever
+requires a newer Go than the image has, the build fails loudly instead of
+silently downloading one.
 
-The Go module cache is pre-warmed at build time from `go.mod` and `go.sum`,
-which means `make mg` and `go test ./...` work inside the container without
-network access — but also that **bumping a dependency requires a `make
-rebuild`**, otherwise the new module is missing from the cache.
+The Go module cache is pre-warmed at build time from `src/go.mod` and
+`src/go.sum`, which means `make mg` and `go test ./...` (from `src/`) work
+inside the container without network access — but also that **bumping a
+dependency requires a `make rebuild`**, otherwise the new module is missing
+from the cache.

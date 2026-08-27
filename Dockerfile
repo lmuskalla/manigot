@@ -125,7 +125,7 @@ USER claude
 # Couples the image to go.sum: a dependency bump then needs a `make rebuild`.
 # Delete these two instructions if you'd rather rely on the container having
 # network.
-COPY --chown=claude:claude go.mod go.sum /tmp/tui/
+COPY --chown=claude:claude src/go.mod src/go.sum /tmp/tui/
 RUN cd /tmp/tui && go mod download && rm -rf /tmp/tui
 
 # The host-side session launcher (cmd/mg's session subcommand) runs the

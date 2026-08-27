@@ -14,13 +14,14 @@ and configured with `mg setup`.
 ## Stack
 - Runtime: Docker (single image, built from `Dockerfile`)
 - Agent CLIs: Claude Code (`claude`) and OpenCode (`opencode`), both installed in the image
-- Host-side tool: **one Go binary, `mg`** (`cmd/mg`), the entire host-side
+- Host-side tool: **one Go binary, `mg`** (`src/cmd/mg`), the entire host-side
   orchestrator — bash is reduced to exactly one file,
   `scripts/entrypoint.sh`, which runs inside the container image and is part
   of the agent environment, not the orchestrator
-- Host-side logic: Go packages under `internal/` (`session`, `job`, `git`,
+- Host-side logic: Go packages under `src/internal/` (`session`, `job`, `git`,
   `ui`, `orchestrate`, `config`, `agentlist`, `cli`, `home`, `launch`,
-  `markdown`, `project`, `editor`)
+  `markdown`, `project`, `editor`) — the Go module root is `src/`
+  (`src/go.mod`)
 - Agent definitions: Markdown files in `agents/`, delivered into every session
   from the manigot checkout (mounted read-only into the container at the CLI's
   global agent location; for `mg host`, symlinked into Claude Code's config
@@ -55,6 +56,8 @@ and configured with `mg setup`.
 
 The seam between the orchestrator (host-side Go) and the agent environment
 (Docker image + `scripts/entrypoint.sh`) is the **only** seam in the system.
+The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
+`src/internal/`); all paths below are relative to `src/` unless stated.
 
 - `cmd/mg/main.go` — the single binary's dispatcher. Every command is a
   subcommand run in-process: bare `mg` (session), `profiles`, `setup`,
@@ -118,7 +121,7 @@ The seam between the orchestrator (host-side Go) and the agent environment
 - `Dockerfile` — builds the image; installs both agent CLIs (the image is
   purely isolation for workspaces — the global `agents/` and `skills/` are no
   longer baked in, they are mounted from the host at session launch), and
-  pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
+  pre-warms the Go module cache from `src/go.mod`/`src/go.sum` (with
   `GOTOOLCHAIN=local` a stale path breaks the build). The meta-prompt mount
   targets' parent dirs (`~/.claude` and `~/.config/opencode`) are pre-created
   in the image.

@@ -15,13 +15,13 @@ rebuild: ## Force rebuild with no cache (use after Claude Code updates)
 # The one `mg` binary is the entire host-side tool: session, profiles, setup,
 # agents, job, done, delete, init, tui and jdi are all subcommands of it. The
 # only bash left is scripts/entrypoint.sh, which runs inside the container
-# image.
+# image. The Go module lives in src/ (go.mod, cmd/, internal/).
 
 MG_BIN := bin/mg
 
 mg: ## Build the host-side mg binary into bin/
 	@mkdir -p bin
-	CGO_ENABLED=0 go build -trimpath \
+	cd src && CGO_ENABLED=0 go build -trimpath \
 		-ldflags "-X main.version=$(VERSION) -X main.tuiVersion=$(VERSION) -X main.jdiVersion=$(VERSION)" \
 		-o "$(CURDIR)/$(MG_BIN)" ./cmd/mg
 	@echo "Built $(MG_BIN) ($(VERSION))"
@@ -63,9 +63,9 @@ uninstall: ## Remove the symlink created by `make install`
 # the Go checks always run. CI wiring (a GitHub Actions workflow, if that's
 # the intended vehicle) is deliberately left out — the repo has no CI today.
 
-check: ## Run go vet + go test, and shellcheck on scripts/entrypoint.sh (when installed)
-	go vet ./...
-	go test ./...
+check: ## Run go vet + go test (from src/), and shellcheck on scripts/entrypoint.sh (when installed)
+	cd src && go vet ./...
+	cd src && go test ./...
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck scripts/entrypoint.sh; \
 	else \
