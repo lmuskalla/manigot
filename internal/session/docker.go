@@ -291,7 +291,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	}
 
 	// ── Global meta prompt ─────────────────────────────────────────────────
-	// The meta prompt (<home>/meta.md) is a system-wide instruction file that
+	// The meta prompt (<home>/prompts/meta.md) is a system-wide instruction file that
 	// sits *above* agents and skills in the instruction hierarchy: it is
 	// injected into every session, regardless of agent, project, or
 	// interactive/--print mode. Each CLI loads it from its *global
@@ -304,10 +304,10 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	// Like skills, the file is plain markdown native to both CLIs, so no
 	// conversion and no temp dir are needed (and thus no Cleanup hook): the
 	// checkout file is mounted read-only at the per-tool target. A checkout
-	// without meta.md yields no mount (it is optional, like skills).
+	// without prompts/meta.md yields no mount (it is optional, like skills).
 	var globalMetaMount []string
 	if homeDir := home.Root(); homeDir != "" {
-		metaFile := filepath.Join(homeDir, "meta.md")
+		metaFile := filepath.Join(homeDir, "prompts", "meta.md")
 		if fs.IsFile(metaFile) {
 			if info.Tool == config.ToolOpenCode {
 				globalMetaMount = []string{"-v", metaFile + ":/home/claude/.config/opencode/AGENTS.md:ro"}

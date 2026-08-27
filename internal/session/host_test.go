@@ -783,7 +783,7 @@ func TestBuildHostDeliversGlobalSkills(t *testing.T) {
 }
 
 // TestInstallHostGlobalMetaClaudeCopies — mg host runs the CLI directly with
-// no mounts, so the manigot checkout's system-wide meta prompt (<home>/meta.md)
+// no mounts, so the manigot checkout's system-wide meta prompt (<home>/prompts/meta.md)
 // is surfaced by COPYING it into the host CLI's global instruction file
 // (~/.claude/CLAUDE.md). The delivered file is a regular file — never a
 // symlink into the checkout, so Claude's /memory writes and agent edits can
@@ -889,7 +889,7 @@ func TestInstallHostGlobalMetaNeverClobbers(t *testing.T) {
 	}
 }
 
-// TestInstallHostGlobalMetaNoMeta — with no meta.md in the checkout, nothing
+// TestInstallHostGlobalMetaNoMeta — with no prompts/meta.md in the checkout, nothing
 // is installed and no host config file is created (no side effects on the
 // user's home).
 func TestInstallHostGlobalMetaNoMeta(t *testing.T) {
@@ -910,7 +910,7 @@ func TestInstallHostGlobalMetaNoMeta(t *testing.T) {
 // it on diag.
 func TestBuildHostDeliversGlobalMeta(t *testing.T) {
 	_, _ = docProject(t)
-	// Re-point the home at a checkout that has meta.md, and $HOME at a temp
+	// Re-point the home at a checkout that has prompts/meta.md, and $HOME at a temp
 	// dir so the copy lands somewhere isolated.
 	home := checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-token\nCLAUDE_ACCOUNT_UUID=uuid-1\nCLAUDE_EMAIL=me@x.io\nCLAUDE_ORG_UUID=org-1\n")
 	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")

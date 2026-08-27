@@ -115,7 +115,7 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 
 	// ── Global meta prompt ──────────────────────────────────────────────────
 	// The same delivery problem applies to the system-wide meta prompt
-	// (<home>/meta.md): the host CLI cannot see it without the image/mounts,
+	// (<home>/prompts/meta.md): the host CLI cannot see it without the image/mounts,
 	// so it is surfaced into the CLI's own global instruction file. Unlike
 	// agents/skills it is a single file copied, never symlinked, so Claude's
 	// /memory writes and agent edits can never reach the checkout. Non-
@@ -451,7 +451,7 @@ func installHostGlobalSkills(tool string) (int, error) {
 // tool — the single file the CLI loads in every session at its *global
 // instruction* location: ~/.claude/CLAUDE.md for Claude Code (the user-global
 // memory file) and ~/.config/opencode/AGENTS.md for OpenCode (the global
-// rules file) — the same locations the container path mounts <home>/meta.md
+// rules file) — the same locations the container path mounts <home>/prompts/meta.md
 // into. The path is derived from $HOME (os.UserHomeDir), so tests can point it
 // at a temp dir.
 func hostGlobalMetaFile(tool string) string {
@@ -466,7 +466,7 @@ func hostGlobalMetaFile(tool string) string {
 }
 
 // installHostGlobalMeta surfaces the manigot checkout's system-wide meta
-// prompt (<home>/meta.md) to the host CLI — the host equivalent of the
+// prompt (<home>/prompts/meta.md) to the host CLI — the host equivalent of the
 // container path's read-only mount (mg host runs the CLI directly, with no
 // mounts).
 //
@@ -477,14 +477,14 @@ func hostGlobalMetaFile(tool string) string {
 //
 // It never clobbers an existing host file: a target that already exists (the
 // user's own CLAUDE.md / AGENTS.md) wins and nothing is written. Nothing is
-// created when the checkout has no meta.md or no home can be located. Returns
+// created when the checkout has no prompts/meta.md or no home can be located. Returns
 // 1 when the file was installed, 0 otherwise.
 func installHostGlobalMeta(tool string) (int, error) {
 	homeDir := home.Root()
 	if homeDir == "" {
 		return 0, nil
 	}
-	src := filepath.Join(homeDir, "meta.md")
+	src := filepath.Join(homeDir, "prompts", "meta.md")
 	if !fs.IsFile(src) {
 		return 0, nil
 	}

@@ -60,7 +60,8 @@ manigot/
     sysadmin.md
     chat.md
   skills/                 ← global skills (<name>/SKILL.md), delivered the same way as agents
-  meta.md                 ← system-wide meta prompt, injected into every session (see "Meta prompt")
+  prompts/                ← prompt material delivered into every session
+    meta.md               ← the system-wide meta prompt (see "Meta prompt")
   project-template/       ← copy this into each new project to get started (via `mg init`)
     docs/
       AGENTS.md
@@ -470,12 +471,12 @@ override a global skill of the same name — no conversion, no shadow mount,
 because skills are plain directories both CLIs read natively. Your
 `docs/skills/` source files are never modified.
 
-The system-wide meta prompt (`meta.md` in the manigot checkout — see
+The system-wide meta prompt (`prompts/meta.md` in the manigot checkout — see
 ["Meta prompt"](#meta-prompt)) is delivered the same way, at each CLI's
 *global instruction* file: `~/.claude/CLAUDE.md` for Claude Code,
 `~/.config/opencode/AGENTS.md` for OpenCode. For a container session the
 checkout file is mounted read-only at that path — plain markdown, so no
-conversion and no temp dir; a checkout without `meta.md` simply yields no
+conversion and no temp dir; a checkout without `prompts/meta.md` simply yields no
 mount.
 
 The read-only agents — `@reviewer`, `@security`, `@analyst` and `@owner` —
@@ -530,7 +531,7 @@ launcher for work that must touch the host itself.
   `~/.config/opencode/skills/` for OpenCode) — symlinked skill dirs for Claude
   Code, copied dirs for OpenCode — and never clobbers an existing host skill
   of the same name (your own skill wins).
-- **Meta prompt.** The system-wide meta prompt (`meta.md`) is delivered into
+- **Meta prompt.** The system-wide meta prompt (`prompts/meta.md`) is delivered into
   the host CLI's own global instruction file (`~/.claude/CLAUDE.md` for Claude
   Code, `~/.config/opencode/AGENTS.md` for OpenCode) as a **copy — never a
   symlink** (a symlink would let Claude's `/memory` writes and agent edits land
@@ -679,7 +680,7 @@ available everywhere.
 
 ## Meta prompt
 
-The meta prompt (`meta.md` at the manigot checkout root) is a system-wide
+The meta prompt (`prompts/meta.md` in the manigot checkout) is a system-wide
 instruction file that is injected into **every** session — the top of the
 instruction hierarchy:
 
@@ -704,14 +705,14 @@ of agent, project, or mode:
 - **OpenCode**: `~/.config/opencode/AGENTS.md` (the global rules file), loaded
   alongside the project `/workspace/AGENTS.md` context mount.
 
-For a container session the checkout's `meta.md` is mounted read-only at the
+For a container session the checkout's `prompts/meta.md` is mounted read-only at the
 per-tool target (no conversion — plain markdown is native to both CLIs). For
 `mg host` it is delivered into the host CLI's own global instruction file as a
 **copy, never a symlink** — `~/.claude/CLAUDE.md` is Claude's user-writable
 memory file, and a symlink would let `/memory` writes and agent edits land
 back in the checkout. Delivery is non-clobbering (an existing host file wins)
 and warn-only on failure, exactly like the agent/skill installers. A checkout
-without `meta.md` simply yields no delivery — the file is optional.
+without `prompts/meta.md` simply yields no delivery — the file is optional.
 
 ---
 

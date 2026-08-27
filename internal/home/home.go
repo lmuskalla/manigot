@@ -1,6 +1,6 @@
 // Package home locates the manigot checkout the running binary belongs to —
-// the source of .env, config/tui-settings.json, agents/, assets/ and the
-// project template. It replaced the resolve package's checkout derivation:
+// the source of .env, config/tui-settings.json, agents/, skills/, assets/,
+// prompts/ (the system-wide meta prompt) and the project template. It replaced the resolve package's checkout derivation:
 // once the single `mg` binary became the whole host-side tool there were no
 // host scripts left to resolve, but the checkout that provides the binary's
 // data files still needs locating — for an installed symlink (whose real

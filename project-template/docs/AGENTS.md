@@ -29,7 +29,7 @@ and to agentless invocations; custom project skills in `docs/skills/`
 tools the same way — write them in the standard format (a directory with a
 SKILL.md carrying name:/description: frontmatter, plus optional support
 files), no per-tool format needed.
-A system-wide meta prompt (from the manigot checkout's `meta.md` — mounted
+A system-wide meta prompt (from the manigot checkout's `prompts/meta.md` — mounted
 read-only into the container at each CLI's global instruction location
 `~/.claude/CLAUDE.md` for Claude Code, `~/.config/opencode/AGENTS.md` for
 OpenCode, or copied into the host CLI's own global instruction file for

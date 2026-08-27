@@ -33,8 +33,8 @@ and configured with `mg setup`.
   `docs/skills/` ride the docs mount and override global skills of the same
   name. manigot ships one example skill, `skills/job-brief/`; the mechanism
   is otherwise provisioned for user-supplied global + project skills.
-- Meta prompt: a system-wide instruction file `meta.md` at the checkout root,
-  injected into every session — the top of the instruction hierarchy
+- Meta prompt: a system-wide instruction file `prompts/meta.md` in the
+  checkout, injected into every session — the top of the instruction hierarchy
   (meta prompt → agents → skills → project context). Delivered like global
   skills: mounted read-only into the container at each CLI's *global
   instruction* location (`~/.claude/CLAUDE.md` for Claude Code, the user-global
@@ -42,7 +42,7 @@ and configured with `mg setup`.
   file), and for `mg host` copied — never symlinked — into the host CLI's own
   global instruction file (a symlink would let Claude's `/memory` writes and
   agent edits land back in the checkout). Non-clobbering and optional: a
-  checkout without `meta.md` yields no delivery.
+  checkout without `prompts/meta.md` yields no delivery.
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
@@ -77,7 +77,8 @@ The seam between the orchestrator (host-side Go) and the agent environment
   (`<home>/skills/`) are mounted read-only at the CLI's global skills
   location — verbatim for Claude Code, staged into a temp dir for OpenCode —
   and project skills (`docs/skills/`) ride the existing docs mount, overriding
-  global skills of the same name. The system-wide meta prompt (`<home>/meta.md`)
+  global skills of the same name. The system-wide meta prompt
+  (`<home>/prompts/meta.md`)
   is mounted read-only the same way at each CLI's *global instruction*
   location (`~/.claude/CLAUDE.md` for Claude Code,
   `~/.config/opencode/AGENTS.md` for OpenCode) — plain markdown, so no
@@ -103,7 +104,7 @@ The seam between the orchestrator (host-side Go) and the agent environment
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
   the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` (quotes.json),
-  `meta.md` and `project-template/`.
+  `prompts/` (the meta prompt) and `project-template/`.
 - `scripts/entrypoint.sh` — the ONLY bash, container-side. Branches on
   `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's onboarding
   wizard, pre-accepts folder trust for `/workspace`, and starts it in
@@ -578,7 +579,7 @@ either way.
   hard-errors on the list form) — never clobbering an existing name. Global
   skills are delivered the same way: symlinked skill dirs for Claude Code,
   copied dirs for OpenCode, never clobbering an existing skill name. The
-  system-wide meta prompt (`meta.md`) is delivered into the CLI's own global
+  system-wide meta prompt (`prompts/meta.md`) is delivered into the CLI's own global
   instruction file (`~/.claude/CLAUDE.md` for Claude Code,
   `~/.config/opencode/AGENTS.md` for OpenCode) as a copy — never a symlink,
   since a symlink would let Claude's `/memory` writes and agent edits land
