@@ -690,11 +690,11 @@ meta prompt (system-wide)  →  agents (per role)  →  skills (on demand)  → 
 ```
 
 It carries the general "do this, do that" character and goals that apply
-regardless of agent, project, or interactive/`--print` mode — e.g. work inside
-the job's `docs/`, respect the job workflow and per-task commits, never touch
-`.env`/credentials, prefer small focused changes, verify rendered work with
-`shot`. The agent files remain the operative per-role instructions; the meta
-prompt is deliberately tool-neutral and does not duplicate their rules.
+regardless of agent, project, or interactive/`--print` mode — e.g. prefer
+small, focused changes and concrete verification over assumption. The agent
+files remain the operative per-role instructions (job workflow, commit
+discipline, guardrails, `shot` usage all live there); the meta prompt is
+deliberately tool-neutral and does not duplicate their rules.
 
 Delivery mirrors the global agents/skills mechanism, at each CLI's **global
 instruction** location — the file both CLIs load in every session, independent
