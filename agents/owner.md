@@ -4,7 +4,9 @@ description: Reviews features and decisions from the product and user perspectiv
 tools: Read, Grep, Glob, Write, Edit
 commit: false
 permission:
-  edit: deny
+  edit:
+    "*": deny
+    "**/*.md": allow
   bash: deny
   task: deny
   webfetch: deny
