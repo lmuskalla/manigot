@@ -81,11 +81,6 @@ func TestBuildPlainClaudeSession(t *testing.T) {
 	if !strings.Contains(diag.String(), "║           manigot") {
 		t.Errorf("missing banner in diag:\n%s", diag.String())
 	}
-	// The ASCII logo (assets/manigot.txt via brand.Logo()) is printed above
-	// the boxed banner.
-	if !strings.Contains(diag.String(), "ASCII-LOGO-STUB") || !strings.Contains(diag.String(), "SECOND-LINE") {
-		t.Errorf("missing logo lines in diag:\n%s", diag.String())
-	}
 	if strings.Contains(diag.String(), "Shadowed : none") == false {
 		t.Errorf("missing shadowed-none line:\n%s", diag.String())
 	}

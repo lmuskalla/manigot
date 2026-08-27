@@ -133,9 +133,6 @@ Every Sopranos-flavored name currently in use, in one place:
   no `docs/` was found (no project context, no job workflow).
 - **assets/quotes.json** — the flat, editable repository of Sopranos quotes
   `entrypoint.sh` prints one random line from each session.
-- **assets/manigot.txt** — the ASCII logo (the three-window mark, with the
-  `*#@*` censor-bleep glyphs), shown in the session banner and the TUI list
-  header.
 - **This Thing of Ours** — this document's title.
 
 That's the whole list — see "The aliases" and "Flavor text" above for the

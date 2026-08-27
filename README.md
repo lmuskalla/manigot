@@ -2,21 +2,6 @@
   <img src="assets/manigot.png" />
 </p>
 
-The repo's ASCII logo — shown in the TUI list header and the session banner,
-canonical source `assets/manigot.txt`:
-
-```
-.----------------------------------.
-|   .----.   .----.   .----.       |
-|   |*#@*|   |*#@*|   |*#@*|       |
-'----------------------------------'
-```
-
-Note: `assets/manigot.png` above is an older draft render — regenerating it
-to match the ASCII logo is a follow-up (there is no in-repo ASCII→PNG
-renderer; `shot` renders URLs).
-
-
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
@@ -57,7 +42,7 @@ manigot/
   .env                    ← your credentials + default profile (gitignored, never committed)
   .gitignore
   README.md
-  assets/                 ← quotes.json (flavor quotes) and manigot.txt (the ASCII logo)
+  assets/                 ← quotes.json (flavor quotes)
   agents/                 ← global agents, mounted into the container (and delivered for mg host)
     analyst.md
     developer.md

@@ -159,7 +159,7 @@ func TestRenderListRecentActivityScalesWithSpareRoom(t *testing.T) {
 	a.refreshRecentCommits()
 	a.width, a.height = 80, 40 // generous height — plenty of spare room
 
-	if got := a.list.recentActivityShown(len(a.jobs), a.settings.RecentActivityCountValue(), a.height, a.width); got != 7 {
+	if got := a.list.recentActivityShown(len(a.jobs), a.settings.RecentActivityCountValue(), a.height); got != 7 {
 		t.Fatalf("recentActivityShown() = %d, want the configured max 7 given ample spare room", got)
 	}
 
@@ -191,7 +191,7 @@ func TestRenderListRecentActivityKeepsFloorWhenListFillsScreen(t *testing.T) {
 	a := NewApp(dir, jobs)
 	a.width, a.height = 80, 24 // a list this long already fills a normal terminal
 
-	if got := a.list.recentActivityShown(len(a.jobs), a.settings.RecentActivityCountValue(), a.height, a.width); got != recentActivityFloor {
+	if got := a.list.recentActivityShown(len(a.jobs), a.settings.RecentActivityCountValue(), a.height); got != recentActivityFloor {
 		t.Errorf("recentActivityShown() = %d, want the floor %d when the list already fills the screen", got, recentActivityFloor)
 	}
 
@@ -675,120 +675,5 @@ func TestRenderActivityLinesByteIdentical(t *testing.T) {
 	v := &listView{recentCommits: commits}
 	if viaList := v.renderRecentActivity(w, len(commits)); viaList != got {
 		t.Errorf("listView.renderRecentActivity no longer delegates to renderActivityLines:\n got: %q\nwant: %q", viaList, got)
-	}
-}
-
-// --- ASCII logo in the list header (TASK-4) ---------------------------------
-
-// TestRenderListShowsLogoAboveTitle verifies the ASCII logo renders above the
-// "manigot - <project> - on <branch>" title, styled with the accent (the same
-// brand treatment the title gets), when the terminal has room for it.
-func TestRenderListShowsLogoAboveTitle(t *testing.T) {
-	dir, _ := gitInitRepo(t)
-	jobs, _ := job.Discover(dir)
-	a := NewApp(dir, jobs)
-	// Simulate a loaded logo asset (MANIGOT_HOME is unset in tests, so
-	// brand.Logo() would otherwise return "").
-	a.list.logo = []string{".---.", "| # |", "'---'"}
-	a.list.logoWidth = 5
-	a.width, a.height = 80, 24
-
-	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
-
-	// The logo is the first thing rendered, above the title.
-	wantFirst := logoStyle.Render(".---.") + "\n"
-	if !strings.HasPrefix(got, wantFirst) {
-		t.Errorf("renderList must start with the styled logo line %q:\n%s", wantFirst, got)
-	}
-	// Every logo row is present, in order.
-	titleIdx := strings.Index(got, "manigot - ")
-	if titleIdx < 0 {
-		t.Fatalf("renderList missing the title:\n%s", got)
-	}
-	for _, row := range []string{".---.", "| # |", "'---'"} {
-		if strings.Index(got, row) > titleIdx {
-			t.Errorf("logo row %q renders below the title, want above:\n%s", row, got)
-		}
-	}
-}
-
-// TestRenderListOmitsLogoWhenNoRoom verifies the logo is omitted entirely
-// when the job list already fills the terminal — it must never push job rows
-// down or overflow, the same graceful-degrade rule as recentActivityShown.
-func TestRenderListOmitsLogoWhenNoRoom(t *testing.T) {
-	dir, _ := gitInitRepo(t)
-	wts := t.TempDir()
-	for i := 0; i < 20; i++ {
-		addJobWorktree(t, dir, wts, fmt.Sprintf("feature/bbbb%02d_b", i), fmt.Sprintf("bbbb%02d_b", i),
-			fmt.Sprintf("# Brief: B%d\n\nstatus: open\nid: bbbb%02d\ndate: 2026-01-01\n", i, i))
-	}
-
-	jobs, _ := job.Discover(dir)
-	if len(jobs) != 20 {
-		t.Fatalf("job.Discover: got %d jobs, want 20", len(jobs))
-	}
-	a := NewApp(dir, jobs)
-	a.list.logo = []string{".---.", "| # |", "'---'"}
-	a.list.logoWidth = 5
-	a.width, a.height = 80, 24
-
-	got := a.list.render(a.jobs, a.status, a.statusVisible(), a.settings.RecentActivityCountValue(), a.spinnerStep, a.width, a.height)
-	if strings.Contains(got, ".---.") {
-		t.Errorf("renderList must omit the logo when the list fills the terminal:\n%s", got)
-	}
-	// Every job row must still be present — the logo must never have pushed
-	// one off the rendered output.
-	cols := listColumns()
-	row := pad("open", cols.status) + "  " + pad("define", cols.stage) + "  " + pad("feature", cols.typ)
-	if n := strings.Count(got, row); n != 20 {
-		t.Errorf("renderList should still show all 20 job rows; found %d:\n%s", n, got)
-	}
-}
-
-// TestRenderListLogoShrinksActivityStrip verifies the logo's rows are folded
-// into the fixed chrome budget: when the logo is shown, the recent-activity
-// strip's spare-room math subtracts exactly the logo's height, so the total
-// render never grows past the pre-logo height.
-func TestRenderListLogoShrinksActivityStrip(t *testing.T) {
-	// A listView with enough commits that the commit-count clamp can't bite.
-	v := &listView{
-		recentCommits: []git.Commit{
-			{ShortHash: "abc1234", Subject: "one", RelTime: "now", Branch: "main"},
-			{ShortHash: "def5678", Subject: "two", RelTime: "now", Branch: "main"},
-			{ShortHash: "deadbee", Subject: "three", RelTime: "now", Branch: "main"},
-			{ShortHash: "cafe123", Subject: "four", RelTime: "now", Branch: "main"},
-			{ShortHash: "beef567", Subject: "five", RelTime: "now", Branch: "main"},
-			{ShortHash: "b00b123", Subject: "six", RelTime: "now", Branch: "main"},
-		},
-		logo:      []string{".---.", "| # |", "'---'"},
-		logoWidth: 5,
-	}
-
-	// 1 job, height 14, max 10: spare = 14 - 7 - 1 = 6; the 3-row logo is
-	// shown (14 >= 7+3+1+1), so the strip gets 6 - 3 = 3.
-	if got := v.recentActivityShown(1, 10, 14, 80); got != 3 {
-		t.Errorf("recentActivityShown() with logo = %d, want 3 (logo's 3 rows folded into the chrome)", got)
-	}
-
-	// Without a logo (missing asset), the same view keeps the full spare room.
-	v.logo = nil
-	if got := v.recentActivityShown(1, 10, 14, 80); got != 6 {
-		t.Errorf("recentActivityShown() without logo = %d, want 6", got)
-	}
-}
-
-// TestRenderListLogoOmittedOnNarrowTerminal verifies the logo is omitted when
-// the viewport is narrower than the logo itself — horizontal overflow is just
-// as forbidden as vertical.
-func TestRenderListLogoOmittedOnNarrowTerminal(t *testing.T) {
-	v := &listView{
-		logo:      []string{".---.", "| # |", "'---'"},
-		logoWidth: 5,
-	}
-	if v.logoShown(0, 24, 80) != true {
-		t.Error("logoShown must be true on a wide-enough terminal")
-	}
-	if v.logoShown(0, 24, 4) != false {
-		t.Error("logoShown must be false when the viewport is narrower than the logo")
 	}
 }

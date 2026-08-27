@@ -166,10 +166,6 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 	}
 
 	// ── Info banner ─────────────────────────────────────────────────────────
-	// Same shared printLogo as the docker builder (see docker.go) so the two
-	// banners stay byte-identical — the ASCII logo above the box, then the
-	// boxed details.
-	printLogo(diag)
 	fmt.Fprintln(diag, "╔══════════════════════════════════════╗")
 	fmt.Fprintln(diag, "║           manigot                   ║")
 	fmt.Fprintln(diag, "╠══════════════════════════════════════╣")

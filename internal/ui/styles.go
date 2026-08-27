@@ -44,12 +44,6 @@ var (
 	// accentStyle emphasises short tokens like action-bar keys.
 	accentStyle = lipgloss.NewStyle().Bold(true).Foreground(accent)
 
-	// logoStyle is for the ASCII logo above the list title — the same accent
-	// as the title itself, so the mark and the wordmark read as one brand
-	// block (deliberately not bold: the logo is a graphic, weight would just
-	// thicken every glyph).
-	logoStyle = lipgloss.NewStyle().Foreground(accent)
-
 	// statusOpen / statusDone colour the status column.
 	statusOpenStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#D7A000"))
 	statusDoneStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3FB950"))

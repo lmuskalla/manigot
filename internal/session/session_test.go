@@ -20,13 +20,6 @@ func checkout(t *testing.T, env string) string {
 	if err := os.WriteFile(filepath.Join(dir, "scripts", "entrypoint.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A logo asset so the banner tests exercise the real printLogo path.
-	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "assets", "manigot.txt"), []byte("ASCII-LOGO-STUB\nSECOND-LINE\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	if env != "" {
 		if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
 			t.Fatal(err)

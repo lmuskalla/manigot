@@ -242,16 +242,6 @@ sed -i "s|@REAL_GIT@|$REAL_GIT|g" "$MANIGOT_BIN/git"
 chmod +x "$MANIGOT_BIN/git"
 export PATH="$MANIGOT_BIN:$PATH"
 
-# The ASCII logo, baked into the image at /home/claude/assets/manigot.txt (see
-# Dockerfile) — the in-agent-terminal variant of the host session banner's
-# logo, printed above the flavor quote. Guarded on the file existing so a
-# stale image without it simply skips the logo, and skipped under --print
-# like the quote below: --print mode expects a clean stdout stream.
-if [[ "${MANIGOT_PRINT:-false}" != "true" && -f "$HOME/assets/manigot.txt" ]]; then
-    cat "$HOME/assets/manigot.txt"
-    printf '\n'
-fi
-
 # --print mode expects a clean stdout stream (see run.sh and the
 # --output-format json branch below) — this quote is purely cosmetic, so
 # it's skipped there rather than risking a caller mis-parsing it as part

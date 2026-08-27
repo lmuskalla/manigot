@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lmuskalla/manigot/internal/brand"
 	"github.com/lmuskalla/manigot/internal/git"
 	"github.com/lmuskalla/manigot/internal/job"
 )
@@ -36,42 +35,11 @@ type listView struct {
 	// detached HEAD or a non-repo project (job.Discover's working-tree-only
 	// fallback) — both render nothing rather than an awkward empty label.
 	currentBranch string
-
-	// logo is the ASCII logo's rows (assets/manigot.txt via brand.Logo()),
-	// loaded once in newListView and rendered above the title when the
-	// vertical budget allows (see logoShown). nil when the asset is missing
-	// or unreadable — the header then shows no logo, the same no-error
-	// convention as the session banner's printLogo.
-	logo []string
-
-	// logoWidth is the widest row of v.logo, used to omit the logo on a
-	// terminal narrower than it (it must never overflow horizontally).
-	logoWidth int
 }
 
 // newListView builds the list view for the project at root.
 func newListView(root string) *listView {
-	v := &listView{root: root}
-	v.loadLogo()
-	return v
-}
-
-// loadLogo reads the ASCII logo (assets/manigot.txt via brand.Logo()) into
-// v.logo, split into rows, and records its widest row in v.logoWidth. A
-// missing/unreadable asset leaves both zero — the header then shows no logo.
-func (v *listView) loadLogo() {
-	logo := brand.Logo()
-	if logo == "" {
-		return
-	}
-	// The asset ends with a trailing newline; TrimSuffix keeps the split from
-	// producing a spurious empty last row.
-	v.logo = strings.Split(strings.TrimSuffix(logo, "\n"), "\n")
-	for _, line := range v.logo {
-		if len(line) > v.logoWidth {
-			v.logoWidth = len(line)
-		}
-	}
+	return &listView{root: root}
 }
 
 // update handles the list's own keys — cursor movement over jobCount jobs.
@@ -119,30 +87,6 @@ const recentActivityFloor = 1
 // blank spacer before the recent-activity strip.
 const dashboardFixedChrome = 7
 
-// logoShown reports whether the ASCII logo should be rendered above the
-// title, given the job count and the terminal height/width. The logo's line
-// count is extra fixed chrome on top of dashboardFixedChrome, so it is shown
-// only when there is room for the whole chrome, every job row, and the
-// recent-activity strip's floor — otherwise it is omitted entirely, the same
-// graceful-degrade rule as recentActivityShown, so it can never push job rows
-// down or overflow the terminal. A logo wider than the viewport is omitted
-// too (horizontal overflow is no better than vertical). height == 0 (a view
-// that has never received a tea.WindowSizeMsg, e.g. some existing tests)
-// falls back to showing the logo, the same kind of guard render already
-// applies to width == 0.
-func (v *listView) logoShown(jobCount, height, width int) bool {
-	if len(v.logo) == 0 {
-		return false
-	}
-	if width < v.logoWidth {
-		return false
-	}
-	if height == 0 {
-		return true
-	}
-	return height >= dashboardFixedChrome+len(v.logo)+jobCount+recentActivityFloor
-}
-
 // recentActivityShown returns how many of v.recentCommits should actually be
 // rendered, given the terminal height and job count. It scales
 // between recentActivityFloor and the configured maximum (maxRecent, i.e.
@@ -155,10 +99,7 @@ func (v *listView) logoShown(jobCount, height, width int) bool {
 // blank spacer beneath it, "jobs" headline, divider, blank line before the
 // footer, footer, the blank spacer before the recent-activity strip — is 7
 // rows, mirroring the same kind of budget detailView.bodyHeight documents for
-// the detail view. When the ASCII logo is shown (logoShown), its rows are
-// folded into that chrome, so the spare room — and with it the strip — shrinks
-// by exactly the logo's height: the total render never grows past the
-// pre-logo height. spare is what's left of the terminal height once that
+// the detail view. spare is what's left of the terminal height once that
 // chrome and every job row are accounted for.
 //
 // height == 0 (a view that has never received a tea.WindowSizeMsg, e.g.
@@ -170,15 +111,12 @@ func (v *listView) logoShown(jobCount, height, width int) bool {
 // the state right after mg init on a brand-new project) degrades to 0, so
 // renderRecentActivity renders no strip at all instead of slicing past an
 // empty cache.
-func (v *listView) recentActivityShown(jobCount, maxRecent, height, width int) int {
+func (v *listView) recentActivityShown(jobCount, maxRecent, height int) int {
 	var n int
 	if height == 0 {
 		n = recentActivityFloor
 	} else {
 		spare := height - dashboardFixedChrome - jobCount
-		if v.logoShown(jobCount, height, width) {
-			spare -= len(v.logo)
-		}
 		n = clamp(spare, recentActivityFloor, maxRecent)
 	}
 	if n > len(v.recentCommits) {
@@ -225,17 +163,6 @@ func (v *listView) render(jobs []job.Job, status string, statusVisible bool, max
 	}
 
 	var b strings.Builder
-
-	// Logo — the ASCII mark above the title, colored with the accent. Shown
-	// only when the vertical/horizontal budget allows (logoShown); omitted
-	// entirely otherwise, so it can never push job rows down or overflow the
-	// terminal.
-	if v.logoShown(len(jobs), height, w) {
-		for _, line := range v.logo {
-			b.WriteString(logoStyle.Render(line))
-			b.WriteString("\n")
-		}
-	}
 
 	// Title line: "manigot - <project> - on <branch>".
 	title := "manigot - " + shortRoot(v.root)
@@ -284,7 +211,7 @@ func (v *listView) render(jobs []job.Job, status string, statusVisible bool, max
 	// chrome and every job row are accounted for, so it can grow past its
 	// one-line floor on a sparse list without ever making the total render
 	// taller than the terminal.
-	if activity := v.renderRecentActivity(w, v.recentActivityShown(len(jobs), maxRecent, height, w)); activity != "" {
+	if activity := v.renderRecentActivity(w, v.recentActivityShown(len(jobs), maxRecent, height)); activity != "" {
 		b.WriteString(activity)
 	} else {
 		b.WriteString("\n")
