@@ -32,8 +32,10 @@ and configured with `mg setup`.
   startup, so every agent and every agentless invocation sees them), and for
   `mg host` delivered into the host CLI's config dir. Project skills in
   `docs/skills/` ride the docs mount and override global skills of the same
-  name. manigot ships one example skill, `skills/job-brief/`; the mechanism
-  is otherwise provisioned for user-supplied global + project skills.
+  name. manigot ships a small curated set of skills under `skills/` —
+  `frontend-design`, `webapp-testing`, `test-driven-development`,
+  `systematic-debugging`, plus the example `job-brief`; the mechanism is
+  otherwise provisioned for user-supplied global + project skills.
 - Meta prompt: a system-wide instruction file `prompts/meta.md` in the
   checkout, injected into every session — the top of the instruction hierarchy
   (meta prompt → agents → skills → project context). Delivered like global
@@ -639,7 +641,6 @@ way `@name` launches do.
   harmless.
 - Keep `agents/*.md` and `project-template/docs/AGENTS.md` in sync with
   whatever this file documents — they're meant to describe the same system
-  (the skills mechanism included, even though manigot ships no skills of its
-  own)
+  (the skills mechanism and the shipped skills included)
 - When scope is unclear: ask, don't guess
 - Do not refactor things unrelated to the current task
