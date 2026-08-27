@@ -581,8 +581,9 @@ project split:
   container at the project skills location and override a global skill of the
   same name — the same project-overrides-global precedence agents have.
 
-manigot ships no skills of its own; drop yours into `skills/` in the checkout
-(or `docs/skills/` in a project) to make them available everywhere.
+manigot ships one example skill, `skills/job-brief/`; drop yours into
+`skills/` in the checkout (or `docs/skills/` in a project) to make them
+available everywhere.
 
 ---
 

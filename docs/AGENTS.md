@@ -30,8 +30,8 @@ configured with `mg setup`.
   startup, so every agent and every agentless invocation sees them), and for
   `mg host` delivered into the host CLI's config dir. Project skills in
   `docs/skills/` ride the docs mount and override global skills of the same
-  name. manigot ships no skills of its own — the mechanism is provisioned for
-  user-supplied global + project skills.
+  name. manigot ships one example skill, `skills/job-brief/`; the mechanism
+  is otherwise provisioned for user-supplied global + project skills.
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
