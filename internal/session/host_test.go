@@ -556,6 +556,195 @@ func TestBuildHostLinksGlobalAgents(t *testing.T) {
 	}
 }
 
+// TestInstallHostGlobalSkillsClaudeSymlinks — mg host runs the CLI directly
+// with no mounts, so the manigot checkout's global skills are surfaced by
+// symlinking each skill DIR into the host CLI's global skills dir
+// (~/.claude/skills/), without clobbering an existing host skill of the same
+// name.
+func TestInstallHostGlobalSkillsClaudeSymlinks(t *testing.T) {
+	home := checkout(t, "")
+	writeSkill(t, home, "review", map[string]string{"SKILL.md": "---\nname: review\n---\n"})
+	writeSkill(t, home, "commit", map[string]string{
+		"SKILL.md":  "---\nname: commit\n---\n",
+		"helper.sh": "#!/bin/sh\n",
+	})
+
+	// Point $HOME at a temp dir so symlinks land there, not the real home.
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	n, err := installHostGlobalSkills(config.ToolClaudeCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalSkills: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("installed = %d, want 2", n)
+	}
+
+	// Claude links each skill dir into ~/.claude/skills/.
+	target := filepath.Join(hostHome, ".claude", "skills")
+	for _, name := range []string{"review", "commit"} {
+		link := filepath.Join(target, name)
+		dest, err := os.Readlink(link)
+		if err != nil {
+			t.Fatalf("expected symlink %s: %v", link, err)
+		}
+		if dest != filepath.Join(home, "skills", name) {
+			t.Errorf("symlink %s -> %q, want %q", link, dest, filepath.Join(home, "skills", name))
+		}
+	}
+	// The symlinked dir resolves to the live checkout's SKILL.md.
+	if _, err := os.Stat(filepath.Join(target, "review", "SKILL.md")); err != nil {
+		t.Errorf("symlinked skill does not resolve to SKILL.md: %v", err)
+	}
+}
+
+// TestInstallHostGlobalSkillsOpenCodeCopies — OpenCode's host target gets a
+// COPY of each skill dir (not a symlink), so the CLI's skills dir is a
+// self-contained snapshot; an existing host skill of the same name is never
+// clobbered.
+func TestInstallHostGlobalSkillsOpenCodeCopies(t *testing.T) {
+	home := checkout(t, "")
+	writeSkill(t, home, "review", map[string]string{
+		"SKILL.md":  "---\nname: review\n---\n",
+		"helper.sh": "#!/bin/sh\n",
+	})
+	writeSkill(t, home, "commit", map[string]string{"SKILL.md": "---\nname: commit\n---\n"})
+
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	// A user's own host skill of the same name — must survive untouched.
+	existing := filepath.Join(hostHome, ".config", "opencode", "skills", "review")
+	if err := os.MkdirAll(existing, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userContent := "---\nname: user's own.\n---\n"
+	if err := os.WriteFile(filepath.Join(existing, "SKILL.md"), []byte(userContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := installHostGlobalSkills(config.ToolOpenCode)
+	if err != nil {
+		t.Fatalf("installHostGlobalSkills: %v", err)
+	}
+	// Only commit is installed — review exists already and is preserved.
+	if n != 1 {
+		t.Errorf("installed = %d, want 1 (review already exists)", n)
+	}
+	if data, err := os.ReadFile(filepath.Join(existing, "SKILL.md")); err != nil || string(data) != userContent {
+		t.Errorf("existing host skill was modified: %q, %v", string(data), err)
+	}
+	// The installed commit skill is a REGULAR DIRECTORY (not a symlink) with
+	// its SKILL.md copied in.
+	installed := filepath.Join(hostHome, ".config", "opencode", "skills", "commit")
+	fi, err := os.Lstat(installed)
+	if err != nil {
+		t.Fatalf("commit skill was not installed: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("opencode target must be a copied directory, not a symlink to the checkout")
+	}
+	if _, err := os.Stat(filepath.Join(installed, "SKILL.md")); err != nil {
+		t.Errorf("installed skill missing SKILL.md: %v", err)
+	}
+}
+
+// TestInstallHostGlobalSkillsNoSkills — with no skills/ dir in the checkout,
+// nothing is installed and no host config dir is created (no side effects on
+// the user's home).
+func TestInstallHostGlobalSkillsNoSkills(t *testing.T) {
+	checkout(t, "")
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	if n, err := installHostGlobalSkills(config.ToolClaudeCode); err != nil || n != 0 {
+		t.Errorf("no-skills install = (%d, %v), want (0, nil)", n, err)
+	}
+	if _, err := os.Stat(filepath.Join(hostHome, ".claude", "skills")); !os.IsNotExist(err) {
+		t.Errorf("no-skills install created a host config dir: %v", err)
+	}
+}
+
+// TestBuildHostDeliversGlobalSkills — BuildHostInvocation surfaces the
+// checkout's global skills into the host CLI's config dir and reports it on
+// diag.
+func TestBuildHostDeliversGlobalSkills(t *testing.T) {
+	_, _ = docProject(t)
+	// Re-point the home at a checkout that has skills, and $HOME at a temp dir
+	// so the symlinks land somewhere isolated.
+	home := checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-token\nCLAUDE_ACCOUNT_UUID=uuid-1\nCLAUDE_EMAIL=me@x.io\nCLAUDE_ORG_UUID=org-1\n")
+	writeSkill(t, home, "review", map[string]string{"SKILL.md": "---\nname: review\n---\n"})
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildHostInvocation(Options{}, info, r, &diag); err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	if _, err := os.Readlink(filepath.Join(hostHome, ".claude", "skills", "review")); err != nil {
+		t.Errorf("host invocation did not link the global skill: %v", err)
+	}
+	if !strings.Contains(diag.String(), "Installed : 1 global skill(s)") {
+		t.Errorf("missing Installed diag line:\n%s", diag.String())
+	}
+}
+
+// TestBuildHostOpenCodeCopiesGlobalSkills — under an opencode profile,
+// BuildHostInvocation delivers COPIED skill dirs (not raw symlinks) into
+// ~/.config/opencode/skills/, so the host CLI can actually load the global
+// skills as a self-contained snapshot.
+func TestBuildHostOpenCodeCopiesGlobalSkills(t *testing.T) {
+	_, _ = docProject(t)
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeSkill(t, home, "review", map[string]string{"SKILL.md": "---\nname: review\n---\n"})
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	var diag strings.Builder
+	if _, err := BuildHostInvocation(Options{}, info, r, &diag); err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	installed := filepath.Join(hostHome, ".config", "opencode", "skills", "review")
+	fi, err := os.Lstat(installed)
+	if err != nil {
+		t.Fatalf("host invocation did not install the skill: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("opencode host target must be a copied directory, not a raw symlink")
+	}
+	if _, err := os.Stat(filepath.Join(installed, "SKILL.md")); err != nil {
+		t.Errorf("installed skill missing SKILL.md: %v", err)
+	}
+	if !strings.Contains(diag.String(), "Installed : 1 global skill(s)") {
+		t.Errorf("missing Installed diag line:\n%s", diag.String())
+	}
+}
+
 // TestBuildHostOpenCodeWritesConvertedGlobalAgents — under an opencode
 // profile, BuildHostInvocation delivers CONVERTED copies (not raw symlinks)
 // into ~/.config/opencode/agents/, so the host CLI can actually load the

@@ -20,6 +20,15 @@ format needed. To make a custom agent read-only under OpenCode, add a
 passes through to OpenCode's schema — see the manigot README's agent section);
 the read-only built-in agents' blocks deny the destructive git commands
 (worktree management, branch -d/-D, reset, checkout, push, ...).
+Global skills (from the manigot checkout's `skills/` — mounted read-only into
+the container at the CLI's global skills location, or delivered into the host
+CLI's config for `mg host`: symlinked dirs for Claude Code, copied dirs for
+OpenCode) are loaded by the CLI at startup and are available to every agent
+and to agentless invocations; custom project skills in `docs/skills/`
+(`<name>/SKILL.md`, overriding global skills of the same name) work under both
+tools the same way — write them in the standard format (a directory with a
+SKILL.md carrying name:/description: frontmatter, plus optional support
+files), no per-tool format needed.
 Custom agents that must commit (like the built-in developer/reviewer/quality)
 declare `commit: true` in their frontmatter; agents that never commit declare
 `commit: false` and get a read-only git mount. The default — no agent named,

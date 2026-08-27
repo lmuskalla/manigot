@@ -57,6 +57,7 @@ manigot/
     devops.md
     sysadmin.md
     chat.md
+  skills/                 ← global skills (<name>/SKILL.md), delivered the same way as agents
   project-template/       ← copy this into each new project to get started (via `mg init`)
     docs/
       AGENTS.md
@@ -75,6 +76,7 @@ your-project/
                                   (CLAUDE.md still works as a fallback)
     agents/                     ← optional: override a global agent for this project only
       developer.md              ← same filename = this replaces the global one
+    skills/                     ← optional: project skills (<name>/SKILL.md), override global ones
     jobs/                     ← one directory per job
         a3f9k2_add-gallery/
           brief.md
@@ -297,9 +299,10 @@ cp -r manigot/project-template/docs/ your-project/docs/
 $EDITOR your-project/docs/AGENTS.md
 ```
 
-Either way, that's it. The global agents come from the manigot checkout and are
-delivered into sessions automatically (mounted into the container, or delivered
-into the host CLI's config for `mg host`) — nothing else to copy.
+Either way, that's it. The global agents and skills come from the manigot
+checkout and are delivered into sessions automatically (mounted into the
+container, or delivered into the host CLI's config for `mg host`) — nothing
+else to copy.
 
 `docs/AGENTS.md` is the one project context file, and it works for both tools:
 manigot mounts it read-only at whatever path the selected CLI reads context
@@ -383,8 +386,10 @@ A profile bundles the agent CLI with the subscription it is billed against.
 | Onboarding | bypassed by writing `~/.claude.json` | nothing to bypass |
 | Permissions | auto-approved via `--dangerously-skip-permissions` | auto-approved via `--auto` |
 | Global agents | `~/.claude/agents/` | `~/.config/opencode/agents/` |
+| Global skills | `~/.claude/skills/` | `~/.config/opencode/skills/` |
 | `docs/` mounted at | `/workspace/.claude` | `/workspace/.opencode` |
 | Project agents | `/workspace/.claude/agents/` | `/workspace/.opencode/agents/` |
+| Project skills | `/workspace/.claude/skills/` | `/workspace/.opencode/skills/` |
 | `docs/AGENTS.md` mounted at | `/workspace/.claude/CLAUDE.md` | `/workspace/AGENTS.md` |
 | Initial job prompt | positional argument | `--prompt` |
 | Billing | your Claude subscription | your Z.AI Coding Plan / OpenCode Go / OpenCode Zen subscription |
@@ -405,6 +410,17 @@ the same way at session launch — manigot strips `name`/`tools` from the
 mounted copies before an OpenCode session sees them (OpenCode hard-errors on
 the list form, so this is what keeps one file working under both CLIs).
 Your `docs/agents/` source files are never modified.
+
+Skills are delivered the same way, at the same global + project locations
+(see the table above). Global skills (`skills/` in the manigot checkout) are
+mounted read-only at the CLI's global skills dir — verbatim for Claude Code,
+a staged copy for OpenCode (skills need no conversion, but the staged dir
+keeps the CLI's skills path a fresh, disposable snapshot) — so they are
+loaded at startup by every agent and by agentless invocations alike. Project
+skills in `docs/skills/` ride the `docs/` mount into the container and
+override a global skill of the same name — no conversion, no shadow mount,
+because skills are plain directories both CLIs read natively. Your
+`docs/skills/` source files are never modified.
 
 The read-only agents — `@reviewer`, `@security`, `@analyst` and `@owner` —
 express their restriction in both tools' schemas: the Claude-Code `tools:`
@@ -452,6 +468,12 @@ launcher for work that must touch the host itself.
   applies, since OpenCode hard-errors on the list-form `tools:` key. mg never
   clobbers existing host agent config — a name you already have in that dir is
   left untouched (your own agent wins).
+- **Skills.** Global skills are available to `mg host` too, delivered the same
+  way: at launch mg puts the checkout's `skills/` dirs into the host CLI's own
+  global skills dir (`~/.claude/skills/` for Claude Code,
+  `~/.config/opencode/skills/` for OpenCode) — symlinked skill dirs for Claude
+  Code, copied dirs for OpenCode — and never clobbers an existing host skill
+  of the same name (your own skill wins).
 - **OpenCode model.** The zai/opencode-go/opencode-zen profiles' plan model is
   forwarded via opencode's `--model` flag; mg never writes your host's opencode
   config.
@@ -533,6 +555,34 @@ in `your-project/docs/agents/`. Project agents take precedence over global ones.
 Write them in the same format as the built-ins (`name:`, `description:`,
 `tools: Read, Grep, ...`) — the OpenCode copy is generated from that file at
 launch, so you never need to hand-write OpenCode's object form.
+
+---
+
+## Skills
+
+Skills are packaged instructions any agent can load on demand. Unlike agents
+(which are bound to a named `@agent`), skills are loaded globally at startup
+by both CLIs — `~/.claude/skills/` for Claude Code,
+`~/.config/opencode/skills/` for OpenCode — independent of the active agent,
+so a skill is available to **every** agent and to invocations that name no
+agent.
+
+A skill is a **directory** containing a `SKILL.md` (with `name:`/`description:`
+frontmatter, which both CLIs read natively) plus optional support files.
+manigot stores and delivers them exactly like agents, with the same global +
+project split:
+
+- **Global skills** live in the manigot checkout at `skills/<name>/SKILL.md`
+  (mirrors `agents/`). For a container session they are mounted read-only at
+  the CLI's global skills location; for `mg host` they are delivered into the
+  host CLI's own skills dir the same way agents are.
+- **Project skills** live in `your-project/docs/skills/<name>/SKILL.md`
+  (mirrors `docs/agents/`). They ride the existing `docs/` mount into the
+  container at the project skills location and override a global skill of the
+  same name — the same project-overrides-global precedence agents have.
+
+manigot ships no skills of its own; drop yours into `skills/` in the checkout
+(or `docs/skills/` in a project) to make them available everywhere.
 
 ---
 

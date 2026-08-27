@@ -579,6 +579,200 @@ func writeAgent(t *testing.T, dir, name, content string) {
 	}
 }
 
+// TestBuildClaudeGlobalSkillsMountedReadOnly: the global skills dir
+// (<home>/skills/) is mounted read-only into the container at Claude's global
+// skills location (~/.claude/skills/). Skills need no conversion (both CLIs
+// read SKILL.md frontmatter natively), so Claude gets the host's dir verbatim
+// as a read-only bind, exactly like its global-agents mount.
+func TestBuildClaudeGlobalSkillsMountedReadOnly(t *testing.T) {
+	_, home := docProject(t)
+	writeSkill(t, home, "review", map[string]string{"SKILL.md": "---\nname: review\ndescription: Review guide.\n---\n\nBody.\n"})
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "skills")+":/home/claude/.claude/skills:ro",
+	)
+	// No temp dir was created for the Claude mount, so no cleanup is needed.
+	if inv.Cleanup != nil {
+		t.Error("claude global-skills mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildOpenCodeGlobalSkillsStagedMount: OpenCode reads global skills from
+// ~/.config/opencode/skills/, so the mounted skills are staged into a temp
+// dir first (a plain copy — no conversion — see stageGlobalSkills) and
+// shadow-mounted read-only at the CLI's global skills path, with the
+// invocation owning cleanup.
+func TestBuildOpenCodeGlobalSkillsStagedMount(t *testing.T) {
+	_, _ = docProject(t)
+	// A zai checkout whose skills/ dir carries a global skill (the effective
+	// home — docProject's own checkout is replaced by this one).
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeSkill(t, home, "review", map[string]string{
+		"SKILL.md":  "---\nname: review\ndescription: Review guide.\n---\n\nBody.\n",
+		"helper.sh": "#!/bin/sh\n",
+	})
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// OpenCode's global skills mount lands at ~/.config/opencode/skills and is
+	// read-only; the staged copy is cleaned up after the run.
+	containsAll(t, inv.Argv, "/home/claude/.config/opencode/skills:ro")
+	if inv.Cleanup == nil {
+		t.Error("opencode global-skills invocation must carry a Cleanup hook")
+	}
+	// The host's global skills source tree is never modified — the raw
+	// SKILL.md and its support file are still in place.
+	data, err := os.ReadFile(filepath.Join(home, "skills", "review", "SKILL.md"))
+	if err != nil || !strings.Contains(string(data), "name: review") {
+		t.Errorf("global skills source was modified: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "skills", "review", "helper.sh")); err != nil {
+		t.Errorf("global skills support file was removed: %v", err)
+	}
+}
+
+// TestBuildNoGlobalSkillsNoMount: with no skills/ dir in the manigot checkout
+// there is nothing to mount — no global-skills mount, and (for OpenCode) no
+// cleanup hook and no staged mount.
+func TestBuildNoGlobalSkillsNoMount(t *testing.T) {
+	// Claude: docProject's fake home has no skills/ dir.
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "/home/claude/.claude/skills") {
+		t.Errorf("claude invocation must not mount global skills when skills/ is absent:\n%s", joined)
+	}
+
+	// OpenCode with no global skills: no stage, no mount, no cleanup.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "/home/claude/.config/opencode/skills") {
+		t.Errorf("opencode invocation must not mount global skills when skills/ is absent:\n%s", joined2)
+	}
+	if inv2.Cleanup != nil {
+		t.Error("no-global-skills opencode invocation must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildProjectSkillsRideDocsMount: project skills (docs/skills/) need no
+// staging or shadow mount — the docs bind mount maps the whole docs/ dir, so
+// docs/skills/ already lands at the project skills location inside the
+// container (/workspace/.claude/skills for Claude Code,
+// /workspace/.opencode/skills for OpenCode), where both CLIs natively prefer a
+// project skill over a global one of the same name. The pin: the invocation
+// carries the plain docs mount (which carries docs/skills/) and no separate
+// skills mount.
+func TestBuildProjectSkillsRideDocsMount(t *testing.T) {
+	// Claude Code: docs/skills/ rides the docs mount at /workspace/.claude.
+	root, _ := docProject(t)
+	writeSkill(t, filepath.Join(root, "docs"), "mine", map[string]string{"SKILL.md": "---\nname: mine\n---\n"})
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	// The docs mount is present (it carries docs/skills/), and no separate
+	// project-skills mount is added on top of it.
+	containsAll(t, inv.Argv, "-v", filepath.Join(root, "docs")+":/workspace/.claude:z")
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "skills") {
+		t.Errorf("claude invocation must not add a separate skills mount (docs/skills/ rides the docs mount):\n%s", joined)
+	}
+	if inv.Cleanup != nil {
+		t.Error("claude project-skills invocation must not carry a Cleanup hook")
+	}
+
+	// OpenCode: docs/skills/ rides the docs mount at /workspace/.opencode.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv2.Argv, "-v", filepath.Join(r2.DocsDir)+":/workspace/.opencode:z")
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "skills") {
+		t.Errorf("opencode invocation must not add a separate skills mount (docs/skills/ rides the docs mount):\n%s", joined2)
+	}
+}
+
 // TestBuildJobWorktreeHooksOverlayMount: job-worktree sessions get a read-only
 // overlay mount for <GitCommonDir>/hooks so an agent cannot plant a hook that
 // would later execute on host-side git operations with host privileges.

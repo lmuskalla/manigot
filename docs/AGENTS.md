@@ -24,6 +24,14 @@ configured with `mg setup`.
   from the manigot checkout (mounted read-only into the container at the CLI's
   global agent location; for `mg host`, symlinked into Claude Code's config
   dir or written as converted copies into OpenCode's)
+- Skills: directories in `skills/` (`<name>/SKILL.md`, mirroring `agents/`),
+  delivered into every session the same way — mounted read-only into the
+  container at the CLI's global skills location (both CLIs load skills at
+  startup, so every agent and every agentless invocation sees them), and for
+  `mg host` delivered into the host CLI's config dir. Project skills in
+  `docs/skills/` ride the docs mount and override global skills of the same
+  name. manigot ships no skills of its own — the mechanism is provisioned for
+  user-supplied global + project skills.
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
@@ -53,7 +61,12 @@ The seam between the orchestrator (host-side Go) and the agent environment
   agents express their restriction under OpenCode), writing
   the converted copies to a temp dir shadow-mounted over the target
   `agents/` subpath — the host's source files are never modified, and the
-  temp dir is cleaned up after the run. It also decides the job git-common-dir
+  temp dir is cleaned up after the run. Skills need no such conversion (both
+  CLIs read `SKILL.md` frontmatter natively), so global skills
+  (`<home>/skills/`) are mounted read-only at the CLI's global skills
+  location — verbatim for Claude Code, staged into a temp dir for OpenCode —
+  and project skills (`docs/skills/`) ride the existing docs mount, overriding
+  global skills of the same name. It also decides the job git-common-dir
   mount mode from the resolved agent's `commit:` frontmatter marker (see
   "Read-only git mount for non-committing agents").
 - `internal/job` — the job lifecycle (was `new-job.sh`/`finish-job.sh`/
@@ -74,7 +87,7 @@ The seam between the orchestrator (host-side Go) and the agent environment
   settings, and manigot's `.env` read/write (`GetEnv`/`UpsertEnv`).
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
-  the source of `.env`, `config/`, `agents/`, `assets/` and
+  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` and
   `project-template/`.
 - `scripts/entrypoint.sh` — the ONLY bash, container-side. Branches on
   `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's onboarding
@@ -87,8 +100,8 @@ The seam between the orchestrator (host-side Go) and the agent environment
   installs a PATH-first `git` shim that restricts agents to read + commit git
   commands (see "Session git shim" below).
 - `Dockerfile` — builds the image; installs both agent CLIs (the image is
-  purely isolation for workspaces — the global `agents/` are no longer baked
-  in, they are mounted from the host at session launch), and
+  purely isolation for workspaces — the global `agents/` and `skills/` are no
+  longer baked in, they are mounted from the host at session launch), and
   pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
   `GOTOOLCHAIN=local` a stale path breaks the build).
 
@@ -501,7 +514,9 @@ either way.
   passed, since host sessions have no isolation. The global agents are still
   available: mg delivers the checkout's `agents/*.md` into the CLI's own host
   config dir — symlinks for Claude Code, converted copies for OpenCode (which
-  hard-errors on the list form) — never clobbering an existing name. For work
+  hard-errors on the list form) — never clobbering an existing name. Global
+  skills are delivered the same way: symlinked skill dirs for Claude Code,
+  copied dirs for OpenCode, never clobbering an existing skill name. For work
   that must touch the host itself (thematic alias: `mg wild`, same
   command/behavior)
 
@@ -554,5 +569,7 @@ way `@name` launches do.
   harmless.
 - Keep `agents/*.md` and `project-template/docs/AGENTS.md` in sync with
   whatever this file documents — they're meant to describe the same system
+  (the skills mechanism included, even though manigot ships no skills of its
+  own)
 - When scope is unclear: ask, don't guess
 - Do not refactor things unrelated to the current task

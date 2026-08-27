@@ -253,6 +253,55 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		}
 	}
 
+	// ── Global skills ─────────────────────────────────────────────────────
+	// Skills follow the same global + project model as agents, applied to a
+	// different unit: a skill is a directory (SKILL.md plus support files),
+	// not a single file. Global skills live in the manigot checkout
+	// (<home>/skills/) and are mounted read-only into the container at the
+	// CLI's global skills location — ~/.claude/skills for Claude Code,
+	// ~/.config/opencode/skills for OpenCode — where both CLIs load skills at
+	// startup, independent of the active agent. That single global location is
+	// exactly what makes a skill available to every agent and to invocations
+	// that name no agent; project skills (docs/skills/, below) ride the docs
+	// mount and override global skills of the same name.
+	//
+	// Unlike agents, skills need no frontmatter conversion — both CLIs read
+	// SKILL.md and its frontmatter natively — so Claude Code gets the host's
+	// skills dir verbatim (a read-only bind, like its agents mount). OpenCode
+	// gets a staged copy instead (see stageGlobalSkills), mounted read-only
+	// and cleaned up via the invocation's Cleanup hook, so the CLI's skills
+	// dir is a fresh, disposable snapshot and the host's skills/ source tree
+	// is never touched. Skipped cleanly when the checkout has no skills dir.
+	var globalSkillMount []string
+	var globalSkillCleanup func()
+	if homeDir := home.Root(); homeDir != "" {
+		globalSkillsDir := filepath.Join(homeDir, "skills")
+		if fs.IsDir(globalSkillsDir) {
+			if info.Tool == config.ToolOpenCode {
+				if tmp, hasSkills, err := stageGlobalSkills(globalSkillsDir); err != nil {
+					return DockerInvocation{}, fmt.Errorf("stage global skills: %w", err)
+				} else if hasSkills {
+					globalSkillMount = []string{"-v", tmp + ":/home/claude/.config/opencode/skills:ro"}
+					globalSkillCleanup = func() { os.RemoveAll(tmp) }
+				}
+			} else {
+				globalSkillMount = []string{"-v", globalSkillsDir + ":/home/claude/.claude/skills:ro"}
+			}
+		}
+	}
+
+	// ── Project skills ────────────────────────────────────────────────────
+	// Project skills (docs/skills/<name>/SKILL.md) need no staging or shadow
+	// mount: the docs bind mount above maps the whole docs/ dir, so
+	// docs/skills/ already lands at the project skills location inside the
+	// container (/workspace/.claude/skills for Claude Code,
+	// /workspace/.opencode/skills for OpenCode), and both CLIs natively prefer
+	// a project skill over a global skill of the same name. Skills differ from
+	// project agents here — agents needed a converted shadow mount over the
+	// docs mount's agents/ subpath for OpenCode (it hard-errors on the
+	// list-form tools: key), while skills need no conversion, so the plain
+	// docs mount is sufficient.
+
 	// ── Job prompt ──────────────────────────────────────────────────────────
 	initialPrompt := ""
 	if root.Job != "" {
@@ -397,6 +446,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, docsMount...)
 	argv = append(argv, agentMount...)
 	argv = append(argv, globalAgentMount...)
+	argv = append(argv, globalSkillMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
@@ -422,16 +472,20 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 
-	// Combine the project- and global-agent temp-dir cleanups (whichever are
-	// non-nil) into a single hook run after the container exits.
+	// Combine the project-agent, global-agent and global-skill temp-dir
+	// cleanups (whichever are non-nil) into a single hook run after the
+	// container exits.
 	var cleanup func()
-	if agentCleanup != nil || globalAgentCleanup != nil {
+	if agentCleanup != nil || globalAgentCleanup != nil || globalSkillCleanup != nil {
 		cleanup = func() {
 			if agentCleanup != nil {
 				agentCleanup()
 			}
 			if globalAgentCleanup != nil {
 				globalAgentCleanup()
+			}
+			if globalSkillCleanup != nil {
+				globalSkillCleanup()
 			}
 		}
 	}

@@ -100,6 +100,18 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 		fmt.Fprintf(diag, "  Installed : %d global agent(s) into %s's host config\n", n, binary)
 	}
 
+	// ── Global skills ─────────────────────────────────────────────────────
+	// The same delivery problem applies to skills: the host CLI cannot see the
+	// checkout's global skills (<home>/skills/) without the image/mounts, so
+	// they are surfaced into the CLI's own global skills dir — symlinked dirs
+	// for Claude Code, copied dirs for OpenCode (see installHostGlobalSkills).
+	// Non-destructive and warn-only, exactly like the agents install above.
+	if n, err := installHostGlobalSkills(info.Tool); err != nil {
+		fmt.Fprintf(diag, "Warning: could not make global skills available to %s on the host: %v\n", binary, err)
+	} else if n > 0 {
+		fmt.Fprintf(diag, "  Installed : %d global skill(s) into %s's host config\n", n, binary)
+	}
+
 	// ── Job prompt ──────────────────────────────────────────────────────────
 	// Host-pathed variant of docker.go's container job prompt: the CLI runs on
 	// the host, so the job path it is told to work on must be a host path.
@@ -331,6 +343,83 @@ func installHostGlobalAgents(tool string) (int, error) {
 		if err := os.Symlink(filepath.Join(srcDir, name), target); err != nil {
 			// Skip names we couldn't link but keep going for the rest.
 			continue
+		}
+		installed++
+	}
+	return installed, nil
+}
+
+// hostGlobalSkillsDir resolves the host CLI's global skills directory for a
+// tool: ~/.claude/skills/ for Claude Code, ~/.config/opencode/skills/ for
+// OpenCode (the same locations the container path mounts the global skills
+// into). The dir is derived from $HOME (os.UserHomeDir), so tests can point it
+// at a temp dir.
+func hostGlobalSkillsDir(tool string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = os.Getenv("HOME")
+	}
+	if tool == config.ToolOpenCode {
+		return filepath.Join(homeDir, ".config", "opencode", "skills")
+	}
+	return filepath.Join(homeDir, ".claude", "skills")
+}
+
+// installHostGlobalSkills surfaces the manigot checkout's global skills
+// (<home>/skills/) to the host CLI — the host equivalent of the container
+// path's read-only mount (mg host runs the CLI directly, with no mounts).
+//
+// A skill is a directory (SKILL.md plus optional support files), so delivery
+// is per-directory, mirroring installHostGlobalAgents' per-tool split:
+//
+//   - Claude Code: each skill dir is symlinked into ~/.claude/skills/ — the
+//     symlinks point at the live checkout dirs, so edits to skills/ are
+//     reflected without re-installing.
+//   - OpenCode: each skill dir is copied into ~/.config/opencode/skills/ — a
+//     self-contained snapshot rather than a symlink, so the CLI's skills dir
+//     never points into (or writes into) the manigot checkout.
+//
+// It never clobbers existing host skill config: a name already present in the
+// target dir is left untouched (the user's own host skill wins, mirroring the
+// project-overrides-global precedence). Nothing is created when the checkout
+// has no skills/ dir or no home can be located. Returns the number of skills
+// installed.
+func installHostGlobalSkills(tool string) (int, error) {
+	homeDir := home.Root()
+	if homeDir == "" {
+		return 0, nil
+	}
+	srcDir := filepath.Join(homeDir, "skills")
+	skills, err := listSkills(srcDir)
+	if err != nil {
+		return 0, err
+	}
+	if len(skills) == 0 {
+		return 0, nil
+	}
+
+	targetDir := hostGlobalSkillsDir(tool)
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return 0, err
+	}
+	installed := 0
+	for _, s := range skills {
+		target := filepath.Join(targetDir, s.Name)
+		// Never clobber an existing host skill — the user's own dir (or an
+		// existing symlink, dangling or not) wins.
+		if _, err := os.Lstat(target); err == nil {
+			continue
+		}
+		if tool == config.ToolOpenCode {
+			// OpenCode gets a copied snapshot (see the doc comment above).
+			if err := copyDir(target, s.Dir); err != nil {
+				continue // skip names we couldn't copy, keep going for the rest
+			}
+		} else {
+			// Claude Code — raw symlink to the live checkout dir.
+			if err := os.Symlink(s.Dir, target); err != nil {
+				continue
+			}
 		}
 		installed++
 	}

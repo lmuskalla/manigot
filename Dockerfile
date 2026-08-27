@@ -95,18 +95,22 @@ ENV NODE_PATH=/usr/local/lib/node_modules
 COPY --chown=claude:claude scripts/shot.js /usr/local/bin/shot
 RUN chmod +x /usr/local/bin/shot
 
-# Global agents — no longer baked into the image. They live on the host in the
-# manigot checkout (agents/) and are mounted read-only into the container at
-# session launch (see internal/session/docker.go), which keeps the image purely
-# isolation for workspaces and makes the same agents available to `mg host`.
+# Global agents and skills — no longer baked into the image. They live on the
+# host in the manigot checkout (agents/, skills/) and are mounted read-only
+# into the container at session launch (see internal/session/docker.go), which
+# keeps the image purely isolation for workspaces and makes the same agents and
+# skills available to `mg host`.
 #
-# The CLI config dirs the agents mount into (~/.claude and
+# The CLI config dirs the agents/skills mount into (~/.claude and
 # ~/.config/opencode) must still exist in the image, writable by any session
 # UID — docker would otherwise create the mount-target parents as root-owned
 # when the -v mount lands, and the entrypoint's opencode.json write (and the
 # CLIs' own state under ~/.claude) would fail for the non-root session user.
-# The agents subdirs themselves are provided by the read-only mounts.
+# The agents/skills subdirs themselves are provided by the read-only mounts;
+# they are pre-created here (writable, claude-owned) so the skills mounts can
+# never land on root-owned parents either.
 RUN mkdir -p /home/claude/.claude /home/claude/.config/opencode \
+    && mkdir -p /home/claude/.claude/skills /home/claude/.config/opencode/skills \
     && chown -R claude:claude /home/claude/.claude /home/claude/.config
 
 # Entrypoint script — writes claude.json to bypass onboarding before Claude starts
