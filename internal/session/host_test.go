@@ -137,6 +137,41 @@ func TestBuildHostOpenCodeProfile(t *testing.T) {
 	}
 }
 
+// TestBuildHostOpenCodeThemeNotForwarded — OPENCODE_THEME is a container-only
+// knob (applied by scripts/entrypoint.sh writing a generated tui.json inside
+// the ephemeral container); mg host runs against the user's own real
+// ~/.config/opencode, which already reflects whatever theme they configured
+// there. hostEnv must not leak OPENCODE_THEME into the host child env even
+// when the global theme setting is configured, mirroring the OPENCODE_MODEL
+// exclusion above.
+func TestBuildHostOpenCodeThemeNotForwarded(t *testing.T) {
+	_, _ = docProject(t)
+	fakeHostBinary(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\nOPENCODE_THEME=nord\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	if info.OpenCodeTheme != "nord" {
+		t.Fatalf("info.OpenCodeTheme = %q, want nord (sanity check the setting is actually configured)", info.OpenCodeTheme)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	m := envMap(t, inv.Env)
+	if m["OPENCODE_THEME"] != "" {
+		t.Errorf("host env must not forward OPENCODE_THEME — it is a container-only knob applied via entrypoint.sh's generated tui.json (got %q)", m["OPENCODE_THEME"])
+	}
+}
+
 // TestBuildHostOpenCodeStripsTmux — the mg host OpenCode path shares the
 // docker path's root cause: opencode runs with the full host env (TMUX set),
 // so it would emit tmux's DCS-passthrough OSC 52 form, which default tmux

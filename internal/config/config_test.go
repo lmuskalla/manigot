@@ -147,6 +147,58 @@ func TestSaveThenLoadRoundTripsTerminal(t *testing.T) {
 	}
 }
 
+func TestThemeValueDefaultsToEmpty(t *testing.T) {
+	if got := (Settings{}).ThemeValue(); got != "" {
+		t.Errorf("zero-value ThemeValue = %q, want empty", got)
+	}
+	if got := (Settings{Theme: "nord"}).ThemeValue(); got != "nord" {
+		t.Errorf("ThemeValue = %q, want %q", got, "nord")
+	}
+}
+
+func TestSaveThenLoadRoundTripsTheme(t *testing.T) {
+	dir := checkout(t)
+	want := Settings{Editor: "vim", Profile: ProfileZAI, Theme: "nord"}
+	if err := Save(want); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	envData, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+	if got := string(envData); !contains(got, "OPENCODE_THEME=nord") {
+		t.Errorf(".env missing OPENCODE_THEME=nord:\n%s", got)
+	}
+	// Not written to tui-settings.json — .env is the single shared store.
+	settingsData, err := os.ReadFile(filepath.Join(dir, "config", "tui-settings.json"))
+	if err != nil {
+		t.Fatalf("read tui-settings.json: %v", err)
+	}
+	if contains(string(settingsData), "theme") {
+		t.Errorf("tui-settings.json should not contain a theme field:\n%s", settingsData)
+	}
+
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Theme != want.Theme {
+		t.Errorf("Theme after round-trip = %q, want %q", got.Theme, want.Theme)
+	}
+}
+
+func TestThemeDefaultsToEmptyAutoDetect(t *testing.T) {
+	checkout(t)
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if s.Theme != "" {
+		t.Errorf("zero-value Theme = %q, want empty (let OpenCode use its own default)", s.Theme)
+	}
+}
+
 func TestTerminalDefaultsToEmptyAutoDetect(t *testing.T) {
 	checkout(t)
 	s, err := Load()
@@ -342,8 +394,11 @@ func TestSaveCreatesEnvWithHeader(t *testing.T) {
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "# ") {
 		t.Errorf("first line of fresh .env should be the header comment, got %q", lines[0])
 	}
-	if lines[len(lines)-1] != "MANIGOT_PROFILE=zai" {
-		t.Errorf("last line = %q, want MANIGOT_PROFILE=zai", lines[len(lines)-1])
+	// MANIGOT_PROFILE and OPENCODE_THEME (empty — never set by this test) are
+	// both written by Save; order between them isn't guaranteed contract, so
+	// check presence rather than an exact last line.
+	if !contains(string(data), "MANIGOT_PROFILE=zai") {
+		t.Errorf(".env missing MANIGOT_PROFILE=zai:\n%s", data)
 	}
 }
 

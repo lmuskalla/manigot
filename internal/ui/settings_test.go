@@ -52,8 +52,12 @@ func TestSettingsTabCyclesFocus(t *testing.T) {
 		t.Errorf("after fifth tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
 	}
 	v.update(key(t, tea.KeyTab))
+	if v.focus != stFocusTheme {
+		t.Errorf("after sixth tab, focus = %d, want %d (theme)", v.focus, stFocusTheme)
+	}
+	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusEditor {
-		t.Errorf("after sixth tab (wrap), focus = %d, want %d (editor)", v.focus, stFocusEditor)
+		t.Errorf("after seventh tab (wrap), focus = %d, want %d (editor)", v.focus, stFocusEditor)
 	}
 }
 
@@ -62,30 +66,34 @@ func TestSettingsShiftTabCyclesFocusBackward(t *testing.T) {
 	if v.focus != stFocusEditor {
 		t.Fatal("expected initial focus editor")
 	}
-	// shift+tab from editor wraps back to terminal.
+	// shift+tab from editor wraps back to theme.
+	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusTheme {
+		t.Errorf("after shift+tab, focus = %d, want %d (theme)", v.focus, stFocusTheme)
+	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusTerminal {
-		t.Errorf("after shift+tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
+		t.Errorf("after second shift+tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusProfile {
-		t.Errorf("after second shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
+		t.Errorf("after third shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusCount {
-		t.Errorf("after third shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
+		t.Errorf("after fourth shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusJobPrefix {
-		t.Errorf("after fourth shift+tab, focus = %d, want %d (job branch prefix)", v.focus, stFocusJobPrefix)
+		t.Errorf("after fifth shift+tab, focus = %d, want %d (job branch prefix)", v.focus, stFocusJobPrefix)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusBranch {
-		t.Errorf("after fifth shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
+		t.Errorf("after sixth shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusEditor {
-		t.Errorf("after sixth shift+tab, focus = %d, want %d (editor)", v.focus, stFocusEditor)
+		t.Errorf("after seventh shift+tab, focus = %d, want %d (editor)", v.focus, stFocusEditor)
 	}
 }
 
@@ -219,7 +227,7 @@ func TestSettingsRender(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
 	v.update(key(t, tea.KeyRunes, 'a', 'b', 'c'))
 	out := v.render()
-	for _, want := range []string{"Editor:", "Base branch", "Job branch prefix", "Recent activity:", "claude-pro", "zai", "opencode-go", "opencode-zen", "opencode-zen-free", "abc", "Profile", "recent activity strip", "Terminal:", "auto-detect"} {
+	for _, want := range []string{"Editor:", "Base branch", "Job branch prefix", "Recent activity:", "claude-pro", "zai", "opencode-go", "opencode-zen", "opencode-zen-free", "abc", "Profile", "recent activity strip", "Terminal:", "auto-detect", "Theme:", "OPENCODE_THEME"} {
 		if !contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
@@ -261,6 +269,48 @@ func TestSettingsTerminalValueTrims(t *testing.T) {
 	v.terminal.SetValue("  kitty  ")
 	if got := v.settingsValue().Terminal; got != "kitty" {
 		t.Errorf("settingsValue().Terminal = %q, want trimmed kitty", got)
+	}
+}
+
+func TestSettingsThemeSeeded(t *testing.T) {
+	v := newSettingsView(config.Settings{Theme: "nord"}, project.Settings{}, 80, 24)
+	if got := v.theme.Value(); got != "nord" {
+		t.Errorf("theme seed = %q, want nord", got)
+	}
+	if got := v.settingsValue().Theme; got != "nord" {
+		t.Errorf("settingsValue().Theme = %q, want nord", got)
+	}
+}
+
+func TestSettingsThemeEdits(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	v.update(key(t, tea.KeyTab)) // editor -> base branch
+	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
+	v.update(key(t, tea.KeyTab)) // job branch prefix -> recent activity count
+	v.update(key(t, tea.KeyTab)) // recent activity count -> profile
+	v.update(key(t, tea.KeyTab)) // profile -> terminal
+	v.update(key(t, tea.KeyTab)) // terminal -> theme
+	if v.focus != stFocusTheme {
+		t.Fatalf("focus = %d, want %d (theme)", v.focus, stFocusTheme)
+	}
+	v.update(key(t, tea.KeyRunes, 'n', 'o', 'r', 'd'))
+	if got := v.theme.Value(); got != "nord" {
+		t.Errorf("theme after typing = %q, want nord", got)
+	}
+	// Typing into theme must not leak into the other fields.
+	if got := v.editor.Value(); got != "" {
+		t.Errorf("editor leaked = %q, want empty", got)
+	}
+	if got := v.terminal.Value(); got != "" {
+		t.Errorf("terminal leaked = %q, want empty", got)
+	}
+}
+
+func TestSettingsThemeValueTrims(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	v.theme.SetValue("  nord  ")
+	if got := v.settingsValue().Theme; got != "nord" {
+		t.Errorf("settingsValue().Theme = %q, want trimmed nord", got)
 	}
 }
 

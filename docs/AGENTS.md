@@ -153,6 +153,19 @@ claude-pro requires `CLAUDE_CODE_OAUTH_TOKEN` and refuses a set
 `ANTHROPIC_API_KEY` (subscription protection); opencode profiles require at
 least one of their key vars.
 
+For OpenCode sessions, the launcher also forwards the global theme setting
+(`OPENCODE_THEME`, set via `mg theme` — see below) into the container as
+`-e OPENCODE_THEME=<value>`, independent of which profile/API key is in use.
+`scripts/entrypoint.sh` turns the per-profile `OPENCODE_MODEL` and the global
+`OPENCODE_THEME` into two separate OpenCode config files via `{env:...}`
+substitution: `~/.config/opencode/opencode.json`'s `model` key for the model,
+and a separate `~/.config/opencode/tui.json`'s `theme` key for the theme —
+OpenCode's own docs mark `opencode.json`'s top-level `theme` key as legacy/
+deprecated (auto-migrated when possible), so the theme is written to its
+current, non-deprecated home instead. Each file is written once, only when it
+doesn't already exist and its respective env var is set. Claude Code already
+respects the host terminal's own theme, so no equivalent exists there.
+
 The `--print` stdout contract: the agent's own output (JSON) on stdout,
 *everything else* (diagnostics, banner, warnings) on stderr — Go separates
 the streams natively, so there is no fd juggling. `--print` also appends the
@@ -369,7 +382,7 @@ both the sibling and nested `.manigot-worktrees` layouts and never reports a
 live worktree (its `.git` file names an existing gitdir) or a standalone
 repository (a `.git` directory).
 
-### `mg init`, `mg profiles`, `mg setup`, `mg agents`
+### `mg init`, `mg profiles`, `mg theme`, `mg setup`, `mg agents`
 
 - `mg init` bootstraps a project for the job workflow: the only command that
   works **without** an existing `docs/` (it creates it). Copies
@@ -382,6 +395,16 @@ repository (a `.git` directory).
   is the default), sets the default (`MANIGOT_PROFILE` in manigot's `.env`),
   or picks it interactively on a TTY. The TUI's settings screen shares the
   same default.
+- `mg theme [name]` shows or sets manigot's global OpenCode theme
+  (`OPENCODE_THEME` in manigot's `.env`) — one value shared across every
+  OpenCode profile, unlike the per-profile `OPENCODE_*_MODEL` keys — or picks
+  it interactively on a TTY. With no name it also prints a reference list of
+  OpenCode's known built-in themes (https://opencode.ai/docs/themes/), but
+  unlike a profile id, an unrecognized name passed to `mg theme <name>` is
+  still accepted — OpenCode itself rejects an invalid name at launch. The
+  TUI's settings screen shares the same setting (a free-text field, not a
+  fixed-list selector, for the same reason). Claude Code already respects the
+  host terminal's own theme, so this has no effect there.
 - `mg setup [name] [--check]` configures each profile's credentials into
   manigot's `.env`, auto-applying what it can read off the host (e.g. the
   Claude account from `~/.claude.json`) and letting you paste the rest.
@@ -448,11 +471,13 @@ either way.
   `OPENCODE_API_KEY` + `OPENCODE_ZEN_MODEL` for opencode-zen,
   `OPENCODE_API_KEY` + `OPENCODE_ZEN_FREE_MODEL` for opencode-zen-free, and
   `MANIGOT_PROFILE` — the default profile shared between CLI and TUI), plus
-  the optional ntfy push-notification keys `NTFY_URL`/`NTFY_TOPIC`/
-  `NTFY_TOKEN` for `mg jdi` (see the `mg jdi` section — `NTFY_TOPIC` unset
-  means no notifications at all).
-  Written by `mg setup`/`mg profiles`/the TUI settings screen; read via
-  `config.GetEnv`/`EnvValue`. Never committed.
+  `OPENCODE_THEME` — the global OpenCode theme (set via `mg theme`), shared
+  across every OpenCode profile rather than pinned per-profile like the
+  `OPENCODE_*_MODEL` keys — and the optional ntfy push-notification keys
+  `NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN` for `mg jdi` (see the `mg jdi` section
+  — `NTFY_TOPIC` unset means no notifications at all).
+  Written by `mg setup`/`mg profiles`/`mg theme`/the TUI settings screen; read
+  via `config.GetEnv`/`EnvValue`. Never committed.
   Key forwarding is pinned per profile (test-pinned in `internal/session`):
   only `zai` forwards `ZHIPU_API_KEY` into its container, only `opencode-go`
   forwards `OPENCODE_API_KEY`, and `claude-pro` forwards the OAuth token +
@@ -492,6 +517,11 @@ either way.
   (`claude-pro`/`zai`/`opencode-go`/`opencode-zen`/`opencode-zen-free`); `--tool` is accepted as a legacy alias
 - `mg profiles [name]` — list the profiles (and which is the default), set the
   default bare `mg` uses, or pick it interactively (no name, on a TTY)
+- `mg theme [name]` — show or set manigot's global OpenCode theme
+  (`OPENCODE_THEME`, shared across every OpenCode profile), or pick it
+  interactively (no name, on a TTY) from a reference list of OpenCode's known
+  built-in themes; an unrecognized name is still accepted (OpenCode rejects an
+  invalid one at launch)
 - `mg setup [name] [--check]` — configure credentials for the profiles,
   interactively, or report status with `--check`
 - `mg agents` — list available agents (global + any `docs/agents/`

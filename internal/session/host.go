@@ -216,7 +216,14 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 // the .env-effective value the session flow already validated — the same
 // credentials the container path forwards. OPENCODE_MODEL is excluded: it is
 // forwarded as --model instead (see BuildHostInvocation), and opencode does
-// not read it from the environment.
+// not read it from the environment. OPENCODE_THEME is excluded too: it is a
+// container-only knob — the docker path applies it by writing a generated
+// ~/.config/opencode/tui.json inside the ephemeral container (see
+// scripts/entrypoint.sh) — and mg host runs the CLI against the user's own
+// real ~/.config/opencode, which already reflects whatever theme the user
+// configured there (the same reason mg host needs no other theme handling;
+// see tasks.md's scope note for this job). Forwarding it would be a silent,
+// untested, unused env leak.
 //
 // For OpenCode sessions, TMUX/TMUX_PANE are filtered out of the child env —
 // the same exception the docker path applies (see the terminalEnvVars comment
@@ -232,7 +239,7 @@ func hostEnv(info ProfileInfo) []string {
 			continue
 		}
 		pair := info.KeyEnv[i+1]
-		if strings.HasPrefix(pair, "OPENCODE_MODEL=") {
+		if strings.HasPrefix(pair, "OPENCODE_MODEL=") || strings.HasPrefix(pair, "OPENCODE_THEME=") {
 			continue
 		}
 		env = append(env, pair)

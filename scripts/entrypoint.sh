@@ -91,6 +91,28 @@ else
 }
 EOF
     fi
+
+    # The theme setting is TUI-specific and lives in its own tui.json, not
+    # opencode.json — confirmed against https://opencode.ai/docs/config/,
+    # which documents opencode.json's top-level "theme" key as legacy
+    # ("Legacy theme, keybinds, and tui keys in opencode.json are deprecated
+    # and automatically migrated when possible") and directs current users to
+    # tui.json instead (https://opencode.ai/docs/themes/'s own example uses
+    # tui.json). run.sh forwards OPENCODE_THEME when the user has set the
+    # global theme (mg theme); emit a minimal tui.json using the same
+    # {env:...} substitution the model config above relies on. Without this
+    # OpenCode boots with its built-in default theme, ignoring the user's
+    # choice.
+    OPENCODE_TUI_CFG="$HOME/.config/opencode/tui.json"
+    if [[ -n "${OPENCODE_THEME:-}" && ! -f "$OPENCODE_TUI_CFG" ]]; then
+        mkdir -p "$(dirname "$OPENCODE_TUI_CFG")"
+        cat > "$OPENCODE_TUI_CFG" <<'EOF'
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "{env:OPENCODE_THEME}"
+}
+EOF
+    fi
 fi
 
 # ── Git config ──────────────────────────────────────────────────────────────────

@@ -23,17 +23,18 @@ var profileOptions = config.Profiles()
 const recentActivityCountMax = 100
 
 // Number of focusable fields in the settings form: editor, base branch, job
-// branch prefix, recent activity count, profile, terminal — in tab cycle
-// order. Kept as a named constant so the tab/shift+tab cycle and focus
+// branch prefix, recent activity count, profile, terminal, theme — in tab
+// cycle order. Kept as a named constant so the tab/shift+tab cycle and focus
 // comparisons don't all hardcode a literal that has to be kept in sync field
 // by field.
-const stFieldCount = 6
+const stFieldCount = 7
 
 // Focus indices for the settings form's fields, in tab cycle order: editor →
 // base branch → job branch prefix → recent activity count → profile →
-// terminal → editor. Used by update() and render() instead of bare ints.
-// Terminal was appended after Profile rather than inserted next to Editor,
-// so the existing constants keep their values unchanged.
+// terminal → theme → editor. Used by update() and render() instead of bare
+// ints. Terminal was appended after Profile, and Theme after Terminal, rather
+// than inserted next to Editor, so the existing constants keep their values
+// unchanged.
 const (
 	stFocusEditor    = 0
 	stFocusBranch    = 1
@@ -41,6 +42,7 @@ const (
 	stFocusCount     = 3
 	stFocusProfile   = 4
 	stFocusTerminal  = 5
+	stFocusTheme     = 6
 )
 
 // stAction is what update returns for the App to act on.
@@ -71,8 +73,9 @@ type settingsView struct {
 	jobBranchPrefix textinput.Model
 	recentCount     textinput.Model
 	terminal        textinput.Model
+	theme           textinput.Model
 	profile         int // index into profileOptions
-	focus           int // stFocusEditor / stFocusBranch / stFocusJobPrefix / stFocusCount / stFocusProfile / stFocusTerminal
+	focus           int // stFocusEditor / stFocusBranch / stFocusJobPrefix / stFocusCount / stFocusProfile / stFocusTerminal / stFocusTheme
 	width           int
 	height          int
 	status          string // validation/save error message
@@ -120,12 +123,20 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 	terminal.SetValue(global.Terminal)
 	terminal.Width = 60
 
+	theme := textinput.New()
+	theme.Placeholder = "blank = OpenCode's own default"
+	theme.Prompt = "" // we render our own "Theme:" label
+	theme.CharLimit = 120
+	theme.SetValue(global.ThemeValue())
+	theme.Width = 60
+
 	v := &settingsView{
 		editor:          editor,
 		baseBranch:      baseBranch,
 		jobBranchPrefix: jobBranchPrefix,
 		recentCount:     recentCount,
 		terminal:        terminal,
+		theme:           theme,
 		profile:         profileIndex(global.ProfileValue()),
 		focus:           stFocusEditor,
 		width:           width,
@@ -138,6 +149,7 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 		v.jobBranchPrefix.Width = w
 		v.recentCount.Width = w
 		v.terminal.Width = w
+		v.theme.Width = w
 	}
 	return v
 }
@@ -176,6 +188,7 @@ func (v *settingsView) resize(width, height int) {
 		v.jobBranchPrefix.Width = w
 		v.recentCount.Width = w
 		v.terminal.Width = w
+		v.theme.Width = w
 	}
 }
 
@@ -206,7 +219,7 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 	}
 
 	// A text input is focused (editor, base branch, job branch prefix, recent
-	// count or terminal): route the key to it.
+	// count, terminal or theme): route the key to it.
 	var ti *textinput.Model
 	switch v.focus {
 	case stFocusEditor:
@@ -217,8 +230,10 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 		ti = &v.jobBranchPrefix
 	case stFocusCount:
 		ti = &v.recentCount
-	default: // stFocusTerminal
+	case stFocusTerminal:
 		ti = &v.terminal
+	default: // stFocusTheme
+		ti = &v.theme
 	}
 	m, _ := ti.Update(msg)
 	*ti = m
@@ -226,9 +241,9 @@ func (v *settingsView) update(msg tea.KeyMsg) stAction {
 }
 
 // setFocus moves focus to field i and keeps the text inputs' focus state in
-// sync: only the editor, base branch, job branch prefix, recent count or
-// terminal holds the text cursor; the profile selector is keyboard-driven
-// (←/→), not a text input.
+// sync: only the editor, base branch, job branch prefix, recent count,
+// terminal or theme holds the text cursor; the profile selector is
+// keyboard-driven (←/→), not a text input.
 func (v *settingsView) setFocus(i int) {
 	v.focus = i
 	v.editor.Blur()
@@ -236,6 +251,7 @@ func (v *settingsView) setFocus(i int) {
 	v.jobBranchPrefix.Blur()
 	v.recentCount.Blur()
 	v.terminal.Blur()
+	v.theme.Blur()
 	switch i {
 	case stFocusEditor:
 		v.editor.Focus()
@@ -247,6 +263,8 @@ func (v *settingsView) setFocus(i int) {
 		v.recentCount.Focus()
 	case stFocusTerminal:
 		v.terminal.Focus()
+	case stFocusTheme:
+		v.theme.Focus()
 	default: // stFocusProfile
 		// no text input to focus — the profile selector is keyboard-driven
 	}
@@ -278,6 +296,7 @@ func (v *settingsView) settingsValue() config.Settings {
 		Editor:   strings.TrimSpace(v.editor.Value()),
 		Profile:  profileOptions[v.profile].ID,
 		Terminal: strings.TrimSpace(v.terminal.Value()),
+		Theme:    strings.TrimSpace(v.theme.Value()),
 	}
 	if n, err := v.recentActivityCount(); err == nil {
 		s.RecentActivityCount = n
@@ -393,6 +412,20 @@ func (v *settingsView) render() string {
 	b.WriteString(dimStyle.Render("           blank = auto-detect (tmux / Terminal.app / gnome-terminal / ...) · inside tmux the split pane always wins · stored in config/tui-settings.json"))
 	b.WriteString("\n\n")
 
+	// Theme row (global): the OpenCode theme name (e.g. "nord", "tokyonight"),
+	// shared across every OpenCode profile — Claude Code already respects the
+	// host terminal's own theme, so this has no effect there. Not validated
+	// against a fixed list here, matching `mg theme`.
+	themeLabel := "  Theme: "
+	if v.focus == stFocusTheme {
+		b.WriteString(themeLabel + v.theme.View())
+	} else {
+		b.WriteString(dimStyle.Render(themeLabel) + dimStyle.Render(v.theme.View()))
+	}
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("           blank = OpenCode's own default/config · OpenCode only · saved as OPENCODE_THEME in manigot/.env"))
+	b.WriteString("\n\n")
+
 	// Footer: status or a focus-aware hint.
 	if v.status != "" {
 		b.WriteString(statusStyle.Render(v.status))
@@ -417,7 +450,9 @@ func (v *settingsView) hint() string {
 		return "tab/shift+tab profile · " + prefix
 	case stFocusProfile:
 		return "←/→ change profile · tab/shift+tab terminal · " + prefix
-	default: // stFocusTerminal
+	case stFocusTerminal:
+		return "tab/shift+tab theme · " + prefix
+	default: // stFocusTheme
 		return "tab/shift+tab editor · " + prefix
 	}
 }

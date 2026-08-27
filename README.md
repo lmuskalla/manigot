@@ -27,7 +27,7 @@ manigot/
   Dockerfile              ← build once, rebuild on Claude Code / OpenCode updates
   Makefile                ← build / rebuild / install / help; `make mg` builds bin/mg
   cmd/mg/                 ← the one host-side binary ('mg'); every command is a subcommand
-                            (session, profiles, setup, agents, job, done, delete, diff, init, tui, jdi)
+                            (session, profiles, theme, setup, agents, job, done, delete, diff, init, tui, jdi)
   internal/               ← the host-side logic as Go packages
     session/              ← docker launch construction (mounts, env, profiles)
     job/                  ← job lifecycle: create / finish / delete
@@ -249,6 +249,30 @@ Note: `ANTHROPIC_API_KEY` is rejected on the claude-pro path — it would
 override your subscription and bill per token. On the OpenCode profiles it is
 ignored (only the profile's own key is forwarded).
 
+### Theme (OpenCode)
+
+If you run a themed terminal (Nord, Gruvbox, ...) you probably want OpenCode
+to match it instead of booting with its own black-and-default look. Unlike
+the model, the theme is a **global** setting — one value shared across every
+OpenCode profile:
+
+```bash
+mg theme           # show the current theme + a reference list of OpenCode's
+                    # known built-in themes (nord, tokyonight, gruvbox, ...);
+                    # on an interactive terminal, also offers a picker
+mg theme nord       # set it — any name is accepted, even one not in the
+                    # reference list (OpenCode itself rejects an invalid name
+                    # at launch)
+```
+
+This writes `OPENCODE_THEME` into the same `manigot/.env`, which the session
+launcher forwards into OpenCode container sessions; `scripts/entrypoint.sh`
+turns it into OpenCode's `~/.config/opencode/tui.json` (`{"theme": "..."}`) —
+a separate file from the model's `opencode.json`, since OpenCode's own docs
+mark `opencode.json`'s `theme` key as legacy/deprecated. The TUI's settings
+screen has the same field. Claude Code already respects your terminal's own
+theme, so there's nothing to configure there.
+
 ### The installed commands
 
 `make install` puts a single command, `mg`, on your `PATH`. It dispatches on
@@ -258,6 +282,7 @@ its first argument:
 |---|---|
 | `mg` | start a session in the current project (works with or without `docs/` — see above); uses the default profile, or the one given with `--profile` |
 | `mg profiles` | list the profiles (which are ready, and which is the default) — `mg profiles <name>` sets the default used by bare `mg`, or pick it interactively on a TTY; the TUI's settings screen shares the same default |
+| `mg theme` | show the global OpenCode theme + a reference list of known built-in themes — `mg theme <name>` sets it (any name accepted), or pick it interactively on a TTY; the TUI's settings screen shares the same setting |
 | `mg setup` | configure credentials for your subscriptions, interactively — `mg setup <name>` for one, `mg setup --check` for a non-interactive status report |
 | `mg agents` | list available agents (global + any `docs/agents/` overrides/additions) and pick one to start a session in, via an interactive picker on a TTY (type to filter, enter to choose; thematic alias: `mg crew`, same command/behavior) |
 | `mg init` | bootstrap this project for the job workflow — copies `docs/` from the template (unless already present) and optionally hands off to `@prompter` to draft `docs/AGENTS.md`; the one command that works **without** `docs/` already existing |
@@ -345,6 +370,7 @@ mg --profile opencode-go      # this session on your OpenCode Go subscription
 mg --profile opencode-zen     # this session on OpenCode Zen (billed model)
 mg --profile opencode-zen-free # this session on OpenCode Zen (free model)
 mg profiles                   # list profiles + the current default (then pick a new one on a TTY)
+mg theme nord                 # set the global OpenCode theme (shared across every OpenCode profile)
 mg setup --check              # which profiles are ready to use
 
 # List all commands
@@ -1019,12 +1045,19 @@ Press `s` from the job list to open the settings screen:
   `MANIGOT_PROFILE` in `manigot/.env` — the one default shared between CLI and
   TUI — so switching it here also switches what bare `mg` uses, and a profile
   set with `mg profiles` shows up here.
+- **Theme** — the global OpenCode theme (e.g. `nord`, `tokyonight`), free-text
+  (not a fixed-list cycling selector, since OpenCode may ship themes manigot
+  doesn't know about — see `mg theme` above). Leave blank to let OpenCode use
+  its own default/config. Shared across every OpenCode profile, unlike the
+  per-profile model. Stored as `OPENCODE_THEME` in `manigot/.env`, same as
+  Profile, so a theme set with `mg theme` shows up here too. Claude Code
+  already respects your terminal's own theme, so this has no effect there.
 
 `tab` moves between fields, `enter` saves, `esc` discards. The editor persists
-to `config/tui-settings.json` and the profile to `manigot/.env` as
-`MANIGOT_PROFILE` (both gitignored, both in the manigot checkout) and apply
-immediately; a missing file just means nothing has been saved yet, and every
-setting falls back to its default above.
+to `config/tui-settings.json` and the profile + theme to `manigot/.env` as
+`MANIGOT_PROFILE`/`OPENCODE_THEME` (both gitignored, both in the manigot
+checkout) and apply immediately; a missing file just means nothing has been
+saved yet, and every setting falls back to its default above.
 
 ### Stage timeline
 

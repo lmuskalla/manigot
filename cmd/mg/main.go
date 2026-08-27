@@ -34,6 +34,8 @@ func main() {
 		os.Exit(0)
 	case "profiles":
 		os.Exit(runProfiles(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin), ttyPicker))
+	case "theme":
+		os.Exit(runTheme(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin), ttyPicker))
 	case "setup":
 		os.Exit(runSetup(args[1:], os.Stdin, os.Stdout, os.Stderr, cli.IsTerminal(os.Stdin)))
 	case "agents", "crew":
@@ -94,6 +96,9 @@ Commands:
                                    esc/q cancel)
   mg setup [name] [--check]       Configure credentials for your subscriptions,
                                    interactively, or report status with --check
+  mg theme [name]                 Show or set the global OpenCode theme
+                                   (OPENCODE_THEME), or pick one via an
+                                   interactive picker on a TTY
   mg agents                       List available agents and pick one to start,
                                    via an interactive picker on a TTY
                                    (type to filter, enter to choose;

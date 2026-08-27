@@ -129,10 +129,15 @@ type ProfileInfo struct {
 	// ("" when none — only the legacy path can leave it unset).
 	OpenCodeModel string
 
+	// OpenCodeTheme is the effective OPENCODE_THEME value for opencode runs
+	// ("" when unset — the global theme setting, config.Settings.Theme, is
+	// shared across every opencode profile, unlike OpenCodeModel).
+	OpenCodeTheme string
+
 	// KeyEnv holds the docker -e arguments for the forwarded credential keys
-	// (and the opencode model), e.g. ["-e", "CLAUDE_CODE_OAUTH_TOKEN=...",
-	// "-e", "ZHIPU_API_KEY=...", "-e", "OPENCODE_MODEL=..."]. Filled by
-	// CheckAuth.
+	// (and the opencode model/theme), e.g. ["-e", "CLAUDE_CODE_OAUTH_TOKEN=...",
+	// "-e", "ZHIPU_API_KEY=...", "-e", "OPENCODE_MODEL=...", "-e",
+	// "OPENCODE_THEME=..."]. Filled by CheckAuth.
 	KeyEnv []string
 }
 
@@ -207,6 +212,13 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 		info.OpenCodeModel = config.EnvValue("OPENCODE_MODEL") // forwarded as-is
 	}
 
+	// The theme setting is global — one value shared across every opencode
+	// profile (config.Settings.Theme/OPENCODE_THEME), unlike the per-profile
+	// model — so it's read once here rather than per-profile above.
+	if info.Tool == config.ToolOpenCode {
+		info.OpenCodeTheme = config.EnvValue("OPENCODE_THEME")
+	}
+
 	// --print is a non-interactive, one-shot invocation built for automated
 	// callers like mg-jdi. The legacy, profile-less --tool opencode path is
 	// intentionally left rejected here — it predates the profile system.
@@ -266,6 +278,12 @@ func (info *ProfileInfo) CheckAuth() error {
 	// via the {env:OPENCODE_MODEL} config substitution.
 	if info.OpenCodeModel != "" {
 		info.KeyEnv = append(info.KeyEnv, "-e", "OPENCODE_MODEL="+info.OpenCodeModel)
+	}
+	// The global theme setting, forwarded independent of which profile/API
+	// key is in use, consumed by scripts/entrypoint.sh via the
+	// {env:OPENCODE_THEME} config substitution.
+	if info.OpenCodeTheme != "" {
+		info.KeyEnv = append(info.KeyEnv, "-e", "OPENCODE_THEME="+info.OpenCodeTheme)
 	}
 	return nil
 }

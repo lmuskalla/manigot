@@ -29,7 +29,7 @@ func checkout(t *testing.T, env string) string {
 	for _, k := range []string{
 		"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID",
 		"ANTHROPIC_API_KEY", "ZHIPU_API_KEY", "OPENCODE_API_KEY", "OPENAI_API_KEY",
-		"OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_ZEN_MODEL", "OPENCODE_ZEN_FREE_MODEL", "OPENCODE_MODEL", "MANIGOT_PROFILE",
+		"OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_ZEN_MODEL", "OPENCODE_ZEN_FREE_MODEL", "OPENCODE_MODEL", "OPENCODE_THEME", "MANIGOT_PROFILE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -330,6 +330,91 @@ func TestResolveProfileOpenCodeZenFreeMissingKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "  OPENCODE_API_KEY") {
 		t.Errorf("missing key listing: %v", err)
+	}
+}
+
+// TestResolveProfileThemeForwardedIndependentOfProfile — the global theme
+// setting (OPENCODE_THEME) is forwarded regardless of which opencode profile
+// (or which of its API keys) is in use, unlike the per-profile model.
+func TestResolveProfileThemeForwardedIndependentOfProfile(t *testing.T) {
+	for _, profile := range []string{"zai", "opencode-go", "opencode-zen", "opencode-zen-free"} {
+		t.Run(profile, func(t *testing.T) {
+			checkout(t, "MANIGOT_PROFILE="+profile+"\nZHIPU_API_KEY=z\nOPENCODE_API_KEY=k\nOPENCODE_THEME=nord\n")
+			info, err := ResolveProfile(Options{})
+			if err != nil {
+				t.Fatalf("ResolveProfile: %v", err)
+			}
+			if info.OpenCodeTheme != "nord" {
+				t.Errorf("OpenCodeTheme = %q, want nord", info.OpenCodeTheme)
+			}
+			if err := info.CheckAuth(); err != nil {
+				t.Fatalf("CheckAuth: %v", err)
+			}
+			if !contains(info.KeyEnv, "-e", "OPENCODE_THEME=nord") {
+				t.Errorf("%s KeyEnv missing OPENCODE_THEME=nord: %v", profile, info.KeyEnv)
+			}
+		})
+	}
+}
+
+// TestResolveProfileThemeUnsetOmitsKeyEnv — no OPENCODE_THEME in .env means
+// no -e OPENCODE_THEME= at all, letting OpenCode fall back to its own
+// default/config.
+func TestResolveProfileThemeUnsetOmitsKeyEnv(t *testing.T) {
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.OpenCodeTheme != "" {
+		t.Errorf("OpenCodeTheme = %q, want empty", info.OpenCodeTheme)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	for _, arg := range info.KeyEnv {
+		if strings.HasPrefix(arg, "OPENCODE_THEME=") {
+			t.Errorf("KeyEnv should not contain OPENCODE_THEME when unset: %v", info.KeyEnv)
+		}
+	}
+}
+
+// TestResolveProfileThemeNotForwardedForClaudePro — claude-pro is not an
+// opencode run, so OpenCodeTheme stays empty and no theme env var is
+// forwarded, even if OPENCODE_THEME happens to be set.
+func TestResolveProfileThemeNotForwardedForClaudePro(t *testing.T) {
+	checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nOPENCODE_THEME=nord\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.OpenCodeTheme != "" {
+		t.Errorf("claude-pro OpenCodeTheme = %q, want empty", info.OpenCodeTheme)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	for _, arg := range info.KeyEnv {
+		if strings.HasPrefix(arg, "OPENCODE_THEME=") {
+			t.Errorf("claude-pro KeyEnv should never contain OPENCODE_THEME: %v", info.KeyEnv)
+		}
+	}
+}
+
+// TestResolveProfileThemeForwardedForLegacyOpenCode — the legacy,
+// profile-less --tool opencode path also gets the global theme, since it's
+// independent of profile/API key.
+func TestResolveProfileThemeForwardedForLegacyOpenCode(t *testing.T) {
+	checkout(t, "OPENAI_API_KEY=sk-oa\nOPENCODE_THEME=gruvbox\n")
+	info, err := ResolveProfile(Options{Tool: "opencode"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	if !contains(info.KeyEnv, "-e", "OPENCODE_THEME=gruvbox") {
+		t.Errorf("legacy KeyEnv missing OPENCODE_THEME=gruvbox: %v", info.KeyEnv)
 	}
 }
 

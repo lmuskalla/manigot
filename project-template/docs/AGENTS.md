@@ -73,6 +73,11 @@ The `shot` tool (`/usr/local/bin/shot`, see the manigot README's PLAYWRIGHT
 doc) renders a URL to a PNG + model-free render report. The developer agent
 uses it to verify rendered work; read-only agents consume the artifacts and
 never run it.
+Claude Code respects your host terminal's own color theme automatically;
+OpenCode needs an explicit theme setting, which manigot exposes as a global
+setting shared across every OpenCode profile (`mg theme <name>`, or the
+TUI's settings screen) — see the manigot README's Theme section. This is a
+manigot-level setting, not something to configure per-project here.
 Keep this file tool-neutral — write it for "the agent", not for one vendor.
 -->
 

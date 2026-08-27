@@ -140,6 +140,16 @@ type Settings struct {
 	// tmux: inside tmux the launch is always a tmux split pane, regardless of
 	// this setting — see internal/launch's buildCmd.
 	Terminal string `json:"terminal,omitempty"`
+
+	// Theme is the global OpenCode theme name (e.g. "nord", "tokyonight") —
+	// one value shared across every OpenCode profile, unlike the per-profile
+	// OPENCODE_*_MODEL keys. It is the shared default: loaded from
+	// OPENCODE_THEME in manigot/.env and persisted there by Save, never to
+	// tui-settings.json — mirroring Profile's storage exactly. Empty means
+	// "let OpenCode use its own default/config" — see ThemeValue. Unlike
+	// Profile, an unrecognized value is still accepted: OpenCode's theme list
+	// is not validated here (see `mg theme`).
+	Theme string `json:"-"`
 }
 
 // ProfileValue returns s.Profile, defaulting to ProfileClaudePro when unset.
@@ -148,6 +158,14 @@ func (s Settings) ProfileValue() string {
 		return ProfileClaudePro
 	}
 	return s.Profile
+}
+
+// ThemeValue returns s.Theme, defaulting to "" (meaning "let OpenCode use its
+// own default/config") when unset. Unlike ProfileValue, there is no non-empty
+// fallback — an empty theme is a legitimate, common choice, not an invalid
+// one.
+func (s Settings) ThemeValue() string {
+	return s.Theme
 }
 
 // RecentActivityCountValue returns s.RecentActivityCount, defaulting to
@@ -364,6 +382,7 @@ func Load() (Settings, error) {
 		}
 	}
 	s.Tool = "" // legacy field — not written back
+	s.Theme = GetEnv("OPENCODE_THEME")
 	return s, nil
 }
 
@@ -394,5 +413,8 @@ func Save(s Settings) error {
 	if _, ok := ProfileByID(profile); !ok {
 		return fmt.Errorf("cannot save: %q is not a valid profile id", profile)
 	}
-	return writeEnvProfile(profile)
+	if err := writeEnvProfile(profile); err != nil {
+		return err
+	}
+	return UpsertEnv("OPENCODE_THEME", s.Theme)
 }
