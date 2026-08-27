@@ -673,9 +673,12 @@ project split:
   container at the project skills location and override a global skill of the
   same name — the same project-overrides-global precedence agents have.
 
-manigot ships one example skill, `skills/job-brief/`; drop yours into
-`skills/` in the checkout (or `docs/skills/` in a project) to make them
-available everywhere.
+manigot ships a small curated set of best-practice skills in `skills/`:
+`frontend-design` (UI/UX design direction), `webapp-testing` (Playwright-based
+testing of local web apps), `test-driven-development` (red-green-refactor),
+`systematic-debugging` (root-cause-first debugging), plus the example
+`job-brief`. Drop yours into `skills/` in the checkout (or `docs/skills/` in a
+project) to make them available everywhere.
 
 ---
 
