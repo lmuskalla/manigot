@@ -75,10 +75,10 @@ func runInit(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int
 	switch {
 	case *profileArg != "":
 		switch *profileArg {
-		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen:
+		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen, config.ProfileOpenCodeZenFree:
 			profile = *profileArg
 		default:
-			fmt.Fprintf(stderr, "Error: --profile must be 'claude-pro', 'zai', 'opencode-go' or 'opencode-zen' (got '%s').\n", *profileArg)
+			fmt.Fprintf(stderr, "Error: --profile must be 'claude-pro', 'zai', 'opencode-go', 'opencode-zen' or 'opencode-zen-free' (got '%s').\n", *profileArg)
 			return 1
 		}
 	case *toolArg != "":

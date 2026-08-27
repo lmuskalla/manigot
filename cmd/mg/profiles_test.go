@@ -108,6 +108,29 @@ func TestProfilesSetOpenCodeZen(t *testing.T) {
 	}
 }
 
+func TestProfilesSetOpenCodeZenFree(t *testing.T) {
+	dir := profileCheckout(t, "OPENCODE_API_KEY=zen-key\n")
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"opencode-zen-free"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "MANIGOT_PROFILE=opencode-zen-free") {
+		t.Errorf(".env missing MANIGOT_PROFILE=opencode-zen-free:\n%s", env)
+	}
+	if !strings.Contains(out.String(), "Default profile set to opencode-zen-free") {
+		t.Errorf("missing set confirmation:\n%s", out.String())
+	}
+	// The shared OPENCODE_API_KEY is present — no missing-creds warning.
+	if strings.Contains(out.String(), "Warning:") {
+		t.Errorf("unexpected warning with the key set:\n%s", out.String())
+	}
+}
+
 func TestProfilesSetUnknownProfile(t *testing.T) {
 	profileCheckout(t, "")
 	var out, errOut strings.Builder
@@ -118,7 +141,7 @@ func TestProfilesSetUnknownProfile(t *testing.T) {
 	if !strings.Contains(errOut.String(), "Error: unknown profile 'bogus'.") {
 		t.Errorf("missing unknown-profile error:\n%s", errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "Valid profiles: claude-pro zai opencode-go opencode-zen") {
+	if !strings.Contains(errOut.String(), "Valid profiles: claude-pro zai opencode-go opencode-zen opencode-zen-free") {
 		t.Errorf("missing valid-profiles hint:\n%s", errOut.String())
 	}
 }
@@ -240,10 +263,10 @@ func TestProfilesPickerGetsProfileRows(t *testing.T) {
 	if gotTitle != "Select the default profile" {
 		t.Errorf("picker title = %q, want %q", gotTitle, "Select the default profile")
 	}
-	if len(gotRows) != 4 {
-		t.Fatalf("picker rows = %d, want 4", len(gotRows))
+	if len(gotRows) != 5 {
+		t.Fatalf("picker rows = %d, want 5", len(gotRows))
 	}
-	wantIDs := []string{"claude-pro", "zai", "opencode-go", "opencode-zen"}
+	wantIDs := []string{"claude-pro", "zai", "opencode-go", "opencode-zen", "opencode-zen-free"}
 	for i, want := range wantIDs {
 		if gotRows[i].ID != want {
 			t.Errorf("row %d ID = %q, want %q", i, gotRows[i].ID, want)
@@ -255,7 +278,8 @@ func TestProfilesPickerGetsProfileRows(t *testing.T) {
 		{"claude-pro", "Claude Code", "claude-code", "(Claude Code default)", "✗ missing CLAUDE_CODE_OAUTH_TOKEN"},
 		{"zai", "Z.AI Coding Plan", "opencode", "zai-coding-plan/glm-5.2", "✗ missing ZHIPU_API_KEY"},
 		{"opencode-go", "OpenCode · Go", "opencode", "opencode-go/glm-5.2", "✗ missing OPENCODE_API_KEY"},
-		{"opencode-zen", "OpenCode · Zen", "opencode", "opencode/deepseek-v4-flash-free", "✗ missing OPENCODE_API_KEY"},
+		{"opencode-zen", "OpenCode · Zen", "opencode", "opencode/deepseek-v4-flash", "✗ missing OPENCODE_API_KEY"},
+		{"opencode-zen-free", "OpenCode · Zen Free", "opencode", "opencode/deepseek-v4-flash-free", "✗ missing OPENCODE_API_KEY"},
 	}
 	for i, parts := range wantSearchParts {
 		key := gotRows[i].SearchKey

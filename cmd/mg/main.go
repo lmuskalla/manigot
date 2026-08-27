@@ -72,14 +72,15 @@ func printHelp() {
 		head = `mg — isolated agent environment per project (Claude Code or OpenCode, sandboxed in Docker)
 
 Profiles bundle an agent CLI with one of your subscriptions:
-  claude-pro    Claude Code, billed to your Claude Pro/Max subscription
-  zai           OpenCode, billed to your Z.AI Coding Plan
-  opencode-go   OpenCode, billed to the OpenCode Go subscription
-  opencode-zen  OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)
+  claude-pro        Claude Code, billed to your Claude Pro/Max subscription
+  zai               OpenCode, billed to your Z.AI Coding Plan
+  opencode-go       OpenCode, billed to the OpenCode Go subscription
+  opencode-zen      OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)
+  opencode-zen-free OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)
 
 Usage:
   mg                              Start a session in the current project
-  mg --profile <name>             ...with the given profile (claude-pro|zai|opencode-go|opencode-zen)
+  mg --profile <name>             ...with the given profile (claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free)
   mg --agent/-a <name>            Start straight in an agent (e.g. analyst)
   mg --job/-j <id>                Start with a job's brief.md as the prompt
   mg --agent <name> --job <id>    Combine the two

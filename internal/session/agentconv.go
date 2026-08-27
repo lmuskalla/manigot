@@ -20,16 +20,21 @@ import (
 // subagent schema — so it always returns ("", false, nil).
 //
 // For ToolOpenCode the conversion mirrors the Dockerfile's bake-time awk for
-// the built-in agents (which strips the `name:` and `tools:` frontmatter keys
-// from the OpenCode copies of agents/*.md): `name:` is dropped because
-// OpenCode derives the agent name from the filename, and `tools:` is dropped
-// because OpenCode requires tools as a map and would hard-error on the list
-// form ("Expected object | undefined, got ..."). A `permission:` block — the
-// OpenCode schema the read-only agents (reviewer/security/analyst/owner) use
-// to express their restriction — passes through untouched. The strip also
-// handles multi-line
-// map-form `tools:` blocks, so a custom agent written as an object today
-// converts cleanly instead of leaving orphaned indented keys.
+// the built-in agents (which strips the `name:`, `tools:` and `commit:`
+// frontmatter keys from the OpenCode copies of agents/*.md): `name:` is
+// dropped because OpenCode derives the agent name from the filename, and
+// `tools:` is dropped because OpenCode requires tools as a map and would
+// hard-error on the list form ("Expected object | undefined, got ...").
+// `commit:` is dropped because it is manigot's own git-mount-mode marker (see
+// agentgit.go), unknown to OpenCode's agent schema — left in, OpenCode
+// forwards it as an extra top-level field into the chat completions request,
+// which OpenCode Zen's strict validator rejects outright ("Extra inputs are
+// not permitted, field: 'commit'"). A `permission:` block — the OpenCode
+// schema the read-only agents (reviewer/security/analyst/owner) use to
+// express their restriction — passes through untouched, since OpenCode
+// itself recognizes that key. The strip also handles multi-line map-form
+// `tools:` blocks, so a custom agent written as an object today converts
+// cleanly instead of leaving orphaned indented keys.
 //
 // The caller shadows the docs mount's agents/ subpath with the returned temp
 // dir for OpenCode sessions (see BuildDockerInvocation) and removes it via
@@ -75,11 +80,11 @@ func convertAgents(srcDir, tool string) (string, bool, error) {
 	return tmp, true, nil
 }
 
-// convertAgentFile strips the frontmatter `name:` and `tools:` keys from an
-// agent file, preserving the rest of the frontmatter and the body verbatim —
-// the Go equivalent of the Dockerfile's bake-time awk:
+// convertAgentFile strips the frontmatter `name:`, `tools:` and `commit:`
+// keys from an agent file, preserving the rest of the frontmatter and the
+// body verbatim — the Go equivalent of the Dockerfile's bake-time awk:
 //
-//	awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools):/{next} {print}'
+//	awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools|commit):/{next} {print}'
 //
 // One deliberate extension over the awk: a multi-line map-form `tools:` block
 // (tools: followed by indented entries) is dropped whole, not just its header
@@ -110,7 +115,7 @@ func convertAgentFile(src []byte) []byte {
 			}
 			droppingToolsBlock = false
 		}
-		if strings.HasPrefix(line, "name:") || strings.HasPrefix(line, "tools:") {
+		if strings.HasPrefix(line, "name:") || strings.HasPrefix(line, "tools:") || strings.HasPrefix(line, "commit:") {
 			if strings.HasPrefix(line, "tools:") {
 				droppingToolsBlock = true
 			}

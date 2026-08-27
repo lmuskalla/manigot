@@ -4,7 +4,7 @@
 This is your project context, loaded by the agent at the start of every session.
 manigot is vendor-agnostic: it runs Claude Code or OpenCode (`mg --profile
 claude-pro` vs `mg --profile zai`/`--profile opencode-go`/`--profile
-opencode-zen`) against the same
+opencode-zen`/`--profile opencode-zen-free`) against the same
 project. Your docs/ directory is
 mounted at /workspace/.claude for Claude Code and /workspace/.opencode for
 OpenCode, and the same global agents are available under @name either way —

@@ -370,8 +370,8 @@ func (v *settingsView) render() string {
 	// Describe the selected profile: which agent CLI it launches and what it
 	// bills against, then where the choice is stored. The model is
 	// deliberately not shown — the opencode profiles' model lives in manigot's
-	// .env (OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL), which the
-	// TUI does not read.
+	// .env (OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL/
+	// OPENCODE_ZEN_FREE_MODEL), which the TUI does not read.
 	sel := profileOptions[v.profile]
 	selDesc := "tool: " + sel.Tool
 	selDesc += " · billed via " + sel.Auth

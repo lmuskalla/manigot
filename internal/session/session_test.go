@@ -29,7 +29,7 @@ func checkout(t *testing.T, env string) string {
 	for _, k := range []string{
 		"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID",
 		"ANTHROPIC_API_KEY", "ZHIPU_API_KEY", "OPENCODE_API_KEY", "OPENAI_API_KEY",
-		"OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_ZEN_MODEL", "OPENCODE_MODEL", "MANIGOT_PROFILE",
+		"OPENCODE_ZAI_MODEL", "OPENCODE_GO_MODEL", "OPENCODE_ZEN_MODEL", "OPENCODE_ZEN_FREE_MODEL", "OPENCODE_MODEL", "MANIGOT_PROFILE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -114,7 +114,7 @@ func TestResolveProfileExplicitWins(t *testing.T) {
 func TestResolveProfileInvalidExplicit(t *testing.T) {
 	checkout(t, "")
 	_, err := ResolveProfile(Options{Profile: "bogus"})
-	if err == nil || !strings.Contains(err.Error(), "--profile must be one of: claude-pro|zai|opencode-go|opencode-zen (got 'bogus').") {
+	if err == nil || !strings.Contains(err.Error(), "--profile must be one of: claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free (got 'bogus').") {
 		t.Errorf("invalid --profile error = %v", err)
 	}
 }
@@ -238,10 +238,10 @@ func TestResolveProfileOpenCodeZenForwarding(t *testing.T) {
 	if len(info.OpenCodeKeys) != 1 || info.OpenCodeKeys[0] != "OPENCODE_API_KEY" {
 		t.Errorf("zen OpenCodeKeys = %v, want [OPENCODE_API_KEY]", info.OpenCodeKeys)
 	}
-	if info.OpenCodeModel != "opencode/deepseek-v4-flash-free" {
+	if info.OpenCodeModel != "opencode/deepseek-v4-flash" {
 		t.Errorf("zen default model = %q", info.OpenCodeModel)
 	}
-	if !contains(info.KeyEnv, "-e", "OPENCODE_API_KEY=zen-secret") || !contains(info.KeyEnv, "-e", "OPENCODE_MODEL=opencode/deepseek-v4-flash-free") {
+	if !contains(info.KeyEnv, "-e", "OPENCODE_API_KEY=zen-secret") || !contains(info.KeyEnv, "-e", "OPENCODE_MODEL=opencode/deepseek-v4-flash") {
 		t.Errorf("zen KeyEnv = %v", info.KeyEnv)
 	}
 	// Only the profile's own key is forwarded — no CLAUDE_* subscription keys.
@@ -272,6 +272,61 @@ func TestResolveProfileOpenCodeZenMissingKey(t *testing.T) {
 	err = info.CheckAuth()
 	if err == nil || !strings.Contains(err.Error(), "profile 'opencode-zen' is missing its API key.") {
 		t.Errorf("missing opencode-zen key error = %v", err)
+	}
+	if !strings.Contains(err.Error(), "  OPENCODE_API_KEY") {
+		t.Errorf("missing key listing: %v", err)
+	}
+}
+
+func TestResolveProfileOpenCodeZenFreeForwarding(t *testing.T) {
+	checkout(t, "MANIGOT_PROFILE=opencode-zen-free\nOPENCODE_API_KEY=zen-secret\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	// Shares the OpenCode key with opencode-go/opencode-zen by design; the
+	// model defaults to the free Zen model and is overridable via
+	// OPENCODE_ZEN_FREE_MODEL.
+	if len(info.OpenCodeKeys) != 1 || info.OpenCodeKeys[0] != "OPENCODE_API_KEY" {
+		t.Errorf("zen-free OpenCodeKeys = %v, want [OPENCODE_API_KEY]", info.OpenCodeKeys)
+	}
+	if info.OpenCodeModel != "opencode/deepseek-v4-flash-free" {
+		t.Errorf("zen-free default model = %q", info.OpenCodeModel)
+	}
+	if !contains(info.KeyEnv, "-e", "OPENCODE_API_KEY=zen-secret") || !contains(info.KeyEnv, "-e", "OPENCODE_MODEL=opencode/deepseek-v4-flash-free") {
+		t.Errorf("zen-free KeyEnv = %v", info.KeyEnv)
+	}
+	// Only the profile's own key is forwarded — no CLAUDE_* subscription keys.
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if contains(info.KeyEnv, "-e", k+"=") {
+			t.Errorf("zen-free KeyEnv forwards %s, want only the profile's own keys: %v", k, info.KeyEnv)
+		}
+	}
+}
+
+func TestResolveProfileOpenCodeZenFreeModelOverride(t *testing.T) {
+	checkout(t, "MANIGOT_PROFILE=opencode-zen-free\nOPENCODE_API_KEY=k\nOPENCODE_ZEN_FREE_MODEL=opencode/custom-free\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.OpenCodeModel != "opencode/custom-free" {
+		t.Errorf("opencode-zen-free model override = %q", info.OpenCodeModel)
+	}
+}
+
+func TestResolveProfileOpenCodeZenFreeMissingKey(t *testing.T) {
+	checkout(t, "MANIGOT_PROFILE=opencode-zen-free\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	err = info.CheckAuth()
+	if err == nil || !strings.Contains(err.Error(), "profile 'opencode-zen-free' is missing its API key.") {
+		t.Errorf("missing opencode-zen-free key error = %v", err)
 	}
 	if !strings.Contains(err.Error(), "  OPENCODE_API_KEY") {
 		t.Errorf("missing key listing: %v", err)

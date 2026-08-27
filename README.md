@@ -6,11 +6,13 @@
 Isolated agent environment per project. One Docker image, real filesystem
 containment, structured agent workflow.
 
-Runs a session under one of four **subscription profiles** — `claude-pro`
+Runs a session under one of five **subscription profiles** — `claude-pro`
 (Claude Code, billed to your Claude Pro/Max subscription), `zai` (OpenCode,
 billed to your Z.AI Coding Plan), `opencode-go` (OpenCode, billed to the
-OpenCode Go subscription), and `opencode-zen` (OpenCode, billed to OpenCode
-Zen — DeepSeek V4 Flash Free costs no credits). Pick per session with
+OpenCode Go subscription), `opencode-zen` (OpenCode, billed to OpenCode
+Zen — DeepSeek V4 Flash, pay-as-you-go), and `opencode-zen-free` (OpenCode,
+billed to OpenCode Zen — DeepSeek V4 Flash Free costs no credits). Pick per
+session with
 `--profile`, set the default
 used by bare `mg` with `mg profiles`, and configure credentials with
 `mg setup`.
@@ -112,7 +114,8 @@ A profile bundles an agent CLI with one of your subscriptions:
 | `claude-pro` | Claude Code | Claude Pro/Max subscription | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs |
 | `zai` | OpenCode | Z.AI Coding Plan | `ZHIPU_API_KEY` |
 | `opencode-go` | OpenCode | OpenCode Go subscription | `OPENCODE_API_KEY` |
-| `opencode-zen` | OpenCode | OpenCode Zen (DeepSeek V4 Flash Free) | `OPENCODE_API_KEY` |
+| `opencode-zen` | OpenCode | OpenCode Zen (DeepSeek V4 Flash, pay-as-you-go) | `OPENCODE_API_KEY` |
+| `opencode-zen-free` | OpenCode | OpenCode Zen (DeepSeek V4 Flash Free) | `OPENCODE_API_KEY` |
 
 Which provider key rides into the container is pinned per profile: only `zai`
 forwards `ZHIPU_API_KEY`, only `opencode-go` forwards `OPENCODE_API_KEY`, and
@@ -205,8 +208,23 @@ EOF
 ### `opencode-zen` — OpenCode, OpenCode Zen
 
 OpenCode Zen uses the same OpenCode API key from [opencode.ai/auth](https://opencode.ai/auth)
-as `opencode-go` — billing follows your subscription. Zen's DeepSeek V4 Flash
-Free model costs no credits, so this profile works with a key alone:
+as `opencode-go` — billing follows your subscription. This profile's DeepSeek
+V4 Flash model is billed pay-as-you-go against your Zen account credits:
+
+```bash
+cat >> manigot/.env << EOF
+OPENCODE_API_KEY=sk-...        # your key from https://opencode.ai/auth
+
+# optional: which model this profile defaults to, as provider/model.
+# Zen's (billed) DeepSeek V4 Flash model is opencode/deepseek-v4-flash
+OPENCODE_ZEN_MODEL=opencode/deepseek-v4-flash
+EOF
+```
+
+### `opencode-zen-free` — OpenCode, OpenCode Zen (free)
+
+Same OpenCode API key as `opencode-zen`. The free DeepSeek V4 Flash model
+costs no credits, so this profile works with a key alone:
 
 ```bash
 cat >> manigot/.env << EOF
@@ -214,7 +232,7 @@ OPENCODE_API_KEY=sk-...        # your key from https://opencode.ai/auth
 
 # optional: which model this profile defaults to, as provider/model.
 # Zen's free DeepSeek V4 Flash model is opencode/deepseek-v4-flash-free
-OPENCODE_ZEN_MODEL=opencode/deepseek-v4-flash-free
+OPENCODE_ZEN_FREE_MODEL=opencode/deepseek-v4-flash-free
 EOF
 ```
 
@@ -319,7 +337,8 @@ mg init
 mg                            # the default profile (claude-pro), or whatever `mg profiles` set
 mg --profile zai              # this session on your Z.AI Coding Plan
 mg --profile opencode-go      # this session on your OpenCode Go subscription
-mg --profile opencode-zen     # this session on OpenCode Zen (free model)
+mg --profile opencode-zen     # this session on OpenCode Zen (billed model)
+mg --profile opencode-zen-free # this session on OpenCode Zen (free model)
 mg profiles                   # list profiles + the current default (then pick a new one on a TTY)
 mg setup --check              # which profiles are ready to use
 
@@ -372,10 +391,11 @@ both, the job prompt wins.
 ## Choosing a profile
 
 A profile bundles the agent CLI with the subscription it is billed against.
-`--profile claude-pro` (default), `--profile zai`, `--profile opencode-go`, or
-`--profile opencode-zen`. What differs per profile:
+`--profile claude-pro` (default), `--profile zai`, `--profile opencode-go`,
+`--profile opencode-zen`, or `--profile opencode-zen-free`. What differs per
+profile:
 
-| | `claude-pro` | `zai` / `opencode-go` / `opencode-zen` |
+| | `claude-pro` | `zai` / `opencode-go` / `opencode-zen` / `opencode-zen-free` |
 |---|---|---|
 | CLI in container | `claude` | `opencode` |
 | Auth | `CLAUDE_CODE_OAUTH_TOKEN` + account UUIDs (Claude subscription) | `ZHIPU_API_KEY` / `OPENCODE_API_KEY` |
@@ -438,9 +458,9 @@ launcher for work that must touch the host itself.
 - **Agents.** manigot's global agents are baked into the container image,
   not installed on the host — `--agent` works only if the host's own CLI has
   that agent installed (it errors clearly otherwise).
-- **OpenCode model.** The zai/opencode-go/opencode-zen profiles' plan model is
-  forwarded via opencode's `--model` flag; mg never writes your host's opencode
-  config.
+- **OpenCode model.** The zai/opencode-go/opencode-zen/opencode-zen-free
+  profiles' plan model is forwarded via opencode's `--model` flag; mg never
+  writes your host's opencode config.
 - **`--print` stays a container path.** `mg host --print` is rejected with a
   clear error — non-interactive runs (and `mg jdi`) still use the container.
 
@@ -633,8 +653,9 @@ worktree is resolved per invocation) — when:
 drives — both stay available as ordinary agents, unaffected.
 
 `mg jdi` runs under the `claude-pro` profile by default; pass `--profile
-zai`, `--profile opencode-go`, or `--profile opencode-zen` to drive the
-sequence under an OpenCode subscription instead:
+zai`, `--profile opencode-go`, `--profile opencode-zen`, or `--profile
+opencode-zen-free` to drive the sequence under an OpenCode subscription
+instead:
 
 ```bash
 mg jdi --job a3f9k2 --profile zai
@@ -828,8 +849,8 @@ Press `s` from the job list to open the settings screen:
 
 - **Editor** — the command `e` (in the detail view) runs to open `brief.md`.
   Leave blank to fall back to `$VISUAL`/`$EDITOR`/`nano`/`vi`.
-- **Profile** — `claude-pro`, `zai`, `opencode-go`, or `opencode-zen`,
-  cycled with `←`/`→`
+- **Profile** — `claude-pro`, `zai`, `opencode-go`, `opencode-zen`, or
+  `opencode-zen-free`, cycled with `←`/`→`
   (the selected profile's tool, model, and billing are shown beneath the list).
   Selects which subscription firing an agent from the action bar launches
   (adds `--profile` to the `mg --agent ... --job ...` command the same way

@@ -21,14 +21,14 @@ TASK-2: PASS
 notes: `internal/session/session.go` — `valid` error string, `--profile`/`MANIGOT_PROFILE`
 validation switches, and the `case config.ProfileOpenCodeZen:` mapping
 (`Tool=opencode`, `OpenCodeKeys=["OPENCODE_API_KEY"]`,
-`OpenCodeModel=envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash-free")`)
+`OpenCodeModel=envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash")`)
 all present. Mirrors the opencode-go case exactly, including the shared key and the
 `--print` legacy-hint mention. `CheckAuth` forwards key + `OPENCODE_MODEL` generically.
 
 TASK-3: PASS
 notes: `cmd/mg/profiles.go` — `profileAuthKeys`/`profileModelEnv`/`profileModelDefaults`
 gain the zen entries (`OPENCODE_API_KEY` / `OPENCODE_ZEN_MODEL` /
-`opencode/deepseek-v4-flash-free`), `profilesHelp` text updated, `profilesSet` switch
+`opencode/deepseek-v4-flash`), `profilesHelp` text updated, `profilesSet` switch
 accepts the new id. The "Valid profiles:" hint derives from `profileIDs()` →
 `config.Profiles()`, so it updates automatically (test-pinned).
 
@@ -37,7 +37,7 @@ notes: `cmd/mg/setup.go` — `setupHelp` text, both "Usage:" error lines, the
 single-profile/target validation, the `--check` single + `--check`-all calls, the wizard
 dispatch (single-profile `case` and the full four-profile walk), and the new
 `setupOpenCodeZen` wizard mirroring `setupOpenCodeGo` (reuses `OPENCODE_API_KEY`,
-prompts `OPENCODE_ZEN_MODEL` defaulting to `opencode/deepseek-v4-flash-free`).
+prompts `OPENCODE_ZEN_MODEL` defaulting to `opencode/deepseek-v4-flash`).
 
 TASK-5: PASS
 notes: `cmd/mg/main.go` (help profile list + `--profile` usage line), `cmd/mg/jdi.go`
@@ -54,7 +54,7 @@ TASK-7: PASS
 notes: All pinned strings updated and zen coverage added: `session_test.go`
 (`TestResolveProfileOpenCodeZenForwarding`/`ModelOverride`/`MissingKey`, hermetic key list
 gains `OPENCODE_ZEN_MODEL`), `docker_test.go` (`TestBuildOpenCodeZenProfile` — argv asserts
-`OPENCODE_API_KEY`, `OPENCODE_MODEL=opencode/deepseek-v4-flash-free`, `MANIGOT_TOOL=opencode`,
+`OPENCODE_API_KEY`, `OPENCODE_MODEL=opencode/deepseek-v4-flash`, `MANIGOT_TOOL=opencode`,
 and the absence of `CLAUDE_*` keys), `host_test.go` (`TestBuildHostOpenCodeZenProfile` —
 `--model` flag + env, no `--auto`/docker, no `CLAUDE_*` keys), `profiles_test.go`
 (valid-profiles string + `TestProfilesSetOpenCodeZen`), `setup_test.go` (`--check-all` line,
@@ -77,8 +77,8 @@ notes: `make mg` + `go test ./...` claimed passing (not re-runnable in this sand
 docker, and the agent git shim restricts bash to read+commit). The one item flagged as
 unverifiable in-repo — the exact free-model id — was resolved and is independently
 verified here: the installed opencode model catalog (`~/.cache/opencode/models.json`)
-contains `deepseek-v4-flash-free` as a model id under the `opencode` provider (runtime
-full id `opencode/deepseek-v4-flash-free`, matching the `provider/model` convention this
+contains `deepseek-v4-flash` as a model id under the `opencode` provider (runtime
+full id `opencode/deepseek-v4-flash`, matching the `provider/model` convention this
 very session uses: `opencode-go/deepseek-v4-flash`), and `opencode-zen` appears nowhere in
 the catalog — so the analyst's proposed `opencode-zen/deepseek-v4-flash` would indeed
 fail as an unknown model. The correction from the tasks.md proposal is exactly the

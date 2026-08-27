@@ -181,7 +181,7 @@ func TestBuildOpenCodeZenProfile(t *testing.T) {
 	}
 	containsAll(t, inv.Argv,
 		"-e", "OPENCODE_API_KEY=zen-secret",
-		"-e", "OPENCODE_MODEL=opencode/deepseek-v4-flash-free",
+		"-e", "OPENCODE_MODEL=opencode/deepseek-v4-flash",
 		"-e", "MANIGOT_TOOL=opencode",
 		"-v", filepath.Join(root, "docs")+":/workspace/.opencode:z",
 		"-v", filepath.Join(root, "docs", "AGENTS.md")+":/workspace/AGENTS.md:ro",
@@ -192,6 +192,41 @@ func TestBuildOpenCodeZenProfile(t *testing.T) {
 	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
 		if strings.Contains(joined, k+"=") {
 			t.Errorf("zen docker argv forwards %s, want only the profile's own keys:\n%s", k, joined)
+		}
+	}
+}
+
+func TestBuildOpenCodeZenFreeProfile(t *testing.T) {
+	root, _ := docProject(t)
+	checkout(t, "MANIGOT_PROFILE=opencode-zen-free\nOPENCODE_API_KEY=zen-secret\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-e", "OPENCODE_API_KEY=zen-secret",
+		"-e", "OPENCODE_MODEL=opencode/deepseek-v4-flash-free",
+		"-e", "MANIGOT_TOOL=opencode",
+		"-v", filepath.Join(root, "docs")+":/workspace/.opencode:z",
+		"-v", filepath.Join(root, "docs", "AGENTS.md")+":/workspace/AGENTS.md:ro",
+	)
+	// The CLAUDE_* subscription keys belong to claude-pro only — an opencode
+	// profile's argv must not carry them.
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if strings.Contains(joined, k+"=") {
+			t.Errorf("zen-free docker argv forwards %s, want only the profile's own keys:\n%s", k, joined)
 		}
 	}
 }

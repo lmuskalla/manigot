@@ -184,7 +184,7 @@ func TestInitProfileValidation(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
-		{[]string{"--profile", "bogus"}, "Error: --profile must be 'claude-pro', 'zai', 'opencode-go' or 'opencode-zen' (got 'bogus')."},
+		{[]string{"--profile", "bogus"}, "Error: --profile must be 'claude-pro', 'zai', 'opencode-go', 'opencode-zen' or 'opencode-zen-free' (got 'bogus')."},
 		{[]string{"--tool", "bogus"}, "Error: --tool must be 'claude-code' or 'opencode' (got 'bogus')."},
 	} {
 		var errOut strings.Builder

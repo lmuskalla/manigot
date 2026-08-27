@@ -59,12 +59,12 @@ Body.
 }
 
 // A permission: block (the OpenCode read-only restriction — see the
-// read-only agents' files) must survive the strip untouched: name:/tools:
-// are dropped, permission: and its indented rules are preserved verbatim,
-// so the OpenCode copy enforces the same read-only restriction under
-// OpenCode's own schema that tools: expresses under Claude Code. This
-// includes the deny rules (git worktree*, git branch -D*, ...) and the
-// commit: marker added by the worktree-protection work.
+// read-only agents' files) must survive the strip untouched: name:/tools:/
+// commit: are dropped, permission: and its indented rules are preserved
+// verbatim, so the OpenCode copy enforces the same read-only restriction
+// under OpenCode's own schema that tools: expresses under Claude Code. This
+// includes the deny rules (git worktree*, git branch -D*, ...); commit: is
+// stripped alongside name:/tools: — see TestConvertAgentFileStripsCommitMarker.
 func TestConvertAgentFilePreservesPermissionBlock(t *testing.T) {
 	src := `---
 name: reviewer
@@ -90,7 +90,6 @@ You are read-only.
 `
 	want := `---
 description: Reviews changes against the original task requirements.
-commit: true
 permission:
   edit:
     "*": deny
@@ -173,10 +172,13 @@ The tools: key in the body is prose.
 	}
 }
 
-// The new commit: frontmatter marker (which agents commit — see agentgit.go)
-// must survive the OpenCode strip untouched, exactly like permission: — it is
-// neither name: nor tools:, so it rides through verbatim.
-func TestConvertAgentFilePreservesCommitMarker(t *testing.T) {
+// The commit: frontmatter marker (which agents commit — see agentgit.go) is
+// manigot's own construct, meaningless to OpenCode's agent schema. It must be
+// stripped like name:/tools: — left in, OpenCode forwards it as an extra
+// top-level field into the chat completions request, which OpenCode Zen's
+// strict validator rejects ("Extra inputs are not permitted, field:
+// 'commit'").
+func TestConvertAgentFileStripsCommitMarker(t *testing.T) {
 	src := `---
 name: developer
 description: Implements tasks.
@@ -188,13 +190,12 @@ Body.
 `
 	want := `---
 description: Implements tasks.
-commit: true
 ---
 
 Body.
 `
 	if got := string(convertAgentFile([]byte(src))); got != want {
-		t.Errorf("convertAgentFile dropped or mangled the commit: marker:\n got: %q\nwant: %q", got, want)
+		t.Errorf("convertAgentFile did not strip the commit: marker:\n got: %q\nwant: %q", got, want)
 	}
 }
 

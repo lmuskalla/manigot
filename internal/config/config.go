@@ -28,14 +28,16 @@ const (
 	ToolOpenCode   = "opencode"
 )
 
-// ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo and ProfileOpenCodeZen are
-// the four supported subscription profiles: Settings.Profile holds one of
-// them, and the session launcher accepts them as --profile values.
+// ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo, ProfileOpenCodeZen and
+// ProfileOpenCodeZenFree are the five supported subscription profiles:
+// Settings.Profile holds one of them, and the session launcher accepts them
+// as --profile values.
 const (
-	ProfileClaudePro   = "claude-pro"
-	ProfileZAI         = "zai"
-	ProfileOpenCodeGo  = "opencode-go"
-	ProfileOpenCodeZen = "opencode-zen"
+	ProfileClaudePro       = "claude-pro"
+	ProfileZAI             = "zai"
+	ProfileOpenCodeGo      = "opencode-go"
+	ProfileOpenCodeZen     = "opencode-zen"
+	ProfileOpenCodeZenFree = "opencode-zen-free"
 )
 
 // DefaultRecentActivityCount is the maximum number of entries the dashboard's
@@ -49,8 +51,8 @@ const DefaultRecentActivityCount = 5
 // that switching profile, not tool, is what changes which subscription is used.
 type Profile struct {
 	// ID is the value Settings.Profile (and the session launcher's
-	// --profile flag) holds: ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo
-	// or ProfileOpenCodeZen.
+	// --profile flag) holds: ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo,
+	// ProfileOpenCodeZen or ProfileOpenCodeZenFree.
 	ID string
 
 	// Label is a short human name for the settings screen and help text.
@@ -67,14 +69,15 @@ type Profile struct {
 
 // Profiles is the ordered list of subscription profiles, in the order the TUI
 // settings screen cycles them. No model is listed here: the opencode profiles' model comes
-// from the OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL values in
-// manigot's .env, which the TUI does not read — showing a compiled-in default
-// would mislead.
+// from the OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL/
+// OPENCODE_ZEN_FREE_MODEL values in manigot's .env, which the TUI does not
+// read — showing a compiled-in default would mislead.
 var profiles = []Profile{
 	{ID: ProfileClaudePro, Label: "Claude Code · Claude Pro", Tool: ToolClaudeCode, Auth: "Claude Pro OAuth"},
 	{ID: ProfileZAI, Label: "OpenCode · Z.AI Coding Plan", Tool: ToolOpenCode, Auth: "ZHIPU_API_KEY"},
 	{ID: ProfileOpenCodeGo, Label: "OpenCode · Go", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
 	{ID: ProfileOpenCodeZen, Label: "OpenCode · Zen", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
+	{ID: ProfileOpenCodeZenFree, Label: "OpenCode · Zen Free", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
 }
 
 // Profiles returns the supported subscription profiles. The slice is built
@@ -110,8 +113,8 @@ type Settings struct {
 	Editor string `json:"editor"`
 
 	// Profile selects the subscription profile launch.Agent/Quick use:
-	// ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo or ProfileOpenCodeZen.
-	// It is the shared
+	// ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo, ProfileOpenCodeZen or
+	// ProfileOpenCodeZenFree. It is the shared
 	// default — loaded from MANIGOT_PROFILE in manigot/.env (with the legacy
 	// profile/tool fields of tui-settings.json as migration fallbacks) and
 	// persisted to .env by Save, never to tui-settings.json. Empty is treated

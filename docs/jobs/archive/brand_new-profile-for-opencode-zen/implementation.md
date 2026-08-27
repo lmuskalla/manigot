@@ -11,7 +11,7 @@ date: 2026-08-17
 
 Added a fourth subscription profile `opencode-zen` — OpenCode CLI billed via
 the existing `OPENCODE_API_KEY`, defaulting to the free model
-`opencode/deepseek-v4-flash-free`, overridable via a new `OPENCODE_ZEN_MODEL`
+`opencode/deepseek-v4-flash`, overridable via a new `OPENCODE_ZEN_MODEL`
 .env key. The profile row was appended to the end of the profiles table, so
 existing profile indices (1=claude-pro, 2=zai, 3=opencode-go) and the
 default profile (claude-pro) are unchanged. All eight code tasks plus the
@@ -30,13 +30,13 @@ comments that enumerated the profiles. The TUI and launch package read
 TASK-2: Wired `opencode-zen` through `internal/session/session.go`:
 the `--profile`/`MANIGOT_PROFILE` validation lists, the profile→tool/key/model
 mapping (`OpenCodeKeys=["OPENCODE_API_KEY"]`, `OpenCodeModel =
-envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash-free")`), the
+envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash")`), the
 error-message strings, and the `--print` legacy-tool hint. The key/model
 mapping mirrors the opencode-go case exactly (shares `OPENCODE_API_KEY`).
 
 TASK-3: Added `opencode-zen` to `cmd/mg/profiles.go`: `profileAuthKeys`,
 `profileModelEnv` (`OPENCODE_ZEN_MODEL`), `profileModelDefaults`
-(`opencode/deepseek-v4-flash-free`), the `profilesHelp` text, and the
+(`opencode/deepseek-v4-flash`), the `profilesHelp` text, and the
 `profilesSet` validation switch. The "Valid profiles:" error hint derives
 from `profileIDs()` and updated automatically.
 
@@ -44,7 +44,7 @@ TASK-4: Added `opencode-zen` to `cmd/mg/setup.go`: `setupHelp` text, the
 arg-validation and per-profile `--check` switches, the wizard dispatch
 (single-profile and full walk), and a new `setupOpenCodeZen` wizard
 mirroring `setupOpenCodeGo` (reuses `OPENCODE_API_KEY`, prompts
-`OPENCODE_ZEN_MODEL` defaulting to `opencode/deepseek-v4-flash-free`).
+`OPENCODE_ZEN_MODEL` defaulting to `opencode/deepseek-v4-flash`).
 
 TASK-5: Updated the CLI help/enumerations in `cmd/mg/main.go` (help profile
 list + `--profile` usage line), `cmd/mg/jdi.go` (`--profile` flag help and
@@ -89,9 +89,9 @@ set).
   tasks.md proposed `opencode-zen/deepseek-v4-flash` (assumption flagged for
   confirmation). Against the installed `opencode` (`opencode models`) there
   is no `opencode-zen/` prefix at all; the free DeepSeek V4 Flash model is
-  `opencode/deepseek-v4-flash-free`. Confirmed live: `opencode run --model
+  `opencode/deepseek-v4-flash`. Confirmed live: `opencode run --model
   opencode-zen/deepseek-v4-flash` errors (unknown model), while
-  `opencode/deepseek-v4-flash-free` responds with cost 0. All code, tests,
+  `opencode/deepseek-v4-flash` responds with cost 0. All code, tests,
   and docs use the confirmed id; `OPENCODE_ZEN_MODEL` remains the override
   if the platform ever introduces a dedicated zen prefix.
 - A real container session under `mg --profile opencode-zen` could not be

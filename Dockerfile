@@ -102,12 +102,17 @@ COPY --chown=claude:claude agents/ /home/claude/.claude/agents/
 # Same agents for OpenCode, which reads global agents from ~/.config/opencode/agents/.
 # The markdown body is identical; only the frontmatter differs — OpenCode takes the
 # agent name from the filename and expects `tools` to be a map, not a list, and passes
-# unknown keys through to the provider. So drop `name:` and `tools:` from this copy —
-# a `permission:` block passes through untouched, which is how the read-only agents
-# (reviewer/security/analyst/owner) express their restriction under OpenCode.
+# unknown keys through to the provider. So drop `name:`, `tools:` and `commit:` from
+# this copy — `commit:` is manigot's own git-mount-mode marker (see internal/session/
+# agentgit.go), meaningless to OpenCode's agent schema; left in, it rode along as an
+# extra top-level field into the chat completions request and got rejected outright by
+# OpenCode Zen's strict validator ("Extra inputs are not permitted, field: 'commit'").
+# A `permission:` block passes through untouched, which is how the read-only agents
+# (reviewer/security/analyst/owner) express their restriction under OpenCode — that key
+# is part of OpenCode's own agent schema, so it does not leak the same way.
 RUN mkdir -p /home/claude/.config/opencode/agents \
     && for f in /home/claude/.claude/agents/*.md; do \
-        awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools):/{next} {print}' "$f" \
+        awk 'BEGIN{fm=0} /^---$/{fm++; print; next} fm==1 && /^(name|tools|commit):/{next} {print}' "$f" \
             > "/home/claude/.config/opencode/agents/$(basename "$f")"; \
     done \
     && chown -R claude:claude /home/claude/.config

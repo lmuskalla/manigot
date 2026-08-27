@@ -114,7 +114,8 @@ var legacyOpenCodeKeys = []string{
 // run.sh's ordering, where the auth checks run after --job resolution.
 type ProfileInfo struct {
 	// Profile is the resolved profile id: claude-pro, zai, opencode-go,
-	// opencode-zen — or "" for the legacy profile-less --tool opencode path.
+	// opencode-zen, opencode-zen-free — or "" for the legacy profile-less
+	// --tool opencode path.
 	Profile string
 
 	// Tool is the agent CLI to launch: config.ToolClaudeCode or
@@ -149,13 +150,13 @@ type ProfileInfo struct {
 // resolves the job before it checks keys, so a job error takes precedence
 // over a missing-key error when both apply).
 func ResolveProfile(opts Options) (ProfileInfo, error) {
-	const valid = "claude-pro|zai|opencode-go|opencode-zen"
+	const valid = "claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free"
 
 	profile := opts.Profile
 	switch {
 	case profile != "":
 		switch profile {
-		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen:
+		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen, config.ProfileOpenCodeZenFree:
 		default:
 			return ProfileInfo{}, fmt.Errorf("--profile must be one of: %s (got '%s').", valid, profile)
 		}
@@ -174,7 +175,7 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 			profile = config.ProfileClaudePro
 		}
 		switch profile {
-		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen:
+		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen, config.ProfileOpenCodeZenFree:
 		default:
 			return ProfileInfo{}, fmt.Errorf("MANIGOT_PROFILE in %s is not a valid profile (got '%s').\nValid profiles: %s", config.EnvFile(), profile, valid)
 		}
@@ -195,7 +196,11 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 	case config.ProfileOpenCodeZen:
 		info.Tool = config.ToolOpenCode
 		info.OpenCodeKeys = []string{"OPENCODE_API_KEY"}
-		info.OpenCodeModel = envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash-free")
+		info.OpenCodeModel = envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash")
+	case config.ProfileOpenCodeZenFree:
+		info.Tool = config.ToolOpenCode
+		info.OpenCodeKeys = []string{"OPENCODE_API_KEY"}
+		info.OpenCodeModel = envDefault("OPENCODE_ZEN_FREE_MODEL", "opencode/deepseek-v4-flash-free")
 	case "":
 		info.Tool = config.ToolOpenCode
 		info.OpenCodeKeys = legacyOpenCodeKeys
@@ -206,7 +211,7 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 	// callers like mg-jdi. The legacy, profile-less --tool opencode path is
 	// intentionally left rejected here — it predates the profile system.
 	if opts.Print && info.Tool == config.ToolOpenCode && info.Profile == "" {
-		return ProfileInfo{}, fmt.Errorf("--print is not supported with the legacy --tool opencode (no --profile).\nUse --profile zai, --profile opencode-go or --profile opencode-zen instead.")
+		return ProfileInfo{}, fmt.Errorf("--print is not supported with the legacy --tool opencode (no --profile).\nUse --profile zai, --profile opencode-go, --profile opencode-zen or --profile opencode-zen-free instead.")
 	}
 
 	return info, nil

@@ -4,7 +4,7 @@
 This is your project context, loaded by the agent at the start of every session.
 manigot is vendor-agnostic: it runs Claude Code or OpenCode against the same
 project (`mg --profile claude-pro` vs `mg --profile zai`/`--profile
-opencode-go`/`--profile opencode-zen`), and this one file serves both — manigot mounts it read-only
+opencode-go`/`--profile opencode-zen`/`--profile opencode-zen-free`), and this one file serves both — manigot mounts it read-only
 wherever the selected tool looks for it
 (/workspace/AGENTS.md for OpenCode, /workspace/.claude/CLAUDE.md for Claude
 Code). Those mount paths are read-only: to change this context, edit this

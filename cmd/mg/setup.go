@@ -22,12 +22,13 @@ const sepLine = "─────────────────────
 const setupHelp = `mg setup [profile] [--check]
 
 Configures credentials for manigot's subscription profiles into manigot/.env:
-  claude-pro    Claude Code, billed to your Claude Pro/Max subscription
-  zai           OpenCode, billed to your Z.AI Coding Plan
-  opencode-go   OpenCode, billed to the OpenCode Go subscription
-  opencode-zen  OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)
+  claude-pro        Claude Code, billed to your Claude Pro/Max subscription
+  zai               OpenCode, billed to your Z.AI Coding Plan
+  opencode-go       OpenCode, billed to the OpenCode Go subscription
+  opencode-zen      OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)
+  opencode-zen-free OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)
 
-With no profile, the wizard walks through all four, plus the optional ntfy
+With no profile, the wizard walks through all five, plus the optional ntfy
 push-notification settings (NTFY_URL/NTFY_TOPIC/NTFY_TOKEN) for mg jdi.
 --check reports which profiles are ready without prompting. Values are
 written to the same .env mg reads; nothing is sent anywhere.
@@ -53,7 +54,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 		// An unknown flag (e.g. "--bogus"): the script's loop reported it the
 		// same way as any other unknown argument.
 		fmt.Fprintln(stderr, flagParseError(err))
-		fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go|opencode-zen] [--check]")
+		fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free] [--check]")
 		return 1
 	}
 
@@ -65,7 +66,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 		return 0
 	}
 	for _, arg := range profileArgs {
-		if arg == config.ProfileClaudePro || arg == config.ProfileZAI || arg == config.ProfileOpenCodeGo || arg == config.ProfileOpenCodeZen {
+		if arg == config.ProfileClaudePro || arg == config.ProfileZAI || arg == config.ProfileOpenCodeGo || arg == config.ProfileOpenCodeZen || arg == config.ProfileOpenCodeZenFree {
 			if target != "" {
 				fmt.Fprintln(stderr, "Error: give a single profile, not several.")
 				return 1
@@ -73,7 +74,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 			target = arg
 		} else {
 			fmt.Fprintf(stderr, "Error: unknown argument '%s'.\n", arg)
-			fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go|opencode-zen] [--check]")
+			fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free] [--check]")
 			return 1
 		}
 	}
@@ -86,6 +87,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 			checkProfile(config.ProfileZAI, stdout)
 			checkProfile(config.ProfileOpenCodeGo, stdout)
 			checkProfile(config.ProfileOpenCodeZen, stdout)
+			checkProfile(config.ProfileOpenCodeZenFree, stdout)
 		}
 		return 0
 	}
@@ -111,12 +113,15 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 			setupOpenCodeGo(br, stdout)
 		case config.ProfileOpenCodeZen:
 			setupOpenCodeZen(br, stdout)
+		case config.ProfileOpenCodeZenFree:
+			setupOpenCodeZenFree(br, stdout)
 		}
 	} else {
 		setupClaudePro(br, stdout)
 		setupZAI(br, stdout)
 		setupOpenCodeGo(br, stdout)
 		setupOpenCodeZen(br, stdout)
+		setupOpenCodeZenFree(br, stdout)
 		setupNtfy(br, stdout)
 	}
 
@@ -289,13 +294,36 @@ func setupOpenCodeGo(r io.Reader, w io.Writer) {
 
 func setupOpenCodeZen(r io.Reader, w io.Writer) {
 	fmt.Fprintln(w, sepLine)
-	fmt.Fprintln(w, "  opencode-zen — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)")
+	fmt.Fprintln(w, "  opencode-zen — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)")
 	fmt.Fprintln(w, sepLine)
 	if have("OPENCODE_API_KEY") {
 		fmt.Fprintf(w, "  ✓ Already configured (OPENCODE_API_KEY %s).\n", cli.Mask(config.EnvValue("OPENCODE_API_KEY")))
 	} else {
 		fmt.Fprintln(w, "  OpenCode Zen uses your OpenCode API key — the same key you get at")
-		fmt.Fprintln(w, "  https://opencode.ai/auth. Zen's DeepSeek V4 Flash Free model costs")
+		fmt.Fprintln(w, "  https://opencode.ai/auth. This DeepSeek V4 Flash model is billed")
+		fmt.Fprintln(w, "  pay-as-you-go against your Zen account credits — add billing at")
+		fmt.Fprintln(w, "  https://opencode.ai/auth if you haven't. For the no-cost variant, use")
+		fmt.Fprintln(w, "  the opencode-zen-free profile instead.")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "  1. Open https://opencode.ai/auth and sign in")
+		fmt.Fprintln(w, "  2. Copy your API key and paste it below")
+		promptSecret("  OPENCODE_API_KEY", "OPENCODE_API_KEY", r, w)
+	}
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
+	fmt.Fprintln(w, "  Zen's (billed) DeepSeek V4 Flash model is opencode/deepseek-v4-flash.")
+	promptValue("  OPENCODE_ZEN_MODEL", "OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash", r, w)
+}
+
+func setupOpenCodeZenFree(r io.Reader, w io.Writer) {
+	fmt.Fprintln(w, sepLine)
+	fmt.Fprintln(w, "  opencode-zen-free — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)")
+	fmt.Fprintln(w, sepLine)
+	if have("OPENCODE_API_KEY") {
+		fmt.Fprintf(w, "  ✓ Already configured (OPENCODE_API_KEY %s).\n", cli.Mask(config.EnvValue("OPENCODE_API_KEY")))
+	} else {
+		fmt.Fprintln(w, "  OpenCode Zen uses your OpenCode API key — the same key you get at")
+		fmt.Fprintln(w, "  https://opencode.ai/auth. The free DeepSeek V4 Flash model costs")
 		fmt.Fprintln(w, "  no credits, so this profile works with a key alone.")
 		fmt.Fprintln(w, "")
 		fmt.Fprintln(w, "  1. Open https://opencode.ai/auth and sign in")
@@ -305,7 +333,7 @@ func setupOpenCodeZen(r io.Reader, w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
 	fmt.Fprintln(w, "  Zen's free DeepSeek V4 Flash model is opencode/deepseek-v4-flash-free.")
-	promptValue("  OPENCODE_ZEN_MODEL", "OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash-free", r, w)
+	promptValue("  OPENCODE_ZEN_FREE_MODEL", "OPENCODE_ZEN_FREE_MODEL", "opencode/deepseek-v4-flash-free", r, w)
 }
 
 // setupNtfy is the optional ntfy block of the mg setup wizard: it prompts
