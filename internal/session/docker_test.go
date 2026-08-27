@@ -710,6 +710,126 @@ func TestBuildNoGlobalSkillsNoMount(t *testing.T) {
 	}
 }
 
+// TestBuildClaudeGlobalMetaMountedReadOnly: the global meta prompt
+// (<home>/meta.md>) is mounted read-only into the container at Claude Code's
+// user-global instruction location (~/.claude/CLAUDE.md). It needs no
+// conversion and no temp dir — plain markdown is native to Claude — so no
+// Cleanup hook is required.
+func TestBuildClaudeGlobalMetaMountedReadOnly(t *testing.T) {
+	_, home := docProject(t)
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "meta.md")+":/home/claude/.claude/CLAUDE.md:ro",
+	)
+	// No temp dir was created for the Claude mount, so no cleanup is needed.
+	if inv.Cleanup != nil {
+		t.Error("claude global-meta mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildOpenCodeGlobalMetaMountedReadOnly: OpenCode reads its global rules
+// from ~/.config/opencode/AGENTS.md, so the global meta prompt is mounted
+// read-only at that path. No conversion, no temp dir, no Cleanup hook.
+func TestBuildOpenCodeGlobalMetaMountedReadOnly(t *testing.T) {
+	_, _ = docProject(t)
+	// A zai checkout whose meta.md carries the system-wide meta prompt.
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	writeMeta(t, home, "# manigot meta\n\nSystem-wide guidance.\n")
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-v", filepath.Join(home, "meta.md")+":/home/claude/.config/opencode/AGENTS.md:ro",
+	)
+	if inv.Cleanup != nil {
+		t.Error("opencode global-meta mount must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildNoGlobalMetaNoMount: with no meta.md in the manigot checkout there
+// is nothing to mount — no global-meta mount for either tool.
+func TestBuildNoGlobalMetaNoMount(t *testing.T) {
+	// Claude: docProject's fake home has no meta.md.
+	_, _ = docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, "/home/claude/.claude/CLAUDE.md") {
+		t.Errorf("claude invocation must not mount the global meta when meta.md is absent:\n%s", joined)
+	}
+
+	// OpenCode with no meta.md: no mount.
+	_, _ = docProject(t)
+	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\n")
+	info2, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info2.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r2, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv2, err := BuildDockerInvocation(Options{}, info2, r2, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	joined2 := strings.Join(inv2.Argv, "\n")
+	if strings.Contains(joined2, "/home/claude/.config/opencode/AGENTS.md") {
+		t.Errorf("opencode invocation must not mount the global meta when meta.md is absent:\n%s", joined2)
+	}
+}
+
+// writeMeta writes a meta.md at the checkout root, creating the file.
+func writeMeta(t *testing.T, dir, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "meta.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestBuildProjectSkillsRideDocsMount: project skills (docs/skills/) need no
 // staging or shadow mount — the docs bind mount maps the whole docs/ dir, so
 // docs/skills/ already lands at the project skills location inside the
