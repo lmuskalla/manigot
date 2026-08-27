@@ -73,12 +73,14 @@ func printHelp() {
 	const (
 		head = `mg — isolated agent environment per project (Claude Code or OpenCode, sandboxed in Docker)
 
-Profiles bundle an agent CLI with one of your subscriptions:
+Profiles bundle an agent CLI with one of your subscriptions. The built-ins are:
   claude-pro        Claude Code, billed to your Claude Pro/Max subscription
   zai               OpenCode, billed to your Z.AI Coding Plan
   opencode-go       OpenCode, billed to the OpenCode Go subscription
   opencode-zen      OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)
   opencode-zen-free OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)
+You can also define your own profiles (e.g. OpenCode Zen with a different
+model) with 'mg profiles add', stored in config/profiles.json.
 
 Usage:
   mg                              Start a session in the current project
@@ -88,12 +90,13 @@ Usage:
   mg --agent <name> --job <id>    Combine the two
 
 Commands:
-  mg profiles [name]              List the profiles (and which is the default),
+  mg profiles [name|add|rm]      List the profiles (and which is the default),
                                    set the default used by bare `
 		mid = `, or pick
                                    one via an interactive picker on a TTY
                                    (type to filter, enter to choose,
-                                   esc/q cancel)
+                                   esc/q cancel); add/rm manage your own
+                                   user-defined profiles (config/profiles.json)
   mg setup [name] [--check]       Configure credentials for your subscriptions,
                                    interactively, or report status with --check
   mg theme [name]                 Show or set the global OpenCode theme

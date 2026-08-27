@@ -76,6 +76,208 @@ func TestSaveUnresolvableHomeErrors(t *testing.T) {
 	}
 }
 
+// TestBuiltInProfilesCarryAuthAndModelMetadata pins TASK-1's data model: the
+// built-in table is the single source of each profile's auth keys and model
+// env/default (moved here from cmd/mg/profiles.go and internal/session).
+func TestBuiltInProfilesCarryAuthAndModelMetadata(t *testing.T) {
+	if got := len(Profiles()); got != 5 {
+		t.Fatalf("built-in profile count = %d, want 5", got)
+	}
+	for _, tc := range []struct {
+		id           string
+		wantAuthKeys []string
+		wantModelEnv string
+		wantModelDef string
+	}{
+		{ProfileClaudePro, []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"}, "", "(Claude Code default)"},
+		{ProfileZAI, []string{"ZHIPU_API_KEY"}, "OPENCODE_ZAI_MODEL", "zai-coding-plan/glm-5.2"},
+		{ProfileOpenCodeGo, []string{"OPENCODE_API_KEY"}, "OPENCODE_GO_MODEL", "opencode-go/glm-5.2"},
+		{ProfileOpenCodeZen, []string{"OPENCODE_API_KEY"}, "OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash"},
+		{ProfileOpenCodeZenFree, []string{"OPENCODE_API_KEY"}, "OPENCODE_ZEN_FREE_MODEL", "opencode/deepseek-v4-flash-free"},
+	} {
+		p, ok := ProfileByID(tc.id)
+		if !ok {
+			t.Fatalf("ProfileByID(%q) not found", tc.id)
+		}
+		if len(p.AuthKeys) != len(tc.wantAuthKeys) {
+			t.Errorf("%s AuthKeys = %v, want %v", tc.id, p.AuthKeys, tc.wantAuthKeys)
+		}
+		for i, k := range tc.wantAuthKeys {
+			if p.AuthKeys[i] != k {
+				t.Errorf("%s AuthKeys[%d] = %q, want %q", tc.id, i, p.AuthKeys[i], k)
+			}
+		}
+		if p.ModelEnv != tc.wantModelEnv {
+			t.Errorf("%s ModelEnv = %q, want %q", tc.id, p.ModelEnv, tc.wantModelEnv)
+		}
+		if p.ModelDefault != tc.wantModelDef {
+			t.Errorf("%s ModelDefault = %q, want %q", tc.id, p.ModelDefault, tc.wantModelDef)
+		}
+	}
+}
+
+// userProfile is a representative user-defined opencode profile used by the
+// store tests.
+func userProfile() Profile {
+	return Profile{
+		ID:           "zen-alt",
+		Label:        "OpenCode · Zen (alternate)",
+		Tool:         ToolOpenCode,
+		Auth:         "OPENCODE_API_KEY",
+		AuthKeys:     []string{"OPENCODE_API_KEY"},
+		ModelEnv:     "OPENCODE_ZEN_MODEL",
+		ModelDefault: "opencode/deepseek-v4-flash-free",
+	}
+}
+
+func TestProfilesMergesBuiltInsThenUserProfiles(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(userProfile()); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	second := userProfile()
+	second.ID = "go-alt"
+	if err := AddProfile(second); err != nil {
+		t.Fatalf("AddProfile second: %v", err)
+	}
+
+	ps := Profiles()
+	if len(ps) != 7 {
+		t.Fatalf("Profiles() = %d profiles, want 7 (5 built-in + 2 user)", len(ps))
+	}
+	// Built-ins keep their canonical order first.
+	wantIDs := []string{ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo, ProfileOpenCodeZen, ProfileOpenCodeZenFree, "zen-alt", "go-alt"}
+	for i, want := range wantIDs {
+		if ps[i].ID != want {
+			t.Errorf("Profiles()[%d].ID = %q, want %q", i, ps[i].ID, want)
+		}
+	}
+}
+
+func TestProfileByIDFindsUserProfile(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(userProfile()); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	p, ok := ProfileByID("zen-alt")
+	if !ok {
+		t.Fatal("ProfileByID(zen-alt) not found after AddProfile")
+	}
+	if p.ModelDefault != "opencode/deepseek-v4-flash-free" || p.Tool != ToolOpenCode {
+		t.Errorf("ProfileByID(zen-alt) = %+v", p)
+	}
+}
+
+func TestAddProfileRejectsBuiltInID(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(Profile{ID: ProfileClaudePro, Tool: ToolOpenCode}); err == nil {
+		t.Fatal("expected an error adding a profile whose id collides with a built-in")
+	}
+}
+
+func TestAddProfileRejectsDuplicateUserID(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(userProfile()); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	if err := AddProfile(userProfile()); err == nil {
+		t.Fatal("expected an error adding a duplicate user profile id")
+	}
+}
+
+func TestAddProfileRejectsEmptyID(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(Profile{}); err == nil {
+		t.Fatal("expected an error adding a profile with no id")
+	}
+}
+
+func TestRemoveProfileRemovesUserProfile(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(userProfile()); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	if err := RemoveProfile("zen-alt"); err != nil {
+		t.Fatalf("RemoveProfile: %v", err)
+	}
+	if _, ok := ProfileByID("zen-alt"); ok {
+		t.Error("ProfileByID(zen-alt) still found after RemoveProfile")
+	}
+	// The built-ins are untouched.
+	if len(Profiles()) != 5 {
+		t.Errorf("after removing the only user profile, Profiles() = %d, want 5", len(Profiles()))
+	}
+}
+
+func TestRemoveProfileUnknownIsError(t *testing.T) {
+	checkout(t)
+	if err := RemoveProfile("nope"); err == nil {
+		t.Fatal("expected an error removing a non-existent user profile")
+	}
+}
+
+func TestRemoveProfileDoesNotTouchBuiltIns(t *testing.T) {
+	checkout(t)
+	// Built-ins are not in the user store — removing a built-in id must fail
+	// (built-ins are not deletable), and the profile must remain.
+	if err := RemoveProfile(ProfileZAI); err == nil {
+		t.Fatal("expected an error removing a built-in profile id")
+	}
+	if _, ok := ProfileByID(ProfileZAI); !ok {
+		t.Error("built-in zai disappeared after a failed RemoveProfile")
+	}
+}
+
+func TestAddProfilePersistsAcrossCalls(t *testing.T) {
+	checkout(t)
+	if err := AddProfile(userProfile()); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	// A fresh read of Profiles/ProfileByID must see the persisted store (no
+	// in-memory caching that a later call could miss).
+	ps := Profiles()
+	found := false
+	for _, p := range ps {
+		if p.ID == "zen-alt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("user profile not present after re-reading Profiles()")
+	}
+}
+
+func TestCorruptUserStoreDegradesToBuiltInsOnly(t *testing.T) {
+	dir := checkout(t)
+	path := filepath.Join(dir, "config", "profiles.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ps := Profiles(); len(ps) != 5 {
+		t.Errorf("Profiles() with a corrupt store = %d, want 5 (built-ins only)", len(ps))
+	}
+	if _, ok := ProfileByID("anything"); ok {
+		t.Error("ProfileByID should not find anything in a corrupt store")
+	}
+	// The write paths must surface the corrupt store rather than clobber it.
+	if err := AddProfile(userProfile()); err == nil {
+		t.Error("AddProfile should error on a corrupt store, not silently overwrite it")
+	}
+}
+
+func TestProfilesReturnsFreshSlice(t *testing.T) {
+	checkout(t)
+	ps := Profiles()
+	ps[0].Label = "mutated"
+	again := Profiles()
+	if again[0].Label == "mutated" {
+		t.Error("mutating the returned slice leaked into the shared table")
+	}
+}
+
 func TestProfileValueDefaultsToClaudePro(t *testing.T) {
 	if got := (Settings{}).ProfileValue(); got != ProfileClaudePro {
 		t.Errorf("zero-value ProfileValue = %q, want %q", got, ProfileClaudePro)

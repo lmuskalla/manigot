@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/ui"
 )
 
@@ -45,7 +46,7 @@ func TestProfilesHelp(t *testing.T) {
 	if code != 0 {
 		t.Errorf("help exit code = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "mg profiles [name]") {
+	if !strings.Contains(out.String(), "mg profiles [name|add|rm]") {
 		t.Errorf("help output missing title:\n%s", out.String())
 	}
 }
@@ -235,6 +236,127 @@ func TestProfilesListInteractiveCancel(t *testing.T) {
 	code := runProfiles([]string{}, strings.NewReader(""), &out, &strings.Builder{}, true, pickerChoice("", false))
 	if code != 0 {
 		t.Errorf("cancel exit code = %d, want 0", code)
+	}
+}
+
+func TestProfilesAddInteractive(t *testing.T) {
+	dir := profileCheckout(t, "")
+	var out, errOut strings.Builder
+	// id given as arg; then six prompts: tool (Enter=opencode), label
+	// (Enter=id), creds (Enter=OPENCODE_API_KEY), billed (Enter=first key),
+	// modelEnv (Enter=OPENCODE_MODEL), modelDefault (type a model).
+	code := runProfiles([]string{"add", "zen-custom"}, strings.NewReader("\n\n\n\n\ncustom/model\n"), &out, &errOut, true, pickerStub(t))
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr:\n%s\noutput:\n%s", code, errOut.String(), out.String())
+	}
+	if !strings.Contains(out.String(), "Added profile 'zen-custom'") {
+		t.Errorf("missing add confirmation:\n%s", out.String())
+	}
+	p, ok := config.ProfileByID("zen-custom")
+	if !ok {
+		t.Fatalf("ProfileByID(zen-custom) not found after add")
+	}
+	if p.Tool != config.ToolOpenCode || p.ModelDefault != "custom/model" || p.ModelEnv != "OPENCODE_MODEL" {
+		t.Errorf("added profile = %+v", p)
+	}
+	if len(p.AuthKeys) != 1 || p.AuthKeys[0] != "OPENCODE_API_KEY" {
+		t.Errorf("added profile AuthKeys = %v", p.AuthKeys)
+	}
+	// The store file was written into the checkout's config/.
+	if _, err := os.Stat(filepath.Join(dir, "config", "profiles.json")); err != nil {
+		t.Errorf("profiles.json not written: %v", err)
+	}
+}
+
+func TestProfilesAddNonTTYRefuses(t *testing.T) {
+	profileCheckout(t, "")
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"add", "zen-alt"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "interactive profile creation needs a terminal") {
+		t.Errorf("missing non-TTY refusal:\n%s", errOut.String())
+	}
+}
+
+func TestProfilesAddDuplicateID(t *testing.T) {
+	profileCheckout(t, "")
+	var out, errOut strings.Builder
+	// "zai" is a built-in — adding a profile with that id is rejected.
+	code := runProfiles([]string{"add", "zai"}, strings.NewReader(""), &out, &errOut, true, pickerStub(t))
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "already exists") {
+		t.Errorf("missing duplicate-id error:\n%s", errOut.String())
+	}
+}
+
+func TestProfilesRmRemovesUserProfile(t *testing.T) {
+	dir := profileCheckout(t, "")
+	if err := config.AddProfile(config.Profile{ID: "zen-alt", Tool: config.ToolOpenCode, AuthKeys: []string{"OPENCODE_API_KEY"}}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"rm", "zen-alt"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Removed profile 'zen-alt'.") {
+		t.Errorf("missing removal confirmation:\n%s", out.String())
+	}
+	if _, ok := config.ProfileByID("zen-alt"); ok {
+		t.Error("profile still present after rm")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "config", "profiles.json")); err != nil {
+		t.Errorf("store file should still exist (now empty) after rm: %v", err)
+	}
+}
+
+func TestProfilesRmDefaultFallsBack(t *testing.T) {
+	dir := profileCheckout(t, "MANIGOT_PROFILE=zen-alt\n")
+	if err := config.AddProfile(config.Profile{ID: "zen-alt", Tool: config.ToolOpenCode, AuthKeys: []string{"OPENCODE_API_KEY"}}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"rm", "zen-alt"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "The default fell back to claude-pro.") {
+		t.Errorf("missing fallback message:\n%s", out.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "MANIGOT_PROFILE=claude-pro") {
+		t.Errorf(".env default not reset to claude-pro:\n%s", env)
+	}
+}
+
+func TestProfilesRmBuiltInRejected(t *testing.T) {
+	profileCheckout(t, "")
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"rm", "claude-pro"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), `no user-defined profile with id "claude-pro"`) {
+		t.Errorf("missing built-in rejection:\n%s", errOut.String())
+	}
+}
+
+func TestProfilesRmUnknownProfile(t *testing.T) {
+	profileCheckout(t, "")
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"rm", "nope"}, strings.NewReader(""), &out, &errOut, false, pickerStub(t))
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "Error: unknown profile 'nope'.") {
+		t.Errorf("missing unknown-profile error:\n%s", errOut.String())
 	}
 }
 

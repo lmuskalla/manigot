@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/lmuskalla/manigot/internal/config"
 )
@@ -122,6 +123,12 @@ type ProfileInfo struct {
 	// config.ToolOpenCode.
 	Tool string
 
+	// AuthKeys are the profile's credential env keys, resolved from
+	// config.ProfileByID (the profile's AuthKeys). The claude branch of
+	// CheckAuth validates and forwards exactly these; for opencode profiles
+	// it is the same set as OpenCodeKeys.
+	AuthKeys []string
+
 	// OpenCodeKeys lists the provider keys this opencode run forwards.
 	OpenCodeKeys []string
 
@@ -155,15 +162,11 @@ type ProfileInfo struct {
 // resolves the job before it checks keys, so a job error takes precedence
 // over a missing-key error when both apply).
 func ResolveProfile(opts Options) (ProfileInfo, error) {
-	const valid = "claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free"
-
 	profile := opts.Profile
 	switch {
 	case profile != "":
-		switch profile {
-		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen, config.ProfileOpenCodeZenFree:
-		default:
-			return ProfileInfo{}, fmt.Errorf("--profile must be one of: %s (got '%s').", valid, profile)
+		if _, ok := config.ProfileByID(profile); !ok {
+			return ProfileInfo{}, fmt.Errorf("--profile must be one of: %s (got '%s').", profileValidList(), profile)
 		}
 	case opts.Tool != "":
 		switch opts.Tool {
@@ -179,36 +182,28 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 		if profile == "" {
 			profile = config.ProfileClaudePro
 		}
-		switch profile {
-		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen, config.ProfileOpenCodeZenFree:
-		default:
-			return ProfileInfo{}, fmt.Errorf("MANIGOT_PROFILE in %s is not a valid profile (got '%s').\nValid profiles: %s", config.EnvFile(), profile, valid)
+		if _, ok := config.ProfileByID(profile); !ok {
+			return ProfileInfo{}, fmt.Errorf("MANIGOT_PROFILE in %s is not a valid profile (got '%s').\nValid profiles: %s", config.EnvFile(), profile, profileValidList())
 		}
 	}
 
 	info := ProfileInfo{Profile: profile}
-	switch profile {
-	case config.ProfileClaudePro:
-		info.Tool = config.ToolClaudeCode
-	case config.ProfileZAI:
-		info.Tool = config.ToolOpenCode
-		info.OpenCodeKeys = []string{"ZHIPU_API_KEY"}
-		info.OpenCodeModel = envDefault("OPENCODE_ZAI_MODEL", "zai-coding-plan/glm-5.2")
-	case config.ProfileOpenCodeGo:
-		info.Tool = config.ToolOpenCode
-		info.OpenCodeKeys = []string{"OPENCODE_API_KEY"}
-		info.OpenCodeModel = envDefault("OPENCODE_GO_MODEL", "opencode-go/glm-5.2")
-	case config.ProfileOpenCodeZen:
-		info.Tool = config.ToolOpenCode
-		info.OpenCodeKeys = []string{"OPENCODE_API_KEY"}
-		info.OpenCodeModel = envDefault("OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash")
-	case config.ProfileOpenCodeZenFree:
-		info.Tool = config.ToolOpenCode
-		info.OpenCodeKeys = []string{"OPENCODE_API_KEY"}
-		info.OpenCodeModel = envDefault("OPENCODE_ZEN_FREE_MODEL", "opencode/deepseek-v4-flash-free")
-	case "":
+	if profile != "" {
+		// Data-driven: the tool, auth keys, and model env/default all come
+		// from the profile's definition in config, so a user-defined profile
+		// resolves exactly like the built-in ones.
+		if p, ok := config.ProfileByID(profile); ok {
+			info.Tool = p.Tool
+			info.AuthKeys = append([]string(nil), p.AuthKeys...)
+			if p.Tool == config.ToolOpenCode {
+				info.OpenCodeKeys = append([]string(nil), p.AuthKeys...)
+				info.OpenCodeModel = envDefault(p.ModelEnv, p.ModelDefault)
+			}
+		}
+	} else {
 		info.Tool = config.ToolOpenCode
 		info.OpenCodeKeys = legacyOpenCodeKeys
+		info.AuthKeys = legacyOpenCodeKeys
 		info.OpenCodeModel = config.EnvValue("OPENCODE_MODEL") // forwarded as-is
 	}
 
@@ -234,8 +229,15 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 // -e arguments for the forwarded opencode keys and model.
 func (info *ProfileInfo) CheckAuth() error {
 	if info.Tool == config.ToolClaudeCode {
-		if config.EnvValue("CLAUDE_CODE_OAUTH_TOKEN") == "" {
-			return fmt.Errorf("CLAUDE_CODE_OAUTH_TOKEN is not set.\nAdd it to %s, or run 'mg setup claude-pro' for help:\n  CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...", config.EnvFile())
+		// The first auth key is the OAuth token every claude profile requires
+		// (the built-in's is CLAUDE_CODE_OAUTH_TOKEN); the rest are optional
+		// account details. The message keeps the built-in's exact wording.
+		tokenKey := "CLAUDE_CODE_OAUTH_TOKEN"
+		if len(info.AuthKeys) > 0 {
+			tokenKey = info.AuthKeys[0]
+		}
+		if config.EnvValue(tokenKey) == "" {
+			return fmt.Errorf("%s is not set.\nAdd it to %s, or run 'mg setup %s' for help:\n  %s=sk-ant-oat01-...", tokenKey, config.EnvFile(), info.Profile, tokenKey)
 		}
 		// Subscription protection: an API key would override the mounted
 		// OAuth credentials and bill per token.
@@ -246,7 +248,7 @@ func (info *ProfileInfo) CheckAuth() error {
 		// empty-value filter matches the opencode handling below, so a
 		// non-claude profile's docker argv never carries -e CLAUDE_*==""
 		// noise (the token was just validated; the other three are optional).
-		for _, key := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		for _, key := range info.AuthKeys {
 			if v := config.EnvValue(key); v != "" {
 				info.KeyEnv = append(info.KeyEnv, "-e", key+"="+v)
 			}
@@ -286,6 +288,19 @@ func (info *ProfileInfo) CheckAuth() error {
 		info.KeyEnv = append(info.KeyEnv, "-e", "OPENCODE_THEME="+info.OpenCodeTheme)
 	}
 	return nil
+}
+
+// profileValidList is the pipe-joined list of known profile ids used in error
+// messages, derived from config.Profiles() so a user-defined profile is
+// reported as valid too. For the default (built-ins only) store it is exactly
+// "claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free".
+func profileValidList() string {
+	ps := config.Profiles()
+	ids := make([]string, len(ps))
+	for i, p := range ps {
+		ids[i] = p.ID
+	}
+	return strings.Join(ids, "|")
 }
 
 // envDefault returns the effective value of key, or def when it is unset —

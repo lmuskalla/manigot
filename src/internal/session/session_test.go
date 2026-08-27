@@ -508,6 +508,89 @@ func TestResolveProfilePrintAllowedForProfiles(t *testing.T) {
 	}
 }
 
+// addUserProfile adds a user-defined opencode profile to the checkout's store.
+func addUserProfile(t *testing.T) {
+	t.Helper()
+	if err := config.AddProfile(config.Profile{
+		ID: "custom", Label: "Custom", Tool: config.ToolOpenCode,
+		AuthKeys: []string{"OPENCODE_API_KEY"},
+		ModelEnv: "OPENCODE_CUSTOM_MODEL", ModelDefault: "opencode/default-model",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+}
+
+// TestResolveUserDefinedProfileEndToEnd pins TASK-3/TASK-9: a user-defined
+// opencode profile resolves through ResolveProfile → CheckAuth exactly like a
+// built-in — tool, auth keys, and model env/default all from the store.
+func TestResolveUserDefinedProfileEndToEnd(t *testing.T) {
+	checkout(t, "OPENCODE_API_KEY=user-secret\nOPENCODE_CUSTOM_MODEL=opencode/custom\n")
+	addUserProfile(t)
+	info, err := ResolveProfile(Options{Profile: "custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.Tool != config.ToolOpenCode {
+		t.Errorf("tool = %q, want opencode", info.Tool)
+	}
+	if len(info.OpenCodeKeys) != 1 || info.OpenCodeKeys[0] != "OPENCODE_API_KEY" {
+		t.Errorf("OpenCodeKeys = %v, want [OPENCODE_API_KEY]", info.OpenCodeKeys)
+	}
+	if info.OpenCodeModel != "opencode/custom" {
+		t.Errorf("OpenCodeModel = %q, want opencode/custom (from OPENCODE_CUSTOM_MODEL)", info.OpenCodeModel)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	if !contains(info.KeyEnv, "-e", "OPENCODE_API_KEY=user-secret") || !contains(info.KeyEnv, "-e", "OPENCODE_MODEL=opencode/custom") {
+		t.Errorf("KeyEnv = %v", info.KeyEnv)
+	}
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if contains(info.KeyEnv, "-e", k+"=") {
+			t.Errorf("user opencode profile forwards %s: %v", k, info.KeyEnv)
+		}
+	}
+}
+
+// TestResolveUserDefinedProfileModelFallback: with no model-env override set,
+// a user-defined opencode profile falls back to its stored ModelDefault.
+func TestResolveUserDefinedProfileModelFallback(t *testing.T) {
+	checkout(t, "OPENCODE_API_KEY=k\n")
+	addUserProfile(t)
+	info, err := ResolveProfile(Options{Profile: "custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.OpenCodeModel != "opencode/default-model" {
+		t.Errorf("OpenCodeModel = %q, want the profile's ModelDefault", info.OpenCodeModel)
+	}
+}
+
+// TestResolveUserDefinedProfileAsDefault: a user-defined profile set as the
+// MANIGOT_PROFILE default resolves like any other default.
+func TestResolveUserDefinedProfileAsDefault(t *testing.T) {
+	checkout(t, "MANIGOT_PROFILE=custom\nOPENCODE_API_KEY=k\n")
+	addUserProfile(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.Profile != "custom" || info.Tool != config.ToolOpenCode {
+		t.Errorf("user profile via MANIGOT_PROFILE = %+v", info)
+	}
+}
+
+// TestProfileValidListIncludesUserProfile: the "--profile must be one of"
+// error message grows to include user-defined profile ids.
+func TestProfileValidListIncludesUserProfile(t *testing.T) {
+	checkout(t, "")
+	addUserProfile(t)
+	_, err := ResolveProfile(Options{Profile: "bogus"})
+	if err == nil || !strings.Contains(err.Error(), "claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free|custom") {
+		t.Errorf("valid list should include the user profile: %v", err)
+	}
+}
+
 func TestResolveProfileEnvFileBeatsProcessEnv(t *testing.T) {
 	checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=from-env-file\n")
 	t.Setenv("ZHIPU_API_KEY", "from-process")

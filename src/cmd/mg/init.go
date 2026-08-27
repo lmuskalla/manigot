@@ -74,10 +74,9 @@ func runInit(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int
 	profile := ""
 	switch {
 	case *profileArg != "":
-		switch *profileArg {
-		case config.ProfileClaudePro, config.ProfileZAI, config.ProfileOpenCodeGo, config.ProfileOpenCodeZen, config.ProfileOpenCodeZenFree:
+		if _, ok := config.ProfileByID(*profileArg); ok {
 			profile = *profileArg
-		default:
+		} else {
 			fmt.Fprintf(stderr, "Error: --profile must be 'claude-pro', 'zai', 'opencode-go', 'opencode-zen' or 'opencode-zen-free' (got '%s').\n", *profileArg)
 			return 1
 		}

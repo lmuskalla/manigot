@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lmuskalla/manigot/internal/config"
 )
 
 func TestSetupCheckAll(t *testing.T) {
@@ -350,6 +352,52 @@ func TestSetupNtfyAlreadyConfigured(t *testing.T) {
 	}
 	if !strings.Contains(string(env), "NTFY_TOPIC=existing-topic") {
 		t.Errorf(".env was modified:\n%s", env)
+	}
+}
+
+func TestSetupWizardUserDefinedProfile(t *testing.T) {
+	dir := profileCheckout(t, "")
+	if err := config.AddProfile(config.Profile{
+		ID: "zen-alt", Label: "Zen Alt", Tool: config.ToolOpenCode,
+		AuthKeys: []string{"OPENCODE_API_KEY"}, ModelEnv: "OPENCODE_ZEN_MODEL", ModelDefault: "opencode/custom-model",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	var out strings.Builder
+	// Type the key, accept the default model.
+	code := runSetup([]string{"zen-alt"}, strings.NewReader("alt-key\n\n"), &out, &strings.Builder{}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, output:\n%s", code, out.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(env)
+	if !strings.Contains(got, "OPENCODE_API_KEY=alt-key") {
+		t.Errorf(".env missing typed key:\n%s", got)
+	}
+	if !strings.Contains(got, "OPENCODE_ZEN_MODEL=opencode/custom-model") {
+		t.Errorf(".env missing the user profile's default model:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "zen-alt") {
+		t.Errorf("wizard output missing the user profile id:\n%s", out.String())
+	}
+}
+
+func TestSetupCheckIncludesUserProfile(t *testing.T) {
+	profileCheckout(t, "")
+	if err := config.AddProfile(config.Profile{ID: "zen-alt", Tool: config.ToolOpenCode, AuthKeys: []string{"OPENCODE_API_KEY"}}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	var out strings.Builder
+	code := runSetup([]string{"--check"}, strings.NewReader(""), &out, &strings.Builder{}, false)
+	if code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+	got := out.String()
+	if !strings.Contains(got, "✗ zen-alt") || !strings.Contains(got, "missing: OPENCODE_API_KEY") {
+		t.Errorf("--check missing the user profile row:\n%s", got)
 	}
 }
 

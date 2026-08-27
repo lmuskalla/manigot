@@ -3,13 +3,16 @@
 Isolated agent environment per project: one Docker image, subscription
 billing via mounted OAuth credentials, real filesystem containment, and a
 structured brief → tasks → implementation → verdict job workflow. Runs a
-session under one of five subscription profiles — `claude-pro` (Claude Code,
-billed to Claude Pro/Max), `zai` (OpenCode, billed to a Z.AI Coding Plan),
-`opencode-go` (OpenCode, billed to the OpenCode Go subscription),
+session under a subscription profile — the built-ins `claude-pro` (Claude
+Code, billed to Claude Pro/Max), `zai` (OpenCode, billed to a Z.AI Coding
+Plan), `opencode-go` (OpenCode, billed to the OpenCode Go subscription),
 `opencode-zen` (OpenCode, billed to OpenCode Zen), and `opencode-zen-free`
 (OpenCode, billed to OpenCode Zen's free DeepSeek V4 Flash Free model) —
-chosen per session with `mg --profile <name>`, defaulted with `mg profiles`,
-and configured with `mg setup`.
+plus any user-defined profiles you add — chosen per session with
+`mg --profile <name>`, defaulted with `mg profiles`, and configured with
+`mg setup`. User profiles are created with `mg profiles add` (stored in the
+gitignored `config/profiles.json`), so any combination of credentials + model
+is possible without code changes.
 
 ## Stack
 - Runtime: Docker (single image, built from `Dockerfile`)
@@ -102,8 +105,10 @@ The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
   `mg jobs`'/`mg agents`' interactive selection on a TTY.
 - `internal/orchestrate` — the `mg jdi` state machine (`@analyst` →
   `@developer` → `@reviewer`).
-- `internal/config` — the profiles table, `config/tui-settings.json`
-  settings, and manigot's `.env` read/write (`GetEnv`/`UpsertEnv`).
+- `internal/config` — the profiles table (built-ins + the user-defined
+  `config/profiles.json` store, merged by `Profiles()`/`ProfileByID()`),
+  `config/tui-settings.json` settings, and manigot's `.env` read/write
+  (`GetEnv`/`UpsertEnv`).
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
   the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` (quotes.json),
@@ -395,10 +400,14 @@ repository (a `.git` directory).
   (git top-level, else `$PWD`), reporting "already initialized" when `docs/`
   exists, then optionally hands off to `@prompter` (via `--prompt`) to draft
   a concrete `docs/AGENTS.md`.
-- `mg profiles [name]` lists the profiles (which are ready, and which
-  is the default), sets the default (`MANIGOT_PROFILE` in manigot's `.env`),
-  or picks it interactively on a TTY. The TUI's settings screen shares the
-  same default.
+- `mg profiles [name|add|rm]` lists the profiles — the built-ins plus any
+  user-defined ones (which are ready, and which is the default) — sets the
+  default (`MANIGOT_PROFILE` in manigot's `.env`), or picks it interactively
+  on a TTY. `mg profiles add` interactively creates a user-defined profile
+  (e.g. OpenCode Zen with a different model), stored in
+  `config/profiles.json`; `mg profiles rm <id>` removes one (built-ins are not
+  removable, and removing the current default falls back to `claude-pro`).
+  The TUI's settings screen shares the same default.
 - `mg theme [name]` shows or sets manigot's global OpenCode theme
   (`OPENCODE_THEME` in manigot's `.env`) — one value shared across every
   OpenCode profile, unlike the per-profile `OPENCODE_*_MODEL` keys — or picks
@@ -410,7 +419,8 @@ repository (a `.git` directory).
   fixed-list selector, for the same reason). Claude Code already respects the
   host terminal's own theme, so this has no effect there.
 - `mg setup [name] [--check]` configures each profile's credentials into
-  manigot's `.env`, auto-applying what it can read off the host (e.g. the
+  manigot's `.env` — walking every profile (built-in + user-defined) when no
+  name is given — auto-applying what it can read off the host (e.g. the
   Claude account from `~/.claude.json`) and letting you paste the rest.
 - `mg agents` (alias `mg crew`) lists every agent available to the current
   project — the global `agents/*.md` files, each swapped for its
@@ -500,6 +510,12 @@ either way.
   fall back to the model-free render report. The perception matrix may later
   widen the forwarding (see the job's probe protocol) — a one-line
   `OpenCodeKeys` change plus its tests, deliberately not made pre-matrix.
+- `config/profiles.json` (gitignored) — the user-defined profile store: the
+  profiles created with `mg profiles add`, each a full definition (tool,
+  auth keys, model env/default) merged after the built-in table by
+  `config.Profiles()`/`ProfileByID()`. A missing or corrupt file degrades to
+  "built-ins only"; id collisions are rejected at write time. Built-ins are
+  compiled in, never stored here.
 - `config/tui-settings.json` (gitignored) — the TUI's personal preferences:
   which editor opens `brief.md`, the recent-activity count, and which
   terminal spawns a session (used only when the TUI is not inside tmux —
@@ -528,15 +544,17 @@ either way.
   is optional (see Architecture above)
 - `mg --profile <name>` — same, but under the given subscription profile
   (`claude-pro`/`zai`/`opencode-go`/`opencode-zen`/`opencode-zen-free`); `--tool` is accepted as a legacy alias
-- `mg profiles [name]` — list the profiles (and which is the default), set the
-  default bare `mg` uses, or pick it interactively (no name, on a TTY)
+- `mg profiles [name|add|rm]` — list the profiles (and which is the default),
+  set the default bare `mg` uses, pick it interactively (no name, on a TTY),
+  or manage your own user-defined profiles with `add`/`rm`
+  (stored in `config/profiles.json`)
 - `mg theme [name]` — show or set manigot's global OpenCode theme
   (`OPENCODE_THEME`, shared across every OpenCode profile), or pick it
   interactively (no name, on a TTY) from a reference list of OpenCode's known
   built-in themes; an unrecognized name is still accepted (OpenCode rejects an
   invalid one at launch)
-- `mg setup [name] [--check]` — configure credentials for the profiles,
-  interactively, or report status with `--check`
+- `mg setup [name] [--check]` — configure credentials for the profiles
+  (built-in + user-defined), interactively, or report status with `--check`
 - `mg agents` — list available agents (global + any `docs/agents/`
   overrides/additions) and pick one to start a session in, via an interactive
   picker on a TTY (type to filter, enter to choose; thematic alias:

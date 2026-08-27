@@ -49,51 +49,244 @@ const DefaultRecentActivityCount = 5
 // under. Each profile bundles the agent CLI to launch, the credentials it is
 // billed against, and the model the CLI should default to — the whole point is
 // that switching profile, not tool, is what changes which subscription is used.
+//
+// The field set is the complete definition of a profile: the five built-in
+// subscription profiles populate every field, and a user-defined profile (see
+// AddProfile) carries the same full definition so the session launcher, the
+// mg profiles listing, and the mg setup wizard all treat it identically to a
+// built-in. The json tags drive the config/profiles.json store; the built-in
+// table is compiled in, never serialized.
 type Profile struct {
 	// ID is the value Settings.Profile (and the session launcher's
 	// --profile flag) holds: ProfileClaudePro, ProfileZAI, ProfileOpenCodeGo,
-	// ProfileOpenCodeZen or ProfileOpenCodeZenFree.
-	ID string
+	// ProfileOpenCodeZen, ProfileOpenCodeZenFree, or a user-defined id.
+	ID string `json:"id"`
 
 	// Label is a short human name for the settings screen and help text.
-	Label string
+	Label string `json:"label"`
 
 	// Tool is the agent CLI this profile launches: ToolClaudeCode or
 	// ToolOpenCode.
-	Tool string
+	Tool string `json:"tool"`
 
 	// Auth names the credential the profile is billed against, for display in
 	// the settings screen and setup help.
-	Auth string
+	Auth string `json:"auth"`
+
+	// AuthKeys lists the .env keys the profile needs to be ready, in the
+	// order the old scripts checked them: claude-pro needs all four
+	// subscription keys, the opencode profiles their single auth key. The
+	// session launcher validates and forwards exactly these keys.
+	AuthKeys []string `json:"authKeys,omitempty"`
+
+	// ModelEnv is the .env key that overrides the profile's default model
+	// (e.g. OPENCODE_ZAI_MODEL). claude-pro has none — the CLI's own default.
+	// Only meaningful for opencode profiles.
+	ModelEnv string `json:"modelEnv,omitempty"`
+
+	// ModelDefault is the model string used when no ModelEnv override is set.
+	// For claude-pro it is only a display value ("(Claude Code default)");
+	// for opencode profiles it is the compiled-in model the session forwards.
+	ModelDefault string `json:"modelDefault,omitempty"`
 }
 
-// Profiles is the ordered list of subscription profiles, in the order the TUI
-// settings screen cycles them. No model is listed here: the opencode profiles' model comes
-// from the OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL/
-// OPENCODE_ZEN_FREE_MODEL values in manigot's .env, which the TUI does not
-// read — showing a compiled-in default would mislead.
-var profiles = []Profile{
-	{ID: ProfileClaudePro, Label: "Claude Code · Claude Pro", Tool: ToolClaudeCode, Auth: "Claude Pro OAuth"},
-	{ID: ProfileZAI, Label: "OpenCode · Z.AI Coding Plan", Tool: ToolOpenCode, Auth: "ZHIPU_API_KEY"},
-	{ID: ProfileOpenCodeGo, Label: "OpenCode · Go", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
-	{ID: ProfileOpenCodeZen, Label: "OpenCode · Zen", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
-	{ID: ProfileOpenCodeZenFree, Label: "OpenCode · Zen Free", Tool: ToolOpenCode, Auth: "OPENCODE_API_KEY"},
+// builtInProfiles is the ordered list of the built-in subscription profiles,
+// in the order the TUI settings screen cycles them. It is the single source
+// of the per-profile auth/model metadata that used to live scattered across
+// cmd/mg/profiles.go (profileAuthKeys/profileModelEnv/profileModelDefaults) and
+// the hardcoded switch in internal/session. The opencode profiles' effective
+// model comes from the OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL/
+// OPENCODE_ZEN_FREE_MODEL values in manigot's .env, falling back to these
+// ModelDefault strings.
+var builtInProfiles = []Profile{
+	{
+		ID:           ProfileClaudePro,
+		Label:        "Claude Code · Claude Pro",
+		Tool:         ToolClaudeCode,
+		Auth:         "Claude Pro OAuth",
+		AuthKeys:     []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"},
+		ModelDefault: "(Claude Code default)",
+	},
+	{
+		ID:           ProfileZAI,
+		Label:        "OpenCode · Z.AI Coding Plan",
+		Tool:         ToolOpenCode,
+		Auth:         "ZHIPU_API_KEY",
+		AuthKeys:     []string{"ZHIPU_API_KEY"},
+		ModelEnv:     "OPENCODE_ZAI_MODEL",
+		ModelDefault: "zai-coding-plan/glm-5.2",
+	},
+	{
+		ID:           ProfileOpenCodeGo,
+		Label:        "OpenCode · Go",
+		Tool:         ToolOpenCode,
+		Auth:         "OPENCODE_API_KEY",
+		AuthKeys:     []string{"OPENCODE_API_KEY"},
+		ModelEnv:     "OPENCODE_GO_MODEL",
+		ModelDefault: "opencode-go/glm-5.2",
+	},
+	{
+		ID:           ProfileOpenCodeZen,
+		Label:        "OpenCode · Zen",
+		Tool:         ToolOpenCode,
+		Auth:         "OPENCODE_API_KEY",
+		AuthKeys:     []string{"OPENCODE_API_KEY"},
+		ModelEnv:     "OPENCODE_ZEN_MODEL",
+		ModelDefault: "opencode/deepseek-v4-flash",
+	},
+	{
+		ID:           ProfileOpenCodeZenFree,
+		Label:        "OpenCode · Zen Free",
+		Tool:         ToolOpenCode,
+		Auth:         "OPENCODE_API_KEY",
+		AuthKeys:     []string{"OPENCODE_API_KEY"},
+		ModelEnv:     "OPENCODE_ZEN_FREE_MODEL",
+		ModelDefault: "opencode/deepseek-v4-flash-free",
+	},
 }
 
-// Profiles returns the supported subscription profiles. The slice is built
-// fresh so a caller cannot mutate the shared table.
+// Profiles returns the supported subscription profiles: the built-in table in
+// its canonical order (which drives the TUI cycle and the mg profiles listing),
+// then any user-defined profiles in file order. A missing or corrupt user store
+// degrades to the built-ins only. The slice is built fresh so a caller cannot
+// mutate the shared table.
 func Profiles() []Profile {
-	return append([]Profile(nil), profiles...)
+	ps := append([]Profile(nil), builtInProfiles...)
+	for _, p := range loadUserProfiles() {
+		ps = append(ps, p)
+	}
+	return ps
 }
 
-// ProfileByID returns the profile with the given ID.
+// ProfileByID returns the profile with the given ID, searching the built-in
+// table first then any user-defined profiles. A missing or corrupt user store
+// degrades to the built-ins only (no error — a bad profiles.json must never
+// break a lookup that the read-only CLI listing, TUI, or session launcher
+// depends on).
 func ProfileByID(id string) (Profile, bool) {
-	for _, p := range profiles {
+	for _, p := range builtInProfiles {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	for _, p := range loadUserProfiles() {
 		if p.ID == id {
 			return p, true
 		}
 	}
 	return Profile{}, false
+}
+
+// profilesPath returns the user-profile store's path (config/profiles.json in
+// the manigot checkout), or "" if the checkout cannot be located. The file is
+// machine-specific user state, alongside config/tui-settings.json — both are
+// covered by the /config/ ignore rule and never committed.
+func profilesPath() string {
+	dir := Dir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "profiles.json")
+}
+
+// loadUserProfiles returns the user-defined profiles persisted in
+// config/profiles.json, in file order. A missing or corrupt file is not an
+// error — it degrades to an empty set ("built-ins only"), so the read-only
+// paths (Profiles/ProfileByID/TUI) can never be broken by a bad store. It is
+// the error-tolerating wrapper around loadUserProfilesErr for those paths.
+func loadUserProfiles() []Profile {
+	ps, _ := loadUserProfilesErr()
+	return ps
+}
+
+// loadUserProfilesErr is loadUserProfiles' strict form, used by the write
+// paths (AddProfile/RemoveProfile): it reports a corrupt or unreadable file as
+// an error so the caller does not silently overwrite user state.
+func loadUserProfilesErr() ([]Profile, error) {
+	path := profilesPath()
+	if path == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var ps []Profile
+	if err := json.Unmarshal(data, &ps); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return ps, nil
+}
+
+// saveUserProfiles writes the user-defined profiles to config/profiles.json,
+// creating config/ (and the file) as needed.
+func saveUserProfiles(ps []Profile) error {
+	dir := Dir()
+	if dir == "" {
+		return fmt.Errorf("cannot determine the manigot checkout to save profiles into (set $%s)", home.EnvHome)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(ps, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "profiles.json"), data, 0o644)
+}
+
+// AddProfile persists a user-defined profile, appending it after the built-ins
+// and any existing user profiles (file order). The profile id must be unique
+// across the whole set — a collision with a built-in or an existing user
+// profile is rejected. Built-ins are never modified; AddProfile only ever
+// writes the user store.
+func AddProfile(p Profile) error {
+	if strings.TrimSpace(p.ID) == "" {
+		return fmt.Errorf("a profile id is required")
+	}
+	for _, b := range builtInProfiles {
+		if b.ID == p.ID {
+			return fmt.Errorf("a built-in profile with id %q already exists", p.ID)
+		}
+	}
+	ps, err := loadUserProfilesErr()
+	if err != nil {
+		return err
+	}
+	for _, existing := range ps {
+		if existing.ID == p.ID {
+			return fmt.Errorf("a profile with id %q already exists", p.ID)
+		}
+	}
+	ps = append(ps, p)
+	return saveUserProfiles(ps)
+}
+
+// RemoveProfile deletes a user-defined profile by id. Built-in profiles are
+// not deletable — they are the defaults every user starts from; only
+// user-defined ids can be removed. Removing an id that is not in the user
+// store is an error.
+func RemoveProfile(id string) error {
+	ps, err := loadUserProfilesErr()
+	if err != nil {
+		return err
+	}
+	kept := ps[:0]
+	found := false
+	for _, p := range ps {
+		if p.ID == id {
+			found = true
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if !found {
+		return fmt.Errorf("no user-defined profile with id %q", id)
+	}
+	return saveUserProfiles(kept)
 }
 
 // ProfileTool returns the agent CLI a profile runs, defaulting to

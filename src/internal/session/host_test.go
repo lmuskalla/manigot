@@ -137,6 +137,47 @@ func TestBuildHostOpenCodeProfile(t *testing.T) {
 	}
 }
 
+// TestBuildHostUserDefinedOpenCodeProfile: a user-defined opencode profile
+// builds a host invocation exactly like a built-in one — opencode binary, the
+// profile's effective model via --model, the auth key in the child env.
+func TestBuildHostUserDefinedOpenCodeProfile(t *testing.T) {
+	_, _ = docProject(t)
+	fakeHostBinary(t)
+	checkout(t, "OPENCODE_API_KEY=user-secret\nOPENCODE_CUSTOM_MODEL=opencode/custom\n")
+	addUserProfile(t)
+	info, err := ResolveProfile(Options{Profile: "custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	if inv.Argv[0] != "opencode" {
+		t.Errorf("argv[0] = %q, want opencode", inv.Argv[0])
+	}
+	containsAll(t, inv.Argv, "--model", "opencode/custom")
+	m := envMap(t, inv.Env)
+	if m["OPENCODE_API_KEY"] != "user-secret" {
+		t.Errorf("host env OPENCODE_API_KEY = %q, want user-secret", m["OPENCODE_API_KEY"])
+	}
+	if m["OPENCODE_MODEL"] != "" {
+		t.Errorf("host env must not forward OPENCODE_MODEL (goes via --model), got %q", m["OPENCODE_MODEL"])
+	}
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if m[k] != "" {
+			t.Errorf("host env forwards %s=%q for a user opencode profile", k, m[k])
+		}
+	}
+}
+
 // TestBuildHostOpenCodeThemeNotForwarded — OPENCODE_THEME is a container-only
 // knob (applied by scripts/entrypoint.sh writing a generated tui.json inside
 // the ephemeral container); mg host runs against the user's own real

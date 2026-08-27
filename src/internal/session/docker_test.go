@@ -162,6 +162,41 @@ func TestBuildOpenCodeProfile(t *testing.T) {
 	}
 }
 
+// TestBuildUserDefinedOpenCodeProfile: a user-defined opencode profile builds
+// a docker invocation exactly like a built-in opencode one — its auth key and
+// effective model forwarded, no CLAUDE_* keys.
+func TestBuildUserDefinedOpenCodeProfile(t *testing.T) {
+	_, _ = docProject(t)
+	checkout(t, "OPENCODE_API_KEY=user-secret\nOPENCODE_CUSTOM_MODEL=opencode/custom\n")
+	addUserProfile(t)
+	info, err := ResolveProfile(Options{Profile: "custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	containsAll(t, inv.Argv,
+		"-e", "OPENCODE_API_KEY=user-secret",
+		"-e", "OPENCODE_MODEL=opencode/custom",
+		"-e", "MANIGOT_TOOL=opencode",
+	)
+	joined := strings.Join(inv.Argv, "\n")
+	for _, k := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"} {
+		if strings.Contains(joined, k+"=") {
+			t.Errorf("user opencode docker argv forwards %s:\n%s", k, joined)
+		}
+	}
+}
+
 func TestBuildOpenCodeZenProfile(t *testing.T) {
 	root, _ := docProject(t)
 	checkout(t, "MANIGOT_PROFILE=opencode-zen\nOPENCODE_API_KEY=zen-secret\n")

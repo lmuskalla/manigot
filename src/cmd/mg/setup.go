@@ -28,9 +28,10 @@ Configures credentials for manigot's subscription profiles into manigot/.env:
   opencode-zen      OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)
   opencode-zen-free OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)
 
-With no profile, the wizard walks through all five, plus the optional ntfy
-push-notification settings (NTFY_URL/NTFY_TOPIC/NTFY_TOKEN) for mg jdi.
---check reports which profiles are ready without prompting. Values are
+With no profile, the wizard walks through every profile — the built-ins above
+plus any user-defined ones you've added (see 'mg profiles add') — and the
+optional ntfy push-notification settings (NTFY_URL/NTFY_TOPIC/NTFY_TOKEN) for
+mg jdi. --check reports which profiles are ready without prompting. Values are
 written to the same .env mg reads; nothing is sent anywhere.
 `
 
@@ -54,7 +55,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 		// An unknown flag (e.g. "--bogus"): the script's loop reported it the
 		// same way as any other unknown argument.
 		fmt.Fprintln(stderr, flagParseError(err))
-		fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free] [--check]")
+		fmt.Fprintln(stderr, "Usage: mg setup [<profile>] [--check]")
 		return 1
 	}
 
@@ -66,7 +67,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 		return 0
 	}
 	for _, arg := range profileArgs {
-		if arg == config.ProfileClaudePro || arg == config.ProfileZAI || arg == config.ProfileOpenCodeGo || arg == config.ProfileOpenCodeZen || arg == config.ProfileOpenCodeZenFree {
+		if _, ok := config.ProfileByID(arg); ok {
 			if target != "" {
 				fmt.Fprintln(stderr, "Error: give a single profile, not several.")
 				return 1
@@ -74,7 +75,7 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 			target = arg
 		} else {
 			fmt.Fprintf(stderr, "Error: unknown argument '%s'.\n", arg)
-			fmt.Fprintln(stderr, "Usage: mg setup [claude-pro|zai|opencode-go|opencode-zen|opencode-zen-free] [--check]")
+			fmt.Fprintln(stderr, "Usage: mg setup [<profile>] [--check]")
 			return 1
 		}
 	}
@@ -83,11 +84,11 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 		if target != "" {
 			checkProfile(target, stdout)
 		} else {
-			checkProfile(config.ProfileClaudePro, stdout)
-			checkProfile(config.ProfileZAI, stdout)
-			checkProfile(config.ProfileOpenCodeGo, stdout)
-			checkProfile(config.ProfileOpenCodeZen, stdout)
-			checkProfile(config.ProfileOpenCodeZenFree, stdout)
+			// Data-driven: check every profile (built-in + user-defined) in
+			// canonical order.
+			for _, p := range config.Profiles() {
+				checkProfile(p.ID, stdout)
+			}
 		}
 		return 0
 	}
@@ -104,24 +105,15 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 	br := bufio.NewReader(r)
 
 	if target != "" {
-		switch target {
-		case config.ProfileClaudePro:
-			setupClaudePro(br, stdout)
-		case config.ProfileZAI:
-			setupZAI(br, stdout)
-		case config.ProfileOpenCodeGo:
-			setupOpenCodeGo(br, stdout)
-		case config.ProfileOpenCodeZen:
-			setupOpenCodeZen(br, stdout)
-		case config.ProfileOpenCodeZenFree:
-			setupOpenCodeZenFree(br, stdout)
+		if p, ok := config.ProfileByID(target); ok {
+			setupProfile(p, br, stdout)
 		}
 	} else {
-		setupClaudePro(br, stdout)
-		setupZAI(br, stdout)
-		setupOpenCodeGo(br, stdout)
-		setupOpenCodeZen(br, stdout)
-		setupOpenCodeZenFree(br, stdout)
+		// Data-driven: walk every profile (built-in + user-defined), then the
+		// optional ntfy block.
+		for _, p := range config.Profiles() {
+			setupProfile(p, br, stdout)
+		}
 		setupNtfy(br, stdout)
 	}
 
@@ -134,9 +126,13 @@ func runSetup(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) in
 // checkProfile prints the `--check` status line for one profile: "✓ ready" or
 // "✗ missing <keys>" with the same formatting setup.sh used.
 func checkProfile(p string, w io.Writer) {
-	keys := profileAuthKeys[p]
+	prof, ok := config.ProfileByID(p)
+	if !ok {
+		fmt.Fprintf(w, "  \u2717 %-12s unknown profile\n", p)
+		return
+	}
 	var missing []string
-	for _, k := range keys {
+	for _, k := range prof.AuthKeys {
 		if config.EnvValue(k) == "" {
 			missing = append(missing, k)
 		}
@@ -254,86 +250,136 @@ func setupClaudePro(r io.Reader, w io.Writer) {
 	}
 }
 
-func setupZAI(r io.Reader, w io.Writer) {
-	fmt.Fprintln(w, sepLine)
-	fmt.Fprintln(w, "  zai — OpenCode, billed to your Z.AI Coding Plan")
-	fmt.Fprintln(w, sepLine)
-	if have("ZHIPU_API_KEY") {
-		fmt.Fprintf(w, "  ✓ Already configured (ZHIPU_API_KEY %s).\n", cli.Mask(config.EnvValue("ZHIPU_API_KEY")))
-	} else {
-		fmt.Fprintln(w, "  OpenCode authenticates to Z.AI with an API key from your Z.AI")
-		fmt.Fprintln(w, "  Coding Plan. Get one from the Z.AI / BigModel console")
-		fmt.Fprintln(w, "  (https://www.bigmodel.cn), then paste it below.")
-		promptSecret("  ZHIPU_API_KEY", "ZHIPU_API_KEY", r, w)
+// setupProfile runs the setup wizard block for one profile, dispatching on its
+// tool: the claude-code flow (the bespoke OAuth account wizard) and the
+// data-driven opencode flow (setupOpenCodeProfile + setupSpecs). Called for
+// every profile in config.Profiles(), so a user-defined profile gets a wizard
+// too — a generic spec when its id has no bespoke entry in setupSpecs.
+func setupProfile(p config.Profile, br *bufio.Reader, w io.Writer) {
+	if p.Tool == config.ToolClaudeCode {
+		setupClaudePro(br, w)
+		return
 	}
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
-	promptValue("  OPENCODE_ZAI_MODEL", "OPENCODE_ZAI_MODEL", "zai-coding-plan/glm-5.2", r, w)
+	spec, ok := setupSpecs[p.ID]
+	if !ok {
+		spec = genericOpenCodeSpec(p)
+	}
+	setupOpenCodeProfile(p, spec, br, w)
 }
 
-func setupOpenCodeGo(r io.Reader, w io.Writer) {
-	fmt.Fprintln(w, sepLine)
-	fmt.Fprintln(w, "  opencode-go — OpenCode, billed to the OpenCode Go subscription")
-	fmt.Fprintln(w, sepLine)
-	if have("OPENCODE_API_KEY") {
-		fmt.Fprintf(w, "  ✓ Already configured (OPENCODE_API_KEY %s).\n", cli.Mask(config.EnvValue("OPENCODE_API_KEY")))
-	} else {
-		fmt.Fprintln(w, "  OpenCode Go uses your OpenCode API key — the same key you get at")
-		fmt.Fprintln(w, "  https://opencode.ai/auth, billed against your Go subscription.")
-		fmt.Fprintln(w, "")
-		fmt.Fprintln(w, "  1. Open https://opencode.ai/auth and sign in")
-		fmt.Fprintln(w, "  2. Subscribe to OpenCode Go (if you haven't already)")
-		fmt.Fprintln(w, "  3. Copy your API key and paste it below")
-		promptSecret("  OPENCODE_API_KEY", "OPENCODE_API_KEY", r, w)
-	}
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
-	fmt.Fprintln(w, "  Go model ids use the opencode-go/ prefix (e.g. opencode-go/deepseek-v4-flash).")
-	promptValue("  OPENCODE_GO_MODEL", "OPENCODE_GO_MODEL", "opencode-go/glm-5.2", r, w)
+// profileSetupSpec carries the prose a profile's opencode wizard block prints.
+// The built-in opencode profiles each have bespoke billing instructions; a
+// user-defined profile (no entry in setupSpecs) falls back to the generic
+// spec built by genericOpenCodeSpec.
+type profileSetupSpec struct {
+	title     string   // the line under sepLine
+	intro     []string // paragraphs printed before the credential prompt
+	modelHint []string // extra lines printed before the model prompt
 }
 
-func setupOpenCodeZen(r io.Reader, w io.Writer) {
-	fmt.Fprintln(w, sepLine)
-	fmt.Fprintln(w, "  opencode-zen — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)")
-	fmt.Fprintln(w, sepLine)
-	if have("OPENCODE_API_KEY") {
-		fmt.Fprintf(w, "  ✓ Already configured (OPENCODE_API_KEY %s).\n", cli.Mask(config.EnvValue("OPENCODE_API_KEY")))
-	} else {
-		fmt.Fprintln(w, "  OpenCode Zen uses your OpenCode API key — the same key you get at")
-		fmt.Fprintln(w, "  https://opencode.ai/auth. This DeepSeek V4 Flash model is billed")
-		fmt.Fprintln(w, "  pay-as-you-go against your Zen account credits — add billing at")
-		fmt.Fprintln(w, "  https://opencode.ai/auth if you haven't. For the no-cost variant, use")
-		fmt.Fprintln(w, "  the opencode-zen-free profile instead.")
-		fmt.Fprintln(w, "")
-		fmt.Fprintln(w, "  1. Open https://opencode.ai/auth and sign in")
-		fmt.Fprintln(w, "  2. Copy your API key and paste it below")
-		promptSecret("  OPENCODE_API_KEY", "OPENCODE_API_KEY", r, w)
-	}
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
-	fmt.Fprintln(w, "  Zen's (billed) DeepSeek V4 Flash model is opencode/deepseek-v4-flash.")
-	promptValue("  OPENCODE_ZEN_MODEL", "OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash", r, w)
+// setupSpecs holds the per-profile wizard prose for the built-in opencode
+// profiles, so the data-driven setupOpenCodeProfile reproduces their exact
+// wording. claude-pro is handled by setupClaudePro (the claude-tool flow).
+var setupSpecs = map[string]profileSetupSpec{
+	config.ProfileZAI: {
+		title: "  zai — OpenCode, billed to your Z.AI Coding Plan",
+		intro: []string{
+			"  OpenCode authenticates to Z.AI with an API key from your Z.AI",
+			"  Coding Plan. Get one from the Z.AI / BigModel console",
+			"  (https://www.bigmodel.cn), then paste it below.",
+		},
+	},
+	config.ProfileOpenCodeGo: {
+		title: "  opencode-go — OpenCode, billed to the OpenCode Go subscription",
+		intro: []string{
+			"  OpenCode Go uses your OpenCode API key — the same key you get at",
+			"  https://opencode.ai/auth, billed against your Go subscription.",
+			"",
+			"  1. Open https://opencode.ai/auth and sign in",
+			"  2. Subscribe to OpenCode Go (if you haven't already)",
+			"  3. Copy your API key and paste it below",
+		},
+		modelHint: []string{
+			"  Go model ids use the opencode-go/ prefix (e.g. opencode-go/deepseek-v4-flash).",
+		},
+	},
+	config.ProfileOpenCodeZen: {
+		title: "  opencode-zen — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash)",
+		intro: []string{
+			"  OpenCode Zen uses your OpenCode API key — the same key you get at",
+			"  https://opencode.ai/auth. This DeepSeek V4 Flash model is billed",
+			"  pay-as-you-go against your Zen account credits — add billing at",
+			"  https://opencode.ai/auth if you haven't. For the no-cost variant, use",
+			"  the opencode-zen-free profile instead.",
+			"",
+			"  1. Open https://opencode.ai/auth and sign in",
+			"  2. Copy your API key and paste it below",
+		},
+		modelHint: []string{
+			"  Zen's (billed) DeepSeek V4 Flash model is opencode/deepseek-v4-flash.",
+		},
+	},
+	config.ProfileOpenCodeZenFree: {
+		title: "  opencode-zen-free — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)",
+		intro: []string{
+			"  OpenCode Zen uses your OpenCode API key — the same key you get at",
+			"  https://opencode.ai/auth. The free DeepSeek V4 Flash model costs",
+			"  no credits, so this profile works with a key alone.",
+			"",
+			"  1. Open https://opencode.ai/auth and sign in",
+			"  2. Copy your API key and paste it below",
+		},
+		modelHint: []string{
+			"  Zen's free DeepSeek V4 Flash model is opencode/deepseek-v4-flash-free.",
+		},
+	},
 }
 
-func setupOpenCodeZenFree(r io.Reader, w io.Writer) {
+// genericOpenCodeSpec builds a wizard spec for a user-defined opencode profile
+// that has no bespoke entry in setupSpecs.
+func genericOpenCodeSpec(p config.Profile) profileSetupSpec {
+	key := "the profile's API key"
+	if len(p.AuthKeys) > 0 {
+		key = p.AuthKeys[0]
+	}
+	return profileSetupSpec{
+		title: fmt.Sprintf("  %s — OpenCode profile billed via %s", p.ID, key),
+		intro: []string{
+			fmt.Sprintf("  This user-defined profile bills against the %s credential.", key),
+			"  Add it to manigot/.env (or inherit it from your environment) to",
+			"  make the profile ready.",
+		},
+	}
+}
+
+// setupOpenCodeProfile is the data-driven opencode wizard block: the key, model
+// env key, and model default all come from the profile; the surrounding prose
+// from its spec. It reproduces the built-in opencode wizards byte-for-byte via
+// setupSpecs.
+func setupOpenCodeProfile(p config.Profile, spec profileSetupSpec, br *bufio.Reader, w io.Writer) {
 	fmt.Fprintln(w, sepLine)
-	fmt.Fprintln(w, "  opencode-zen-free — OpenCode, billed to OpenCode Zen (DeepSeek V4 Flash Free)")
+	fmt.Fprintln(w, spec.title)
 	fmt.Fprintln(w, sepLine)
-	if have("OPENCODE_API_KEY") {
-		fmt.Fprintf(w, "  ✓ Already configured (OPENCODE_API_KEY %s).\n", cli.Mask(config.EnvValue("OPENCODE_API_KEY")))
+	key := ""
+	if len(p.AuthKeys) > 0 {
+		key = p.AuthKeys[0]
+	}
+	if key != "" && have(key) {
+		fmt.Fprintf(w, "  ✓ Already configured (%s %s).\n", key, cli.Mask(config.EnvValue(key)))
 	} else {
-		fmt.Fprintln(w, "  OpenCode Zen uses your OpenCode API key — the same key you get at")
-		fmt.Fprintln(w, "  https://opencode.ai/auth. The free DeepSeek V4 Flash model costs")
-		fmt.Fprintln(w, "  no credits, so this profile works with a key alone.")
-		fmt.Fprintln(w, "")
-		fmt.Fprintln(w, "  1. Open https://opencode.ai/auth and sign in")
-		fmt.Fprintln(w, "  2. Copy your API key and paste it below")
-		promptSecret("  OPENCODE_API_KEY", "OPENCODE_API_KEY", r, w)
+		for _, line := range spec.intro {
+			fmt.Fprintln(w, line)
+		}
+		if key != "" {
+			promptSecret("  "+key, key, br, w)
+		}
 	}
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "  Optional — the model this profile defaults to, as provider/model.")
-	fmt.Fprintln(w, "  Zen's free DeepSeek V4 Flash model is opencode/deepseek-v4-flash-free.")
-	promptValue("  OPENCODE_ZEN_FREE_MODEL", "OPENCODE_ZEN_FREE_MODEL", "opencode/deepseek-v4-flash-free", r, w)
+	for _, line := range spec.modelHint {
+		fmt.Fprintln(w, line)
+	}
+	promptValue("  "+p.ModelEnv, p.ModelEnv, p.ModelDefault, br, w)
 }
 
 // setupNtfy is the optional ntfy block of the mg setup wizard: it prompts

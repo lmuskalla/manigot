@@ -7,8 +7,9 @@
 # `-o bin/mg`). Builds go to bin/; the root copy is never referenced.
 /mg
 
-# Local TUI preferences (editor, subscription profile), written by the TUI's
-# settings screen (tui/internal/config). Machine-specific, not shared.
+# Local TUI preferences (editor, subscription profile) and the user-defined
+# profile store (config/profiles.json), written by the TUI's settings screen
+# and `mg profiles add/rm`. Machine-specific, not shared.
 /config/
 
 # Runtime mount points: docs/ is bind-mounted here inside the container,
