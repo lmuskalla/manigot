@@ -105,7 +105,15 @@ the richer step-level `run.log` (the old "richer logging" backlog item),
 replacing the README's honest "final answer only" limitation. Design the
 writer side in the agent invocation path and the reader side in the TUI for
 *that* consumer; the format earns its keep before anything else attaches to
-it.
+it. One sizing constraint to pin before the writer design: the CLIs are
+asymmetric in what they emit. OpenCode's `run --format json` already streams
+fine-grained events (`step_start` / `tool_use` / `text` / `step_finish` with
+per-step tokens). Claude Code's `--print` today returns a single final-result
+object (`--output-format json`); it *can* stream (`--output-format
+stream-json`: per-message events, cost only as a per-run total on the result
+event) but manigot does not use it yet, and that format is more version-volatile
+than the stable result shape. So the writer needs either a third parser branch
+(Claude stream-json) or a coarser event model under `claude-pro`.
 
 ### 6. In-TUI embedded terminal — biggest bet, last, smallest slice first, now in scope
 
