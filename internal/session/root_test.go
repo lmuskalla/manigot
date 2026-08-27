@@ -96,7 +96,8 @@ func TestResolveJobWorktreeExcludesMountTargets(t *testing.T) {
 	assertMountTargetsExcluded(t, root)
 }
 
-func TestResolveRootNoDocsFallsBackToGitRoot(t *testing.T) {	dir := projectCheckout(t, t.TempDir(), false)
+func TestResolveRootNoDocsFallsBackToGitRoot(t *testing.T) {
+	dir := projectCheckout(t, t.TempDir(), false)
 	sub := filepath.Join(dir, "sub")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)

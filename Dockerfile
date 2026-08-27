@@ -117,6 +117,12 @@ RUN mkdir -p /home/claude/.claude /home/claude/.config/opencode \
 COPY --chown=claude:claude scripts/entrypoint.sh /home/claude/entrypoint.sh
 RUN chmod +x /home/claude/entrypoint.sh
 
+# ASCII logo — baked into the image so entrypoint.sh can print it inside the
+# container (the in-agent-terminal variant of the host session banner's logo;
+# see scripts/entrypoint.sh). The same file is the canonical source the
+# host-side banner and TUI read from the checkout.
+COPY --chown=claude:claude assets/manigot.txt /home/claude/assets/manigot.txt
+
 USER claude
 
 # Pre-warm the Go module cache so `make build` and `go test ./...` work inside

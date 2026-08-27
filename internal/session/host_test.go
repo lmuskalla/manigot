@@ -88,6 +88,11 @@ func TestBuildPlainClaudeHostSession(t *testing.T) {
 	if !strings.Contains(diag.String(), "Entering host mode") {
 		t.Errorf("missing host-mode banner:\n%s", diag.String())
 	}
+	// The ASCII logo (assets/manigot.txt via brand.Logo()) is printed above
+	// the boxed banner — identical to the docker builder's.
+	if !strings.Contains(diag.String(), "ASCII-LOGO-STUB") || !strings.Contains(diag.String(), "SECOND-LINE") {
+		t.Errorf("missing logo lines in diag:\n%s", diag.String())
+	}
 }
 
 func TestBuildHostOpenCodeProfile(t *testing.T) {

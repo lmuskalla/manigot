@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lmuskalla/manigot/internal/brand"
 	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/fs"
 	"github.com/lmuskalla/manigot/internal/git"
@@ -380,6 +381,12 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	}
 
 	// ── Info banner ─────────────────────────────────────────────────────────
+	// The ASCII logo (assets/manigot.txt via brand.Logo()) prints above the
+	// boxed banner — plain uncolored ASCII, so it renders identically in a
+	// captured terminal, a tmux pane, and every terminal emulator. Shared
+	// with BuildHostInvocation via printLogo so the two banners stay
+	// byte-identical; a missing asset prints nothing.
+	printLogo(diag)
 	fmt.Fprintln(diag, "╔══════════════════════════════════════╗")
 	fmt.Fprintln(diag, "║           manigot                   ║")
 	fmt.Fprintln(diag, "╠══════════════════════════════════════╣")
@@ -593,4 +600,22 @@ func pickQuote() string {
 		return ""
 	}
 	return quotes[rand.IntN(len(quotes))]
+}
+
+// printLogo writes the ASCII logo (assets/manigot.txt via brand.Logo()) to
+// diag, one line per logo row followed by a blank line. It is the shared
+// banner header for both BuildDockerInvocation and BuildHostInvocation, so
+// the two banners can never drift. A missing/unreadable asset prints nothing
+// — no logo, no blank line — the same no-error convention as pickQuote.
+func printLogo(diag io.Writer) {
+	logo := brand.Logo()
+	if logo == "" {
+		return
+	}
+	// The asset ends with a trailing newline; TrimSuffix keeps the split from
+	// producing a spurious empty last row.
+	for _, line := range strings.Split(strings.TrimSuffix(logo, "\n"), "\n") {
+		fmt.Fprintln(diag, line)
+	}
+	fmt.Fprintln(diag, "")
 }

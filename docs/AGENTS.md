@@ -101,8 +101,8 @@ The seam between the orchestrator (host-side Go) and the agent environment
   settings, and manigot's `.env` read/write (`GetEnv`/`UpsertEnv`).
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
-  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/`, `meta.md`
-  and `project-template/`.
+  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` (quotes.json,
+  the ASCII logo in manigot.txt), `meta.md` and `project-template/`.
 - `scripts/entrypoint.sh` — the ONLY bash, container-side. Branches on
   `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's onboarding
   wizard, pre-accepts folder trust for `/workspace`, and starts it in
@@ -115,7 +115,9 @@ The seam between the orchestrator (host-side Go) and the agent environment
   commands (see "Session git shim" below).
 - `Dockerfile` — builds the image; installs both agent CLIs (the image is
   purely isolation for workspaces — the global `agents/` and `skills/` are no
-  longer baked in, they are mounted from the host at session launch), and
+  longer baked in, they are mounted from the host at session launch; the ASCII
+  logo at `assets/manigot.txt` is baked in for entrypoint.sh's in-container
+  print), and
   pre-warms the Go module cache from the root `go.mod`/`go.sum` (with
   `GOTOOLCHAIN=local` a stale path breaks the build). The meta-prompt mount
   targets' parent dirs (`~/.claude` and `~/.config/opencode`) are pre-created
