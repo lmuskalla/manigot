@@ -1,6 +1,6 @@
 # Brief: character
 
-status: open
+status: done
 type: feature
 id: symbol
 branch: feature/symbol_character
@@ -26,3 +26,4 @@ Do create it for this repo as well.
 ## Notes
 
 <!-- Anything the analyst or developer should know before starting. -->
+
