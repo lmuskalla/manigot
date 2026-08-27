@@ -1224,3 +1224,67 @@ func TestTigSuccessThroughTmuxStub(t *testing.T) {
 		t.Errorf("select-pane tagging of the new pane missing:\n%s", calls)
 	}
 }
+
+// --- tail (log tailing) launcher ---------------------------------------------
+
+func TestTailShellCommandFormat(t *testing.T) {
+	got := tailShellCommand("/home/me/proj/.manigot/jdi-status/irw320/run.log")
+	want := "tail -f '/home/me/proj/.manigot/jdi-status/irw320/run.log'"
+	if got != want {
+		t.Errorf("tailShellCommand =\n %q\nwant\n %q", got, want)
+	}
+	// Deliberately NOT wrapped in holdOnFailure: a user ends a tail pane with
+	// Ctrl+C (exit 130, non-zero), so holding on a non-zero exit would leave
+	// a "press enter to close" prompt every single time.
+	if strings.Contains(got, "ec=$?") {
+		t.Errorf("tailShellCommand must not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// A log path in a directory with spaces must still produce a single word for
+// the inner command, since the string is re-parsed by osascript / bash -lc.
+func TestTailShellCommandQuotesPathWithSpaces(t *testing.T) {
+	got := tailShellCommand("/Users/me/My Projects/manigot/.manigot/jdi-status/irw320/run.log")
+	if !strings.Contains(got, `'/Users/me/My Projects/manigot/.manigot/jdi-status/irw320/run.log'`) {
+		t.Errorf("log path not quoted as one word in %q", got)
+	}
+}
+
+// Embedded quotes in the log path must be escaped, not close the quote.
+func TestTailShellCommandQuoteEscape(t *testing.T) {
+	got := tailShellCommand("/path/with'quote/run.log")
+	if !strings.Contains(got, `'/path/with'\''quote/run.log'`) {
+		t.Errorf("log path quote not escaped in %q", got)
+	}
+}
+
+// TestTailSuccessThroughTmuxStub exercises the full Tail launch through the
+// existing tmuxStub, mirroring TestTigSuccessThroughTmuxStub: with $TMUX set
+// and a stubbed tmux on PATH, the split-window invocation must carry the tail
+// inner command, the pane must be tagged/recorded, and the returned
+// description must be "tmux pane". Unlike Tig there is no ExeOverride /
+// TigLookPath seam to stub — Tail is a plain host command with no mg-binary
+// hop.
+func TestTailSuccessThroughTmuxStub(t *testing.T) {
+	stub := newTmuxStub(t)
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	desc, err := Tail("/home/me/proj/.manigot/jdi-status/t5oc4j/run.log", "")
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	if tmuxLastPaneID == "" {
+		t.Error("Tail launch did not record a pane id")
+	}
+	calls := stub.calls()
+	if !strings.Contains(calls, "tail -f '/home/me/proj/.manigot/jdi-status/t5oc4j/run.log'") {
+		t.Errorf("tmux split-window not invoked with the tail inner command:\n%s", calls)
+	}
+	if !strings.Contains(calls, "select-pane -t %100 -T manigot") {
+		t.Errorf("select-pane tagging of the new pane missing:\n%s", calls)
+	}
+}

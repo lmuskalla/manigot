@@ -1192,6 +1192,30 @@ func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.detail.setStatus("→ tig in " + desc)
 		}
 		return a, a.armStatusExpiry()
+	case "l":
+		// Tail the job's mg-jdi run.log in a tmux split pane / new terminal —
+		// a live `tail -f` of the same sidecar the log tab (key 5) reads, so a
+		// user can watch the currently running agent's output grow without
+		// pressing ctrl+r. Like "t" it spawns a host-side pane (see
+		// launch.Tail), unlike "j" which stays background-only. Gated on a
+		// run.log existing for this job — the same condition under which the
+		// log tab shows real content — and deliberately with no branch guard
+		// (unlike "t"/"P"/"c"/"g"): the log sidecar is job-name-keyed, not
+		// branch-keyed, so a branch-less working-tree job can tail too.
+		if !a.detail.runLogExists() {
+			a.detail.setStatus("no mg jdi run has happened for this job yet")
+			return a, a.armStatusExpiry()
+		}
+		// The launch path takes the absolute run.log path directly — no
+		// mg-binary hop, no profile flag: `tail -f` is a plain host command.
+		// Same job.Root the gate just checked, so the two can never disagree.
+		desc, err := launch.Tail(job.JDIRunLogPath(a.detail.job.Root, a.detail.job.Name), a.settings.Terminal)
+		if err != nil {
+			a.detail.setStatus(cmdErrorText(err))
+		} else {
+			a.detail.setStatus("→ tailing run.log in " + desc)
+		}
+		return a, a.armStatusExpiry()
 	case "c":
 		// Commit all uncommitted changes in this job's worktree — a
 		// catch-all sweep for the files agents sometimes leave behind, which

@@ -59,7 +59,9 @@ session git shim): worktree management, branch deletes, resets, checkouts,
 pushes, and the other destructive subcommands are refused.
 The manigot TUI's job detail view also offers a `t` key that opens the job's
 branch diff in tig (`mg diff <job> --tig`) in a tmux split pane / new
-terminal, gated on tig being installed on the host.
+terminal, gated on tig being installed on the host, and an `l` key that
+tails the job's mg-jdi `run.log` live in a tmux split pane / new terminal,
+gated on a run.log existing for the job.
 Copying text from inside a session uses OSC 52: your terminal emulator must
 support it, and tmux needs `set-clipboard on` when the session runs inside
 tmux (mg forwards your terminal environment into the container and warns at

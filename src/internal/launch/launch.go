@@ -179,6 +179,32 @@ func Tig(jobID, projectRoot, terminal string) (string, error) {
 	return launchDetached(inner, terminal)
 }
 
+// Tail opens a new terminal — inside tmux, a split pane in the TUI's current
+// window, exactly like Agent/Quick/Tig, including the replace policy — that
+// runs `tail -f '<logPath>'`: a live tail of the given absolute log file (the
+// mg-jdi run.log sidecar, job.JDIRunLogPath) so a user can watch the currently
+// running agent's output grow from inside the TUI. terminal is
+// config.Settings.Terminal, threaded through to launchDetached exactly like
+// the other launch paths' own terminal parameter — see Agent's doc for the
+// override semantics. It returns the same short human description of where it
+// opened so the caller can surface it in a status line.
+//
+// Unlike Agent/Quick/Tig there is no mg-binary hop at all: `tail -f` is a
+// plain host command, so there is no ExeOverride resolution and no profile
+// flag. The inner command is deliberately NOT wrapped in holdOnFailure (the
+// one launch path that deviates): a user ends a tail pane with Ctrl+C (exit
+// 130, non-zero), so holding on a non-zero exit would leave a "press enter to
+// close" prompt every single time — the pane should just close when the user
+// is done watching.
+//
+// tail -f idles harmlessly once the underlying run ends (the file simply
+// stops growing), so there is no liveness check here; the caller decides when
+// the key and footer hint are reachable (e.g. gated on the log file existing).
+func Tail(logPath, terminal string) (string, error) {
+	inner := tailShellCommand(logPath)
+	return launchDetached(inner, terminal)
+}
+
 // ExeOverride returns the path of the binary implementing the mg session
 // subcommand — the running binary itself. An exported package-level variable
 // so tests (in this package and internal/ui) can point Agent/Quick/AgentQuick
@@ -511,6 +537,25 @@ func tigShellCommand(manigotPath, jobID, projectRoot string) string {
 	inner := fmt.Sprintf("cd %s && %s diff %s --tig",
 		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(jobID))
 	return holdOnFailure(inner)
+}
+
+// tailShellCommand builds the shell string executed inside the new terminal:
+//
+//	tail -f '<logPath>'
+//
+// The log path is absolute (the caller passes job.JDIRunLogPath's output), so
+// there is no cd-first like the other launch paths — and the inner command is
+// deliberately NOT wrapped in holdOnFailure, the one deviation from the
+// agent/quick/tig convention: a user ends `tail -f` with Ctrl+C (exit 130,
+// non-zero), so holding on a non-zero exit would leave a "press enter to
+// close" prompt every single time instead of just closing the pane. Same
+// shellQuote-everything behavior as the other builders — a path with spaces
+// or embedded quotes survives osascript and `bash -lc` as one word.
+// Deliberately its own function rather than a generalization of the other
+// shell-command builders, per the file's "separate function per launch path"
+// convention.
+func tailShellCommand(logPath string) string {
+	return "tail -f " + shellQuote(logPath)
 }
 
 // holdOnFailure wraps a shell command so that, if it exits non-zero, the

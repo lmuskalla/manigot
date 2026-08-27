@@ -978,6 +978,7 @@ Detail view:
 | `x` / `del` | permanently delete the job — shows an in-TUI confirmation (with a dirty-worktree warning when the job's worktree has uncommitted changes), then runs the in-process delete lifecycle. `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull` |
 | `t` | open the job's branch diff in tig (`mg diff <id> --tig`) — spawns in a tmux split pane / new terminal like agent launches; only available when tig is installed on the host |
+| `l` | tail this job's `mg jdi` `run.log` live — spawns `tail -f` in a tmux split pane / new terminal like agent launches; only available once an `mg jdi` run has happened for this job (the same gate as the log tab's real content) |
 | `c` | commit all uncommitted changes in this job's worktree (`git add -A` + `git commit` with a `[<id>] chore: commit all` message) — a catch-all sweep for the files agents sometimes leave behind, so `D`'s clean-tree check isn't tripped |
 | `g` | open the git panel — pick one of the detail view's git commands for this job's worktree: commit all, push to origin, or merge default branch (see below) |
 | `ctrl+r` | refresh |
@@ -1103,7 +1104,8 @@ terminal window at all** — `mg jdi` has no interactive session for a human
 or a subprocess to attach to, so it runs fully detached in the background.
 Two places show you what it's doing instead, both polled the same
 refresh-triggered way as everything else in the TUI (pressing `ctrl+r`,
-returning to the list, etc. — no separate live-streaming subsystem). The one
+returning to the list, etc. — no separate live-streaming subsystem), plus a
+live tail you can open yourself. The one
 exception is a narrow timer-driven redraw that runs *only while a run is
 active*, driving the animated indicator below:
 
@@ -1118,6 +1120,13 @@ active*, driving the animated indicator below:
   to report; a stale status left behind by a killed `mg jdi` process is
   never shown as if it were current.
 - **Log tab** — see [Keybindings](#keybindings) above.
+- **Live tail pane** — press `l` in the detail view (available once a
+  `run.log` exists for the job) to spawn a live `tail -f` of the job's
+  `run.log` in a tmux split pane / new terminal — the same sidecar the log
+  tab reads, but updating without any refresh. Like the log tab, it updates
+  per agent invocation (mg-jdi appends at invocation boundaries, not
+  mid-invocation), and `tail -f` idles harmlessly once a run ends; end the
+  pane with Ctrl+C like any tail.
 
 **Notification.** A direct `mg jdi --job <id>` run rings the terminal bell
 itself when it stops (see [Autonomous mode](#autonomous-mode-mg-jdi)). A
