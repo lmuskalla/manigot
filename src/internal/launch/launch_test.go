@@ -1384,3 +1384,114 @@ func TestTailSuccessThroughTmuxStub(t *testing.T) {
 		t.Errorf("select-pane tagging of the new pane missing:\n%s", calls)
 	}
 }
+
+// --- jq availability seam + jq-piped tail -----------------------------------
+
+// stubJqLookPath points the launch package's jq lookup at fn and restores it
+// after the test, mirroring stubTigLookPath — so jq availability can be
+// controlled without requiring (or forbidding) a real jq on the test
+// machine.
+func stubJqLookPath(t *testing.T, fn func(string) (string, error)) {
+	t.Helper()
+	old := JqLookPath
+	JqLookPath = fn
+	t.Cleanup(func() { JqLookPath = old })
+}
+
+func TestJqAvailableTrueWhenJqResolves(t *testing.T) {
+	stubJqLookPath(t, func(name string) (string, error) {
+		if name != "jq" {
+			t.Errorf("JqLookPath called with %q, want %q", name, "jq")
+		}
+		return "/usr/bin/jq", nil
+	})
+	if !JqAvailable() {
+		t.Error("JqAvailable() = false, want true when jq resolves")
+	}
+}
+
+func TestJqAvailableFalseWhenJqMissing(t *testing.T) {
+	stubJqLookPath(t, func(name string) (string, error) {
+		return "", exec.ErrNotFound
+	})
+	if JqAvailable() {
+		t.Error("JqAvailable() = true, want false when jq does not resolve")
+	}
+}
+
+func TestJqTailShellCommandFormat(t *testing.T) {
+	got := jqTailShellCommand("/home/me/proj/.manigot/jdi-status/irw320/run.log")
+	want := `tail -f '/home/me/proj/.manigot/jdi-status/irw320/run.log' | jq -R -r 'fromjson? // .'`
+	if got != want {
+		t.Errorf("jqTailShellCommand =\n %q\nwant\n %q", got, want)
+	}
+	// Deliberately NOT wrapped in holdOnFailure, mirroring tailShellCommand:
+	// Ctrl+C on either stage of the pipe should just close the pane.
+	if strings.Contains(got, "ec=$?") {
+		t.Errorf("jqTailShellCommand must not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// A log path in a directory with spaces must still produce a single word for
+// the tail stage of the pipe, since the string is re-parsed by osascript /
+// bash -lc.
+func TestJqTailShellCommandQuotesPathWithSpaces(t *testing.T) {
+	got := jqTailShellCommand("/Users/me/My Projects/manigot/.manigot/jdi-status/irw320/run.log")
+	if !strings.Contains(got, `'/Users/me/My Projects/manigot/.manigot/jdi-status/irw320/run.log'`) {
+		t.Errorf("log path not quoted as one word in %q", got)
+	}
+}
+
+// TestTailUsesJqPipeWhenJqAvailable exercises the full Tail launch through
+// the existing tmuxStub with jq stubbed as available: the split-window
+// invocation must carry the jq-piped inner command, not the plain tail -f.
+func TestTailUsesJqPipeWhenJqAvailable(t *testing.T) {
+	stub := newTmuxStub(t)
+	stubJqLookPath(t, func(name string) (string, error) {
+		return "/usr/bin/jq", nil
+	})
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	logPath := "/home/me/proj/.manigot/jdi-status/t5oc4j/run.log"
+	desc, err := Tail(logPath, "")
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	calls := stub.calls()
+	if !strings.Contains(calls, jqTailShellCommand(logPath)) {
+		t.Errorf("tmux split-window not invoked with the jq-piped tail command:\n%s", calls)
+	}
+}
+
+// TestTailFallsBackToPlainWhenJqMissing exercises the full Tail launch
+// through the existing tmuxStub with jq stubbed as missing: the split-window
+// invocation must carry the plain tail -f command, silently falling back
+// instead of erroring.
+func TestTailFallsBackToPlainWhenJqMissing(t *testing.T) {
+	stub := newTmuxStub(t)
+	stubJqLookPath(t, func(name string) (string, error) {
+		return "", exec.ErrNotFound
+	})
+	t.Cleanup(func() { tmuxLastPaneID = "" })
+	tmuxLastPaneID = ""
+
+	logPath := "/home/me/proj/.manigot/jdi-status/t5oc4j/run.log"
+	desc, err := Tail(logPath, "")
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if desc != "tmux pane" {
+		t.Errorf("desc = %q, want %q", desc, "tmux pane")
+	}
+	calls := stub.calls()
+	if !strings.Contains(calls, tailShellCommand(logPath)) {
+		t.Errorf("tmux split-window not invoked with the plain tail command:\n%s", calls)
+	}
+	if strings.Contains(calls, "jq") {
+		t.Errorf("tmux split-window unexpectedly invoked with a jq pipe:\n%s", calls)
+	}
+}

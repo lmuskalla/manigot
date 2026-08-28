@@ -213,25 +213,34 @@ func Tig(jobID, projectRoot, terminal string) (string, error) {
 // window, exactly like Agent/Quick/Tig, including the replace policy — that
 // runs `tail -f '<logPath>'`: a live tail of the given absolute log file (the
 // mg-jdi run.log sidecar, job.JDIRunLogPath) so a user can watch the currently
-// running agent's output grow from inside the TUI. terminal is
-// config.Settings.Terminal, threaded through to launchDetached exactly like
-// the other launch paths' own terminal parameter — see Agent's doc for the
-// override semantics. It returns the same short human description of where it
-// opened so the caller can surface it in a status line.
+// running agent's output grow from inside the TUI. When jq resolves on the
+// host (JqAvailable), the tail is piped through it (jqTailShellCommand) so
+// the JSONL raw stream both agent CLIs write is pretty-printed as it scrolls
+// by, with the mg-jdi section headers and blank lines passed through
+// unchanged; when jq is missing, this silently falls back to the plain
+// tail -f (tailShellCommand) — strictly no worse than before jq support
+// existed. terminal is config.Settings.Terminal, threaded through to
+// launchDetached exactly like the other launch paths' own terminal
+// parameter — see Agent's doc for the override semantics. It returns the
+// same short human description of where it opened so the caller can surface
+// it in a status line.
 //
-// Unlike Agent/Quick/Tig there is no mg-binary hop at all: `tail -f` is a
-// plain host command, so there is no ExeOverride resolution and no profile
-// flag. The inner command is deliberately NOT wrapped in holdOnFailure (the
-// one launch path that deviates): a user ends a tail pane with Ctrl+C (exit
-// 130, non-zero), so holding on a non-zero exit would leave a "press enter to
-// close" prompt every single time — the pane should just close when the user
-// is done watching.
+// Unlike Agent/Quick/Tig there is no mg-binary hop at all: `tail -f` (piped
+// through jq or not) is a plain host command, so there is no ExeOverride
+// resolution and no profile flag. The inner command is deliberately NOT
+// wrapped in holdOnFailure (the one launch path that deviates): a user ends
+// a tail pane with Ctrl+C (exit 130, non-zero), so holding on a non-zero
+// exit would leave a "press enter to close" prompt every single time — the
+// pane should just close when the user is done watching.
 //
 // tail -f idles harmlessly once the underlying run ends (the file simply
 // stops growing), so there is no liveness check here; the caller decides when
 // the key and footer hint are reachable (e.g. gated on the log file existing).
 func Tail(logPath, terminal string) (string, error) {
 	inner := tailShellCommand(logPath)
+	if JqAvailable() {
+		inner = jqTailShellCommand(logPath)
+	}
 	return launchDetached(inner, terminal)
 }
 
@@ -277,6 +286,23 @@ var TigLookPath = exec.LookPath
 // authoritative backstop and errors clearly on its own when tig is missing.
 func TigAvailable() bool {
 	_, err := TigLookPath("tig")
+	return err == nil
+}
+
+// JqLookPath resolves the jq binary on the host, mirroring TigLookPath's own
+// tig-availability seam. An exported package-level variable, mirroring
+// ExeOverride/JdiExe/TigLookPath, so tests (in this package and internal/ui)
+// can point it at a stub or a jq-less PATH instead of requiring jq on the
+// test machine.
+var JqLookPath = exec.LookPath
+
+// JqAvailable reports whether jq resolves on the host — the "if available"
+// gate Tail keys its JSONL-pretty-printing pipe on (see Tail's own doc for
+// why it falls back to a plain tail -f rather than erroring when jq is
+// missing). Deliberately a lightweight LookPath probe with no version check,
+// mirroring TigAvailable.
+func JqAvailable() bool {
+	_, err := JqLookPath("jq")
 	return err == nil
 }
 
@@ -643,6 +669,30 @@ func tigShellCommand(manigotPath, jobID, projectRoot string) string {
 // convention.
 func tailShellCommand(logPath string) string {
 	return "tail -f " + shellQuote(logPath)
+}
+
+// jqTailShellCommand builds the shell string executed inside the new
+// terminal when jq is available on the host (see Tail's own doc):
+//
+//	tail -f '<logPath>' | jq -R -r 'fromjson? // .'
+//
+// session.log is not pure JSON: mg-jdi writes `=== <RFC3339> <agent> (attempt
+// N) ===` section headers and blank lines around each invocation's raw
+// stream, and the raw stream itself is JSONL for both agent CLIs (opencode
+// --format json; Claude --output-format stream-json). The filter reads each
+// line raw (-R), tries to parse it as JSON (fromjson?, jq's "try" form —
+// null/error on failure rather than aborting the whole pipeline) and falls
+// back to the raw line (// .) when parsing fails, so the headers and blank
+// lines pass through untouched while every JSONL line is pretty-printed
+// (jq's default output format) as it scrolls by. -r prints the fallback raw
+// lines without JSON-string quoting.
+//
+// Same shellQuote-everything behavior as tailShellCommand — a log path with
+// spaces or embedded quotes survives osascript and `bash -lc` as one word.
+// The jq filter itself is a fixed literal (no host input embedded in it), so
+// it needs no quoting beyond the single-quoted shell argument it already is.
+func jqTailShellCommand(logPath string) string {
+	return "tail -f " + shellQuote(logPath) + ` | jq -R -r 'fromjson? // .'`
 }
 
 // holdOnFailure wraps a shell command so that, if it exits non-zero, the
