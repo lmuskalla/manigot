@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -227,9 +228,68 @@ func TestSettingsRender(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
 	v.update(key(t, tea.KeyRunes, 'a', 'b', 'c'))
 	out := v.render()
-	for _, want := range []string{"Editor:", "Base branch", "Job branch prefix", "Recent activity:", "claude-pro", "zai", "opencode-go", "opencode-zen", "opencode-zen-free", "abc", "Profile", "recent activity strip", "Terminal:", "auto-detect", "Theme:", "OPENCODE_THEME"} {
+	for _, want := range []string{
+		// Section headlines.
+		"Personal settings", "Project settings",
+		// Per-setting headlines.
+		"Editor", "Recent activity", "Profile", "Terminal", "Theme", "Base branch", "Job branch prefix",
+		// The typed editor value.
+		"abc",
+		// Profile rows.
+		"claude-pro", "zai", "opencode-go", "opencode-zen", "opencode-zen-free",
+		// Shortened example lines.
+		"blank = use $VISUAL / $EDITOR / nano / vi", "recent activity strip", "auto-detect", "namespace for job branches",
+	} {
 		if !contains(out, want) {
 			t.Errorf("render missing %q", want)
+		}
+	}
+	// The old flat wall's phrasing is gone: per-field persistence clauses,
+	// the (project) label suffixes, the selected-profile "tool/billed via"
+	// description line, and the long per-field examples.
+	for _, gone := range []string{
+		"Editor:", "Recent activity:", "Base branch (project)", "Job branch prefix (project)",
+		"stored in config/tui-settings.json", "saved as OPENCODE_THEME", "max entries shown in the", "billed via",
+	} {
+		if contains(out, gone) {
+			t.Errorf("render still contains removed %q", gone)
+		}
+	}
+}
+
+func TestSettingsRenderPersistenceNotesOncePerSection(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	out := v.render()
+	// The persistence location is stated once per section (in the section
+	// headline / the profile note), not repeated per field.
+	for _, note := range []string{
+		"saved in config/tui-settings.json + manigot/.env",
+		"stored in .manigot/manigot.json, shared with your team",
+		"saved as MANIGOT_PROFILE in manigot/.env",
+	} {
+		if got := strings.Count(out, note); got != 1 {
+			t.Errorf("persistence note %q appears %d times, want 1", note, got)
+		}
+	}
+}
+
+func TestSettingsRenderFitsHeightBudget(t *testing.T) {
+	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
+	// The settings form is not scrollable (app.go renders it as a raw string
+	// wrapped in uiPaddingStyle), so its line count is a hard budget: the
+	// content area of a 24-row terminal is 22 rows (24 - 2*uiPaddingY). The
+	// whole form — the last field included — must fit those rows.
+	if got := len(strings.Split(v.render(), "\n")); got > 22 {
+		t.Errorf("render has %d lines, does not fit the 22 content rows of a 24-row terminal", got)
+	}
+	// Regression guard: the footer and every setting headline must be present,
+	// so nothing important is clipped below the fold.
+	for _, want := range []string{
+		"Editor", "Recent activity", "Profile", "Terminal", "Theme",
+		"Base branch", "Job branch prefix", "enter save",
+	} {
+		if !contains(v.render(), want) {
+			t.Errorf("render missing %q (clipped below the fold?)", want)
 		}
 	}
 }

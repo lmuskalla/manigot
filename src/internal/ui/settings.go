@@ -29,6 +29,12 @@ const recentActivityCountMax = 100
 // by field.
 const stFieldCount = 7
 
+// settingsLabelWidth is the display width of the settings form's label
+// column — the length of the longest setting headline ("Job branch prefix")
+// — so every text input starts at the same x and the form reads as aligned
+// columns rather than a ragged wall of label+input pairs.
+const settingsLabelWidth = 17
+
 // Focus indices for the settings form's fields, in tab cycle order: editor →
 // base branch → job branch prefix → recent activity count → profile →
 // terminal → theme → editor. Used by update() and render() instead of bare
@@ -54,15 +60,27 @@ const (
 	stSubmit          // enter — persist the settings
 )
 
-// settingsView is the "Settings" form. It edits three files at once:
+// settingsView is the "Settings" form, laid out as two bold-headed sections
+// that mirror the storage split the form edits:
 //
-//   - config/tui-settings.json — the editor preference and the recent-activity
-//     count (personal, gitignored, in the manigot checkout);
-//   - manigot/.env — the subscription profile, as MANIGOT_PROFILE: the one
-//     default shared between CLI and TUI (bare `mg` resolves to it, `mg
-//     profiles` writes it, and this form reads/writes the same key); and
-//   - the project.Settings (base branch, job branch prefix) — shared project
-//     conventions, committable, in the target project's .manigot/manigot.json.
+//   - Personal settings — the editor preference, the recent-activity count,
+//     the subscription profile, the terminal and the theme: global, personal
+//     preferences stored in config/tui-settings.json (editor, recent activity,
+//     terminal) and manigot/.env (the profile as MANIGOT_PROFILE — the one
+//     default shared between CLI and TUI: bare `mg` resolves to it, `mg
+//     profiles` writes it, and this form reads/writes the same key — and the
+//     theme as OPENCODE_THEME), both gitignored, in the manigot checkout;
+//   - Project settings — the base branch and job branch prefix: shared
+//     project conventions, committable, in the target project's
+//     .manigot/manigot.json.
+//
+// Within each section every setting has a bold headline with its value next
+// to it (only the input value dims when unfocused — the headline stays bold),
+// and the examples are short dim lines; the persistence location is stated
+// once per section (in the section headline, and for the profile in its
+// headline), not per field. The render is a fixed-height, non-scrollable
+// string, so vertical separation is deliberately tight — a single blank line
+// between the two sections — to fit the 22 content rows of a 24-row terminal.
 //
 // Like newJobView, it does not persist anything itself — the App calls
 // config.Save and project.Save on submit so this stays a pure input
@@ -155,9 +173,11 @@ func newSettingsView(global config.Settings, proj project.Settings, width, heigh
 }
 
 // stInputWidth returns the usable width for a settings text input, given the
-// available form width. All text inputs share the same width rule.
+// available form width. All text inputs share the same width rule: the label
+// column (settingsLabelWidth) plus the 2-space indent and the 2-space gap
+// between label and input.
 func stInputWidth(width int) int {
-	w := width - 12
+	w := width - settingsLabelWidth - 4
 	if w < 20 {
 		w = 20
 	}
@@ -313,63 +333,64 @@ func (v *settingsView) projectValue() project.Settings {
 	}
 }
 
-// render draws the form.
+// settingsField renders one setting's headline row: the bold label and the
+// value (a text input view) next to it, the label right-padded to
+// settingsLabelWidth so every input starts at the same x. The label stays
+// bold whether focused or not — only the value dims when its field is
+// unfocused, so a glance at the form still finds each setting by its bold
+// headline.
+func settingsField(focused bool, label, value string) string {
+	padded := label + strings.Repeat(" ", settingsLabelWidth-len(label))
+	if focused {
+		return "  " + headerStyle.Render(padded) + "  " + value
+	}
+	return "  " + headerStyle.Render(padded) + "  " + dimStyle.Render(value)
+}
+
+// render draws the form. The layout is deliberately packed: the render is a
+// raw, non-scrollable string (app.go's stateSettings branch), so it must fit
+// the 22 content rows available at a 24-row terminal (24 - 2*uiPaddingY).
+// The bold section and per-setting headlines carry the separation, so only a
+// single blank line is kept — between the two sections — and the examples are
+// short dim lines. The base branch row deliberately has no example line: its
+// placeholder ("main") already communicates the blank default.
 func (v *settingsView) render() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Settings"))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
+
+	// Personal settings section (global): editor, recent activity count,
+	// profile, terminal, theme. The section headline carries the storage
+	// location once, so the per-field examples below can stay short.
+	b.WriteString(headerStyle.Render("Personal settings"))
+	b.WriteString(" — ")
+	b.WriteString(dimStyle.Render("saved in config/tui-settings.json + manigot/.env"))
+	b.WriteString("\n")
 
 	// Editor row (global).
-	editorLabel := "  Editor: "
-	if v.focus == stFocusEditor {
-		b.WriteString(editorLabel + v.editor.View())
-	} else {
-		b.WriteString(dimStyle.Render(editorLabel) + dimStyle.Render(v.editor.View()))
-	}
+	b.WriteString(settingsField(v.focus == stFocusEditor, "Editor", v.editor.View()))
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = use $VISUAL / $EDITOR / nano / vi"))
-	b.WriteString("\n\n")
-
-	// Base branch row (project). Labeled project-scoped so it's clear this
-	// writes a different file (.manigot/manigot.json, committable) than the
-	// editor/profile rows above and below it.
-	branchLabel := "  Base branch (project): "
-	if v.focus == stFocusBranch {
-		b.WriteString(branchLabel + v.baseBranch.View())
-	} else {
-		b.WriteString(dimStyle.Render(branchLabel) + dimStyle.Render(v.baseBranch.View()))
-	}
+	b.WriteString(dimStyle.Render("  blank = use $VISUAL / $EDITOR / nano / vi"))
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = main · stored in .manigot/manigot.json, shared with your team"))
-	b.WriteString("\n\n")
-
-	// Job branch prefix row (project): the namespace job branches live under,
-	// e.g. "jobs" makes a feature job's branch "jobs/feature/<id>_<slug>".
-	// Project-scoped like base branch, so the same project-file note applies.
-	prefixLabel := "  Job branch prefix (project): "
-	if v.focus == stFocusJobPrefix {
-		b.WriteString(prefixLabel + v.jobBranchPrefix.View())
-	} else {
-		b.WriteString(dimStyle.Render(prefixLabel) + dimStyle.Render(v.jobBranchPrefix.View()))
-	}
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = feature/… · stored in .manigot/manigot.json, shared with your team"))
-	b.WriteString("\n\n")
 
 	// Recent activity count row (global): the maximum number of entries the
 	// dashboard's recent-activity strip may show.
-	countLabel := "  Recent activity: "
-	if v.focus == stFocusCount {
-		b.WriteString(countLabel + v.recentCount.View())
-	} else {
-		b.WriteString(dimStyle.Render(countLabel) + dimStyle.Render(v.recentCount.View()))
-	}
+	b.WriteString(settingsField(v.focus == stFocusCount, "Recent activity", v.recentCount.View()))
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = 5 · max entries shown in the dashboard's recent activity strip, stored in config/tui-settings.json"))
-	b.WriteString("\n\n")
+	b.WriteString(dimStyle.Render("  1–100 · blank = 5 · dashboard recent activity strip"))
+	b.WriteString("\n")
 
-	// Profile row (global): one line per profile, the selected one highlighted.
-	b.WriteString("  Profile:\n")
+	// Profile row (global): the label has no text input next to it — the
+	// options are listed below, one per line, the selected one highlighted.
+	// Where the choice is stored and who it is shared with rides on the
+	// headline line (saving a row the packed layout cannot afford). The model
+	// is deliberately not shown — the opencode profiles' model lives in
+	// manigot's .env (OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL/
+	// OPENCODE_ZEN_FREE_MODEL), which the TUI does not read.
+	b.WriteString("  " + headerStyle.Render("Profile"))
+	b.WriteString(" — ")
+	b.WriteString(dimStyle.Render("saved as MANIGOT_PROFILE in manigot/.env, shared with the CLI"))
+	b.WriteString("\n")
 	for i, p := range profileOptions {
 		var mark, id, rest string
 		if i == v.profile && v.focus == stFocusProfile {
@@ -386,45 +407,47 @@ func (v *settingsView) render() string {
 		b.WriteString("    " + mark + id + rest)
 		b.WriteString("\n")
 	}
-	// Describe the selected profile: which agent CLI it launches and what it
-	// bills against, then where the choice is stored. The model is
-	// deliberately not shown — the opencode profiles' model lives in manigot's
-	// .env (OPENCODE_ZAI_MODEL/OPENCODE_GO_MODEL/OPENCODE_ZEN_MODEL/
-	// OPENCODE_ZEN_FREE_MODEL), which the TUI does not read.
-	sel := profileOptions[v.profile]
-	selDesc := "tool: " + sel.Tool
-	selDesc += " · billed via " + sel.Auth
-	b.WriteString(dimStyle.Render("    " + selDesc))
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("    saved as MANIGOT_PROFILE in manigot/.env — shared with the CLI (bare mg / mg profiles)"))
-	b.WriteString("\n\n")
 
 	// Terminal row (global): the command used to spawn an agent session's
 	// terminal, replacing launch's auto-detect spawn order when set. Inside
 	// tmux the split pane always wins, regardless of this setting.
-	terminalLabel := "  Terminal: "
-	if v.focus == stFocusTerminal {
-		b.WriteString(terminalLabel + v.terminal.View())
-	} else {
-		b.WriteString(dimStyle.Render(terminalLabel) + dimStyle.Render(v.terminal.View()))
-	}
+	b.WriteString(settingsField(v.focus == stFocusTerminal, "Terminal", v.terminal.View()))
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = auto-detect (tmux / Terminal.app / gnome-terminal / ...) · inside tmux the split pane always wins · stored in config/tui-settings.json"))
-	b.WriteString("\n\n")
+	b.WriteString(dimStyle.Render("  blank = auto-detect (tmux / Terminal.app / ...) · in tmux the split pane always wins"))
+	b.WriteString("\n")
 
 	// Theme row (global): the OpenCode theme name (e.g. "nord", "tokyonight"),
 	// shared across every OpenCode profile — Claude Code already respects the
 	// host terminal's own theme, so this has no effect there. Not validated
 	// against a fixed list here, matching `mg theme`.
-	themeLabel := "  Theme: "
-	if v.focus == stFocusTheme {
-		b.WriteString(themeLabel + v.theme.View())
-	} else {
-		b.WriteString(dimStyle.Render(themeLabel) + dimStyle.Render(v.theme.View()))
-	}
+	b.WriteString(settingsField(v.focus == stFocusTheme, "Theme", v.theme.View()))
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("           blank = OpenCode's own default/config · OpenCode only · saved as OPENCODE_THEME in manigot/.env"))
-	b.WriteString("\n\n")
+	b.WriteString(dimStyle.Render("  blank = OpenCode's own default · OpenCode only"))
+	b.WriteString("\n")
+
+	// Single blank line separating the two sections — the only vertical pause
+	// the height budget affords.
+	b.WriteString("\n")
+
+	// Project settings section: base branch and job branch prefix — shared
+	// project conventions, committable, in the target project's
+	// .manigot/manigot.json.
+	b.WriteString(headerStyle.Render("Project settings"))
+	b.WriteString(" — ")
+	b.WriteString(dimStyle.Render("stored in .manigot/manigot.json, shared with your team"))
+	b.WriteString("\n")
+
+	// Base branch row (project): no example line — the placeholder ("main")
+	// already communicates the blank default.
+	b.WriteString(settingsField(v.focus == stFocusBranch, "Base branch", v.baseBranch.View()))
+	b.WriteString("\n")
+
+	// Job branch prefix row (project): the namespace job branches live under,
+	// e.g. "jobs" makes a feature job's branch "jobs/feature/<id>_<slug>".
+	b.WriteString(settingsField(v.focus == stFocusJobPrefix, "Job branch prefix", v.jobBranchPrefix.View()))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  blank = feature/… · namespace for job branches"))
+	b.WriteString("\n")
 
 	// Footer: status or a focus-aware hint.
 	if v.status != "" {
