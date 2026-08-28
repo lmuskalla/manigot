@@ -404,6 +404,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.detail = nil
 		a.state = stateList
 		if msg.err != nil {
+			// A merge failure handed to @git-solver is not an error — the
+			// TUI's pre-approved confirmations always accept the handoff, so
+			// this is the common conflicted-merge outcome. The git-solver
+			// session was opened detached (launch.HostAgent); the job stays
+			// in the list until it finishes the cleanup.
+			if errors.Is(msg.err, job.ErrGitSolverHandoff) {
+				return a, tea.Batch(spinnerCmd, a.setStatus("handed off to @git-solver — resolving the merge in the opened session"))
+			}
 			return a, tea.Batch(spinnerCmd, a.setStatus(cmdErrorText(msg.err)))
 		}
 		return a, tea.Batch(spinnerCmd, a.setStatus("refreshed"))

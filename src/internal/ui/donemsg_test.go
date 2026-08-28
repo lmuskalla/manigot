@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lmuskalla/manigot/internal/job"
@@ -111,6 +112,37 @@ func TestDoneMsgErrorSurfacesAndReturnsToList(t *testing.T) {
 	want := cmdErrorText(wantErr)
 	if got.status != want {
 		t.Errorf("status = %q, want %q", got.status, want)
+	}
+}
+
+// TestDoneMsgGitSolverHandoffShowsHandoffStatus verifies a doneMsg carrying
+// ErrGitSolverHandoff — the TUI's pre-approved yesConfirm always accepts the
+// git-solver offer on a failed merge, so this is the common TUI outcome of a
+// conflicted `mg done` — renders a friendly handoff status instead of an
+// error.
+func TestDoneMsgGitSolverHandoffShowsHandoffStatus(t *testing.T) {
+	root := t.TempDir()
+	jobDir := filepath.Join(root, "docs", "jobs", "ab0007_h")
+	os.MkdirAll(jobDir, 0o755)
+	os.WriteFile(filepath.Join(jobDir, "brief.md"), []byte("# Brief: H\n\nstatus: open\n"), 0o644)
+
+	jobs, _ := job.Discover(root)
+	a := NewApp(root, jobs)
+	a.width, a.height = 80, 24
+	a.detail = newDetailView(a.jobs[0], 80, 24)
+	a.state = stateDetail
+
+	model, _ := a.Update(doneMsg{err: job.ErrGitSolverHandoff})
+	got := model.(*App)
+
+	if got.state != stateList {
+		t.Errorf("state = %v, want stateList", got.state)
+	}
+	if !strings.Contains(got.status, "@git-solver") {
+		t.Errorf("status = %q, want a @git-solver handoff message", got.status)
+	}
+	if strings.HasPrefix(got.status, "error: ") {
+		t.Errorf("handoff rendered as an error: %q", got.status)
 	}
 }
 
