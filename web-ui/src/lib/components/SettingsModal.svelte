@@ -1,6 +1,6 @@
-// Settings — where the daemon lives and how to authenticate. The token is
-// configured out-of-band (mg serve-token / $MG_SERVE_TOKEN); the UI only
-// remembers it. Never rendered back in full after saving.
+<!-- Settings — where the daemon lives and how to authenticate. The token is -->
+<!-- configured out-of-band (mg serve-token / $MG_SERVE_TOKEN); the UI only -->
+<!-- remembers it. Never rendered back in full after saving. -->
 
 <script lang="ts">
   import Modal from './Modal.svelte'

@@ -129,8 +129,19 @@ export function getJobs(project: string, signal?: AbortSignal): Promise<JobsResp
   return json<JobsResponse>('GET', `${ep.jobs(seg(project))}`, { signal })
 }
 
+// The daemon's file route takes the on-disk filename (brief.md, not brief) —
+// job one's shipped whitelist keys are the full file names. Map the UI's
+// logical tab id to the real filename so the client matches the daemon.
+const JOB_FILENAMES: Record<string, string> = {
+  brief: 'brief.md',
+  tasks: 'tasks.md',
+  implementation: 'implementation.md',
+  verdict: 'verdict.md',
+}
+
 export function getJobFile(project: string, job: string, file: string, signal?: AbortSignal): Promise<string> {
-  return request('GET', ep.file(seg(project), seg(job), seg(file)), { signal })
+  const filename = JOB_FILENAMES[file] ?? file
+  return request('GET', ep.file(seg(project), seg(job), seg(filename)), { signal })
 }
 
 export function getJobJdi(project: string, job: string, signal?: AbortSignal): Promise<JobJdiResponse> {

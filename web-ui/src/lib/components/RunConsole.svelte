@@ -1,7 +1,7 @@
-// RunConsole — live run supervision for one job: the run.log event timeline
-// (mg-jdi's per-invocation summary) above, the raw session.log stream below.
-// The stream attaches over SSE when the daemon offers it (job two) and
-// degrades to /jdi polling otherwise — the mode is shown, never hidden.
+<!-- RunConsole — live run supervision for one job: the run.log event timeline -->
+<!-- (mg-jdi's per-invocation summary) above, the raw session.log stream below. -->
+<!-- The stream attaches over SSE when the daemon offers it (job two) and -->
+<!-- degrades to /jdi polling otherwise — the mode is shown, never hidden. -->
 
 <script lang="ts">
   import { onMount } from 'svelte'
@@ -137,7 +137,7 @@
   }
   .sub {
     font-size: 12px;
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
 
   .live-pill {
@@ -237,7 +237,7 @@
   .att {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
   .human-text {
     color: #ffb3b6;

@@ -1,8 +1,8 @@
-// Pipeline — the signature element. Every job travels define → plan →
-// implement → review → finished; this is that truth drawn as a metro line.
-// mini sits in job rows; full sits in the job header with stage labels.
-// The current station carries the run state: pulsing while mg-jdi runs,
-// red when the run stopped for a human, green once finished.
+<!-- Pipeline — the signature element. Every job travels define → plan → -->
+<!-- implement → review → finished; this is that truth drawn as a metro line. -->
+<!-- mini sits in job rows; full sits in the job header with stage labels. -->
+<!-- The current station carries the run state: pulsing while mg-jdi runs, -->
+<!-- red when the run stopped for a human, green once finished. -->
 
 <script lang="ts">
   import { STAGES, stageIndex } from '$lib/stage'
@@ -56,9 +56,21 @@
     display: flex;
     align-items: flex-start;
   }
-  .pipeline.mini {
-    transform: scale(0.82);
-    transform-origin: left center;
+  /* mini: real dimensions, not a transform — the layout box must shrink with
+     the visuals or the row starves its text columns. */
+  .pipeline.mini .pipe-node {
+    width: 8px;
+    height: 8px;
+  }
+  .pipeline.mini .pipe-node.current {
+    width: 11px;
+    height: 11px;
+  }
+  .pipeline.mini .pipe-station {
+    height: 11px;
+  }
+  .pipeline.mini .pipe-seg {
+    width: 16px;
   }
 
   .pipe-station {
@@ -133,7 +145,7 @@
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;
-    color: var(--ink-3);
+    color: var(--ink-2);
     white-space: nowrap;
   }
   .pipe-label.label-active {
@@ -144,8 +156,12 @@
   .pipeline:not(.mini) {
     padding-bottom: 24px; /* room for labels */
   }
+  .pipeline:not(.mini) .pipe-station {
+    min-width: 62px; /* reserve the label's width so it never overflows */
+    justify-content: center;
+  }
   .pipeline:not(.mini) .pipe-seg {
-    width: 34px;
+    width: 20px;
   }
 
   @keyframes pulse {

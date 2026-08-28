@@ -42,6 +42,12 @@ class ConnectionStore {
     const persisted = load()
     this.baseUrl = persisted.baseUrl
     this.token = persisted.token
+    // ?api=<url> overrides the persisted base URL for this session — a
+    // deep-link/testing convenience (tokens stay out of URLs by design).
+    if (typeof location !== 'undefined') {
+      const api = new URLSearchParams(location.search).get('api')
+      if (api) this.baseUrl = api
+    }
     this.apply()
   }
 

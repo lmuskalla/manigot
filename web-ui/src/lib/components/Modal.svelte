@@ -1,6 +1,6 @@
-// Modal — focused dialog over a scrim. Escape closes (unless busy), click
-// on the scrim closes, focus moves to the panel. Used by every action that
-// needs a decision (confirmations, new job, agent picker, settings).
+<!-- Modal — focused dialog over a scrim. Escape closes (unless busy), click -->
+<!-- on the scrim closes, focus moves to the panel. Used by every action that -->
+<!-- needs a decision (confirmations, new job, agent picker, settings). -->
 
 <script lang="ts">
   import type { Snippet } from 'svelte'

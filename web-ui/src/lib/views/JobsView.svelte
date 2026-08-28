@@ -341,7 +341,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--r-4);
+    gap: var(--r-3) var(--r-4);
+    flex-wrap: wrap;
     padding: 14px 18px;
     background: var(--bg-1);
     border: 1px solid var(--line);
@@ -369,6 +370,7 @@
     align-items: center;
     gap: var(--r-5);
     min-width: 0;
+    flex: 1 1 240px; /* below 240px of text room, the meta column wraps under */
   }
   .ident {
     display: flex;
@@ -395,11 +397,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: none;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
   }
   .when {
     font-size: 12px;
-    color: var(--ink-3);
+    color: var(--ink-2);
     min-width: 70px;
     text-align: right;
   }
@@ -445,6 +448,16 @@
       flex-direction: column;
       align-items: flex-start;
       gap: var(--r-3);
+    }
+    .left {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--r-2);
+      flex: none;
+      width: 100%;
+    }
+    .ident {
+      width: 100%;
     }
     .meta {
       flex-wrap: wrap;

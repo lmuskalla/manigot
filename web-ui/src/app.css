@@ -19,11 +19,11 @@
   --bg-3: #2a2439; /* hover fills, chips */
   --bg-glow: rgba(139, 108, 246, 0.07); /* ambient panel glow */
 
-  /* ink — violet-grays */
+  /* ink — violet-grays (all secondary text clears WCAG AA on every surface) */
   --ink-0: #ece8f4; /* primary text */
   --ink-1: #b4abc7; /* secondary */
-  --ink-2: #7d7492; /* muted, labels */
-  --ink-3: #564e68; /* faint, dividers-as-text */
+  --ink-2: #8f86a5; /* muted, labels — ≥4.8:1 on all surfaces */
+  --ink-3: #564e68; /* faint, decorative only — never informative text */
 
   /* brand accent — the manigot violet, lifted for dark surfaces */
   --accent: #8b6cf6;

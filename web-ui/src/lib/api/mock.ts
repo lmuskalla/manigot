@@ -201,20 +201,20 @@ export function fixtureState(): MockState {
       ],
     },
     files: {
-      'manigot/farmer_part-2-of-web-ui-tui-path/brief':
+      'manigot/farmer_part-2-of-web-ui-tui-path/brief.md':
         briefScaffold('listener mutating API + run supervision', 'feature', 'farmer'),
-      'manigot/farmer_part-2-of-web-ui-tui-path/tasks': tasksMd,
-      'manigot/farmer_part-2-of-web-ui-tui-path/implementation': implMd,
-      'manigot/harbor_needs-human-on-conflict-handling/brief':
+      'manigot/farmer_part-2-of-web-ui-tui-path/tasks.md': tasksMd,
+      'manigot/farmer_part-2-of-web-ui-tui-path/implementation.md': implMd,
+      'manigot/harbor_needs-human-on-conflict-handling/brief.md':
         briefScaffold('conflict handling over HTTP', 'feature', 'harbor') +
         '\n## Notes\n\nA squash-merge conflict is an interactive prompt today — there is no human\nat a terminal to answer it over HTTP.\n',
-      'manigot/harbor_needs-human-on-conflict-handling/tasks':
+      'manigot/harbor_needs-human-on-conflict-handling/tasks.md':
         '# Tasks: conflict handling over HTTP\n\nTASK-1: Pin the done-conflict behavior — structured error, job untouched.\n',
-      'manigot/harbor_needs-human-on-conflict-handling/implementation':
+      'manigot/harbor_needs-human-on-conflict-handling/implementation.md':
         '# Implementation: conflict handling over HTTP\n\n## Summary\nLanded the structured conflict error on done.\n',
-      'manigot/harbor_needs-human-on-conflict-handling/verdict': verdictRejected,
-      'manigot/lumen_doctor-health-check/verdict': verdictApproved,
-      'manigot/quartz_prune-on-a-timer/brief':
+      'manigot/harbor_needs-human-on-conflict-handling/verdict.md': verdictRejected,
+      'manigot/lumen_doctor-health-check/verdict.md': verdictApproved,
+      'manigot/quartz_prune-on-a-timer/brief.md':
         briefScaffold('prune orphaned containers on a timer', 'chore', 'quartz'),
     },
     logs: {
@@ -432,15 +432,15 @@ function routes(): Route[] {
           jdi: null,
         }
         jobs.unshift(job)
-        S.files[`${m[1]}/${name}/brief`] = briefScaffold(job.title, job.type, id)
+        S.files[`${m[1]}/${name}/brief.md`] = briefScaffold(job.title, job.type, id)
         return jsonRes({ job }, 201)
       },
     },
     {
       method: 'GET',
-      pattern: /^\/projects\/([^/]+)\/jobs\/([^/]+)\/files\/(brief|tasks|implementation|verdict)$/,
+      pattern: /^\/projects\/([^/]+)\/jobs\/([^/]+)\/files\/(brief|tasks|implementation|verdict)\.md$/,
       handle: (m) => {
-        const content = S.files[`${m[1]}/${m[2]}/${m[3]}`]
+        const content = S.files[`${m[1]}/${m[2]}/${m[3]}.md`]
         return content !== undefined ? textRes(content) : errRes(404, 'file not found')
       },
     },
@@ -448,7 +448,7 @@ function routes(): Route[] {
       method: 'PUT',
       pattern: /^\/projects\/([^/]+)\/jobs\/([^/]+)\/files\/brief$/,
       handle: async (m, req) => {
-        S.files[`${m[1]}/${m[2]}/brief`] = String(typeof req.body === 'string' ? req.body : '')
+        S.files[`${m[1]}/${m[2]}/brief.md`] = String(typeof req.body === 'string' ? req.body : '')
         return jsonRes({ ok: true })
       },
     },

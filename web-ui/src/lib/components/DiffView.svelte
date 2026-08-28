@@ -1,6 +1,6 @@
-// DiffView — the `mg diff` quick eyeball, upgraded: commits, per-file stat
-// bars, and the full patch on demand with proper unified-diff rendering —
-// the single most legitimate "the web can do better than the TUI" win.
+<!-- DiffView — the `mg diff` quick eyeball, upgraded: commits, per-file stat -->
+<!-- bars, and the full patch on demand with proper unified-diff rendering — -->
+<!-- the single most legitimate "the web can do better than the TUI" win. -->
 
 <script lang="ts">
   import { onMount } from 'svelte'
@@ -181,7 +181,7 @@
   }
   .sub {
     font-size: 12px;
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
 
   .commits {
@@ -326,7 +326,7 @@
     width: 38px;
     text-align: right;
     padding-right: 8px;
-    color: var(--ink-3);
+    color: var(--ink-2);
     user-select: none;
     font-size: 10.5px;
     line-height: 1.9;

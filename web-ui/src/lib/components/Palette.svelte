@@ -1,5 +1,5 @@
-// Command palette (⌘K) — jump to jobs/projects and fire maintenance actions.
-// It reads live data, so everything it offers is real.
+<!-- Command palette (⌘K) — jump to jobs/projects and fire maintenance actions. -->
+<!-- It reads live data, so everything it offers is real. -->
 
 <script lang="ts">
   import { data } from '$lib/state/data.svelte'
@@ -203,7 +203,7 @@
     outline: none;
   }
   .q::placeholder {
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
   .list {
     overflow-y: auto;
@@ -214,7 +214,7 @@
     font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--ink-2);
     padding: 8px 10px 4px;
   }
   .item {

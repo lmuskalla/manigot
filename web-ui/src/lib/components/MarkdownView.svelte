@@ -1,4 +1,4 @@
-// MarkdownView — rendered, sanitized markdown for the four-file contract.
+<!-- MarkdownView — rendered, sanitized markdown for the four-file contract. -->
 
 <script lang="ts">
   import { preprocessJobMarkdown, renderMarkdown } from '$lib/markdown'
@@ -71,7 +71,7 @@
     margin-bottom: 6px;
   }
   .md :global(li::marker) {
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
   .md :global(code) {
     background: var(--bg-2);

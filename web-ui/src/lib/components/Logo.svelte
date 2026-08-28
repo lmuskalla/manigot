@@ -1,6 +1,6 @@
-// The manigot mark — three agent cells on a rail, redrawn as SVG from the
-// ASCII logo (assets/manigot.txt). The cells light up in the status hues:
-// amber (work to define), green (done), accent (in flight).
+<!-- The manigot mark — three agent cells on a rail, redrawn as SVG from the -->
+<!-- ASCII logo (assets/manigot.txt). The cells light up in the status hues: -->
+<!-- amber (work to define), green (done), accent (in flight). -->
 
 <script lang="ts">
   let { size = 22 }: { size?: number } = $props()

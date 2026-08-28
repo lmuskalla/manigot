@@ -233,7 +233,7 @@
   }
   .p-state {
     margin-left: auto;
-    color: var(--ink-3);
+    color: var(--ink-2);
     font-size: 11.5px;
   }
   .profile.ready .p-state {
@@ -263,7 +263,7 @@
   .fine {
     margin-top: var(--r-3);
     font-size: 12px;
-    color: var(--ink-3);
+    color: var(--ink-2);
     border-top: 1px solid var(--line);
     padding-top: var(--r-3);
   }

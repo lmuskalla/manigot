@@ -1,6 +1,6 @@
-// Confirm — the CLI's confirmation discipline, kept verbatim. mg delete asks
-// "This cannot be done."… no: "This cannot be undone."; mg done warns on an
-// unapproved verdict; the wording is a product asset, not an accident.
+<!-- Confirm — the CLI's confirmation discipline, kept verbatim. mg delete asks -->
+<!-- "This cannot be done."… no: "This cannot be undone."; mg done warns on an -->
+<!-- unapproved verdict; the wording is a product asset, not an accident. -->
 
 <script lang="ts">
   import Modal from './Modal.svelte'

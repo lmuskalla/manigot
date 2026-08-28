@@ -1,0 +1,10 @@
+# Dependencies and build output — never commit these.
+node_modules/
+dist/
+
+# Vite/vitest caches.
+.vite/
+
+# Stray local render artifacts; verification screenshots + reports are
+# committed selectively per task and tracked explicitly.
+screenshots/*.tmp

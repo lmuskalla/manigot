@@ -473,10 +473,10 @@
     font-size: 12px;
   }
   .dim {
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
   .sep {
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
   .actions {
     display: flex;
@@ -498,7 +498,8 @@
   .stage-row {
     display: flex;
     align-items: center;
-    gap: var(--r-4);
+    gap: var(--r-3) var(--r-4);
+    flex-wrap: wrap;
     margin: var(--r-5) 0 var(--r-4);
     padding: var(--r-3) var(--r-4);
     background: var(--bg-1);
@@ -544,9 +545,23 @@
     border-bottom: 1px solid var(--line);
     overflow-x: auto;
     scrollbar-width: none;
+    position: relative;
   }
   .tabs::-webkit-scrollbar {
     display: none;
+  }
+  /* a scrollability hint at the right edge — the strip scrolls on phones */
+  .tabs::after {
+    content: '';
+    position: sticky;
+    right: 0;
+    top: 0;
+    flex: none;
+    width: 28px;
+    align-self: stretch;
+    background: linear-gradient(90deg, transparent, var(--bg-0) 70%);
+    pointer-events: none;
+    margin-left: -28px;
   }
   .tabs button {
     appearance: none;
@@ -643,7 +658,7 @@
   }
   .hint {
     font-size: 11.5px;
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
 
   .launch-hint {

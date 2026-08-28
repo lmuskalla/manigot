@@ -35,13 +35,14 @@
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  /* Light ink on the deep accent — 4.8:1+, and robust against any backdrop. */
+  background: #6647e6;
   border-color: transparent;
-  color: var(--accent-ink);
+  color: var(--ink-0);
   font-weight: 620;
 }
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #b9a1fa, var(--accent-bright));
+  background: var(--accent);
   border-color: transparent;
 }
 
