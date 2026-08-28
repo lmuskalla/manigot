@@ -141,6 +141,33 @@ func AgentQuick(agent, projectRoot, profile, terminal string) (string, error) {
 	return launchDetached(inner, terminal)
 }
 
+// HostAgent opens a new terminal — inside tmux, a split pane in the TUI's
+// current window, exactly like Agent/Quick/AgentQuick, including the replace
+// policy — that runs `mg host --profile <profile> --agent <agent> --prompt
+// '<prompt>'` in projectRoot: a host-mode agent session (the agent CLI runs
+// directly on the host, unisolated — see `mg host`) with an explicit prompt.
+// prompt is the free-form instruction the agent starts with (the session
+// launcher passes it through verbatim); it is what `mg done` uses to hand a
+// failed squash merge to @git-solver, telling it what broke and what cleanup
+// remains. profile is one of the subscription profiles in config.Profiles;
+// an empty value defaults to config.ProfileClaudePro, matching Agent/Quick.
+// terminal is config.Settings.Terminal, threaded through to launchDetached
+// exactly like the other launch paths' own terminal parameter — see Agent's
+// doc for the override semantics. It returns the same short human description
+// of where it opened so the caller can surface it in a status line.
+//
+// Unlike Agent/AgentQuick there is no --job: host-mode sessions run against
+// the project root itself — the main worktree, where a failed `mg done`
+// squash merge leaves its conflicted state — never a job worktree.
+func HostAgent(agent, prompt, projectRoot, profile, terminal string) (string, error) {
+	exe, err := ExeOverride()
+	if err != nil {
+		return "", fmt.Errorf("locate mg binary: %w", err)
+	}
+	inner := hostAgentShellCommand(exe, agent, prompt, projectRoot, profile)
+	return launchDetached(inner, terminal)
+}
+
 // Tig opens a new terminal — inside tmux, a split pane in the TUI's current
 // window, exactly like Agent/Quick/AgentQuick, including the replace policy —
 // that runs `mg diff '<jobName>' --tig` in projectRoot: the host-side tig TUI
@@ -519,6 +546,30 @@ func agentQuickShellCommand(manigotPath, agent, projectRoot, profile string) str
 	}
 	inner := fmt.Sprintf("cd %s && %s --profile %s --agent %s",
 		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile), shellQuote(agent))
+	return holdOnFailure(inner)
+}
+
+// hostAgentShellCommand builds the shell string for HostAgent's host-mode
+// agent session (--agent, --prompt, no --job), executed inside the new
+// terminal:
+//
+//	cd '<projectRoot>' && '<manigot>' host --profile '<profile>' --agent '<agent>' --prompt '<prompt>'; ec=$?; ...
+//
+// Same cd-first, shellQuote-everything, holdOnFailure-wrap behavior as the
+// other launch paths, with the `host` subcommand inserted and the prompt
+// passed via --prompt — the one launch path that carries a prompt. The prompt
+// is a free-form multi-sentence instruction, so shellQuote's embedded-quote
+// escaping matters here more than anywhere (see TestHostAgentShellCommandQuotesPrompt).
+// An empty profile defaults to config.ProfileClaudePro for the same reason the
+// other builders do. Deliberately its own function rather than a
+// generalization of the other shell-command builders, per the file's
+// "deliberately separate function per launch path" convention.
+func hostAgentShellCommand(manigotPath, agent, prompt, projectRoot, profile string) string {
+	if profile == "" {
+		profile = config.ProfileClaudePro
+	}
+	inner := fmt.Sprintf("cd %s && %s host --profile %s --agent %s --prompt %s",
+		shellQuote(projectRoot), shellQuote(manigotPath), shellQuote(profile), shellQuote(agent), shellQuote(prompt))
 	return holdOnFailure(inner)
 }
 

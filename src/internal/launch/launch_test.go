@@ -122,6 +122,62 @@ func TestAgentQuickShellCommandQuotesPathWithSpaces(t *testing.T) {
 	}
 }
 
+// --- host-agent (host-mode agent session with an explicit prompt) -----------
+
+func TestHostAgentShellCommandFormat(t *testing.T) {
+	got := hostAgentShellCommand("/usr/local/bin/manigot", "git-solver", "resolve the conflict", "/home/me/proj", "claude-pro")
+	wantInner := "cd '/home/me/proj' && '/usr/local/bin/manigot' host --profile 'claude-pro' --agent 'git-solver' --prompt 'resolve the conflict'"
+	if !strings.HasPrefix(got, wantInner) {
+		t.Errorf("hostAgentShellCommand =\n %q\nwant prefix\n %q", got, wantInner)
+	}
+	// Must be wrapped by holdOnFailure, exactly like the other launch paths.
+	if got != holdOnFailure(wantInner) {
+		t.Errorf("hostAgentShellCommand does not wrap its inner command with holdOnFailure:\n%q", got)
+	}
+}
+
+// A host-mode session must never carry --job: it runs against the project
+// root itself (where the failed merge lives), not a job worktree.
+func TestHostAgentShellCommandOmitsJob(t *testing.T) {
+	got := hostAgentShellCommand("/usr/local/bin/manigot", "git-solver", "p", "/home/me/proj", "claude-pro")
+	if strings.Contains(got, "--job") {
+		t.Errorf("hostAgentShellCommand unexpectedly contains --job: %q", got)
+	}
+}
+
+func TestHostAgentShellCommandDefaultsEmptyProfile(t *testing.T) {
+	got := hostAgentShellCommand("/bin/manigot", "git-solver", "p", "/home/me/proj", "")
+	if !strings.Contains(got, "--profile 'claude-pro'") {
+		t.Errorf("hostAgentShellCommand with empty profile = %q, want it to default to claude-pro", got)
+	}
+}
+
+func TestHostAgentShellCommandPassesZAIProfile(t *testing.T) {
+	got := hostAgentShellCommand("/bin/manigot", "git-solver", "p", "/home/me/proj", "zai")
+	if !strings.Contains(got, "--profile 'zai'") {
+		t.Errorf("hostAgentShellCommand with zai profile = %q, want --profile 'zai'", got)
+	}
+}
+
+// The prompt is a free-form sentence with quotes/parens — it must survive as
+// a single quoted word so the session launcher receives it verbatim.
+func TestHostAgentShellCommandQuotesPrompt(t *testing.T) {
+	prompt := `An interrupted mg done: merge feature/ab12cd_x into main (conflicted). "Don't push."`
+	got := hostAgentShellCommand("/bin/manigot", "git-solver", prompt, "/home/me/proj", "claude-pro")
+	if !strings.Contains(got, "--prompt 'An interrupted mg done: merge feature/ab12cd_x into main (conflicted). \"Don'\\''t push.\"'") {
+		t.Errorf("prompt not quoted as one word in %q", got)
+	}
+}
+
+// A checkout in a directory with spaces must still produce a single word for
+// the manigot path, since the string is re-parsed by osascript / bash -lc.
+func TestHostAgentShellCommandQuotesPathWithSpaces(t *testing.T) {
+	got := hostAgentShellCommand("/Users/me/My Projects/manigot/scripts/run.sh", "git-solver", "p", "/tmp/p", "claude-pro")
+	if !strings.Contains(got, `'/Users/me/My Projects/manigot/scripts/run.sh'`) {
+		t.Errorf("manigot path not quoted as one word in %q", got)
+	}
+}
+
 // An empty profile must default to claude-pro, matching scripts/run.sh's own
 // default, rather than passing an empty --profile value through.
 func TestShellCommandDefaultsEmptyProfile(t *testing.T) {
