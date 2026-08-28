@@ -39,6 +39,12 @@ func runDone(args []string, r io.Reader, stdout, stderr io.Writer) int {
 		// A declined confirmation is the script's `exit 0`, not an error.
 		return 0
 	}
+	if errors.Is(err, job.ErrGitSolverHandoff) {
+		// The failed merge was handed to @git-solver (mg host); FinishJob
+		// already printed where it started. A clean exit — the user chose
+		// this path.
+		return 0
+	}
 	if err != nil {
 		cliError(stderr, err)
 		return 1

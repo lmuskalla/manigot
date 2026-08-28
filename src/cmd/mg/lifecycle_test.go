@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lmuskalla/manigot/internal/job"
 )
 
 // mgGit runs git -C dir args, failing the test on error, and returns trimmed
@@ -163,6 +165,64 @@ func TestRunDoneUsageAndCancel(t *testing.T) {
 	var out2, errOut2 strings.Builder
 	if code := runDone([]string{jobName}, strings.NewReader("n\n"), &out2, &errOut2); code != 0 {
 		t.Errorf("declined exit code = %d, want 0 (script exits 0 on decline)", code)
+	}
+}
+
+// mgWrite writes a file, creating parent dirs as needed.
+func mgWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRunDoneMergeConflictHandsOffToGitSolver drives the full CLI path through
+// a conflicted `mg done`: the user accepts the git-solver offer, the launch is
+// stubbed (no real terminal), and `mg done` must exit 0 — the handoff is a
+// clean exit, not an error.
+func TestRunDoneMergeConflictHandsOffToGitSolver(t *testing.T) {
+	dir := mgCheckout(t)
+	t.Chdir(dir)
+
+	var jobOut, errOut strings.Builder
+	if code := runJob([]string{"Handoff Job"}, &jobOut, &errOut); code != 0 {
+		t.Fatalf("runJob: %d %s", code, errOut.String())
+	}
+	jobName := strings.TrimPrefix(mgGit(t, dir, "for-each-ref", "--format=%(refname:short)", "refs/heads/feature/"), "feature/")
+	wtPath := filepath.Join(filepath.Dir(dir), ".manigot-worktrees", filepath.Base(dir), jobName)
+
+	// Work + APPROVED verdict on the job branch, then a conflict: both sides
+	// touch docs/jobs/.gitkeep differently.
+	mgWrite(t, filepath.Join(wtPath, "docs", "jobs", jobName, "implementation.md"), "# Implementation\n\nDone.\n")
+	mgWrite(t, filepath.Join(wtPath, "docs", "jobs", jobName, "verdict.md"), "# Verdict\n\n## Overall\n\nAPPROVED\n")
+	mgGit(t, wtPath, "add", "-A")
+	mgGit(t, wtPath, "commit", "-q", "-m", "[work] implement + verdict")
+	mgWrite(t, filepath.Join(dir, "docs", "jobs", ".gitkeep"), "main side\n")
+	mgGit(t, dir, "add", "-A")
+	mgGit(t, dir, "commit", "-q", "-m", "main side change")
+	mgWrite(t, filepath.Join(wtPath, "docs", "jobs", ".gitkeep"), "job side\n")
+	mgGit(t, wtPath, "add", "-A")
+	mgGit(t, wtPath, "commit", "-q", "-m", "job side change")
+
+	// Stub the git-solver launch so no real terminal is spawned.
+	orig := job.GitSolverLaunch
+	var launched bool
+	job.GitSolverLaunch = func(agent, prompt, projectRoot, profile, terminal string) (string, error) {
+		launched = true
+		return "tmux pane", nil
+	}
+	defer func() { job.GitSolverLaunch = orig }()
+
+	var out strings.Builder
+	// y = Proceed, y = start @git-solver.
+	if code := runDone([]string{jobName}, strings.NewReader("y\ny\n"), &out, &errOut); code != 0 {
+		t.Errorf("handoff exit code = %d, want 0\nstdout: %s\nstderr: %s", code, out.String(), errOut.String())
+	}
+	if !launched {
+		t.Error("git-solver launch was not invoked")
 	}
 }
 
