@@ -375,7 +375,14 @@ job's `.manigot/jdi-status/` sidecar — the archive keeps the job's docs, and
 mg-jdi never runs against an archived job, so the status/run.log sidecar
 would otherwise be dead weight forever. Interactive
 confirmations go through `internal/cli` prompts with the scripts' original
-wording.
+wording. A failed squash merge (usually a conflict) no longer leaves the repo
+broken: `mg done` captures the main worktree's pre-merge HEAD, and on failure
+offers to start @git-solver via `mg host` (a detached session —
+`launch.HostAgent`) to resolve the conflict and finish the cleanup the
+interrupted finish still owes (worktree, branch, mg-jdi status); declining,
+or a launch that fails to start, rolls the merge back (`git reset --hard`) so
+the main worktree is clean again — skipped when it held uncommitted changes
+before the merge, which the reset would destroy.
 
 `mg delete` (`job.DeleteJob`) permanently deletes a job: worktree
 (force-removed, with an explicit "uncommitted changes will be discarded"
@@ -634,7 +641,9 @@ and the security invariants below are non-negotiable.
   no git registration) and offers to remove them
 - `mg done <id>` — archive a finished job (squash-merge into the base branch
   and remove its worktree; the merge target is the configured `baseBranch`,
-  falling back to the remote default branch when unset)
+  falling back to the remote default branch when unset; a conflicted merge
+  offers to hand the job to @git-solver via `mg host`, and rolls back on
+  decline)
 - `mg delete <id>` — permanently delete a job (worktree + branch, no merge),
   or an orphaned worktree by its name
 - `mg prune` — remove orphaned manigot docker containers: every EXITED
