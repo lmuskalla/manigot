@@ -67,11 +67,13 @@ through `jq` when available on the host, falling back to a plain `tail -f`
 otherwise), gated on a session.log existing for the job (created at mg-jdi
 run start).
 `mg serve` is the listener: a long-running daemon exposing a read-only control
-API over a registry of project roots (an explicit config file,
-`<manigot checkout>/config/serve.json`, holding `{"projects": ["/abs/root",
-...]}` — no scanning; changing it means editing and restarting), so any
-surface — a web UI, a native GUI, a future CLI — can attach to it as a client
-from localhost or a VPS. It binds `127.0.0.1:8080` by default (tokenless —
+API over a registry of named project roots (an explicit config file,
+`<manigot checkout>/config/serve.json`, holding `{"projects":
+[{"name": "my-project", "path": "/abs/root"}, ...]}` — `name` is the required,
+operator-chosen URL segment the project is served under; no scanning;
+changing it means editing and restarting), so any surface — a web UI, a
+native GUI, a future CLI — can attach to it as a client from localhost or a
+VPS. It binds `127.0.0.1:8080` by default (tokenless —
 the machine's own user is the trust boundary); a non-loopback bind REQUIRES a
 bearer token (`--token` or `$MG_SERVE_TOKEN`) or the daemon refuses to start,
 and TLS is the reverse proxy's job (Caddy/nginx), never the daemon's. The v1

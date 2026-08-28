@@ -12,6 +12,17 @@ import (
 	"github.com/lmuskalla/manigot/internal/job"
 )
 
+// entryFor turns a project root into a registry Entry named after the
+// root's base name — the shared shape most tests use, since URL construction
+// throughout this package already spells out filepath.Base(root) (a holdover
+// from when Project matched by base name). Resolution is strictly by
+// configured Name now — see TestRegistryProjectNameOnlyResolution in
+// registry_test.go for the pin that a differently-named entry does NOT
+// resolve by its directory's base name.
+func entryFor(root string) Entry {
+	return Entry{Name: filepath.Base(root), Path: filepath.Clean(root)}
+}
+
 // netListen is net.Listen's tcp form, split out so tests read cleanly.
 func netListen(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)

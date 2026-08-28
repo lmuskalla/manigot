@@ -63,9 +63,9 @@ func validSegment(seg string) bool {
 }
 
 // resolveProject maps a URL project segment to a registered root. The segment
-// is validated, then matched against the registry by exact path, then unique
-// base name (Registry.Project) — it is never joined into a filesystem path.
-// An invalid segment or no match is a 404; the handler returns false and must
+// is validated, then matched against the registry by configured entry name
+// only (Registry.Project) — it is never joined into a filesystem path. An
+// invalid segment or no match is a 404; the handler returns false and must
 // return immediately.
 func (s *Server) resolveProject(w http.ResponseWriter, segment string) (string, bool) {
 	if !validSegment(segment) {
@@ -182,7 +182,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // --- /projects ---------------------------------------------------------------
 
 // projectRow is one entry in the /projects response: a registered root and
-// its base name (the URL segment that resolves to it).
+// its configured name (the URL segment that resolves to it).
 type projectRow struct {
 	Path string `json:"path"`
 	Name string `json:"name"`
@@ -196,10 +196,10 @@ type projectsResponse struct {
 // handleProjects lists the registered project roots — pure registry data, the
 // daemon never scans for projects it does not know.
 func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
-	roots := s.reg.Projects()
-	rows := make([]projectRow, 0, len(roots))
-	for _, root := range roots {
-		rows = append(rows, projectRow{Path: root, Name: filepath.Base(root)})
+	entries := s.reg.Entries()
+	rows := make([]projectRow, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, projectRow{Path: e.Path, Name: e.Name})
 	}
 	writeJSON(w, http.StatusOK, projectsResponse{Projects: rows})
 }

@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/lmuskalla/manigot/internal/config"
 	"github.com/lmuskalla/manigot/internal/fs"
@@ -40,30 +41,72 @@ func DefaultRegistryPath() string {
 	return filepath.Join(dir, "serve.json")
 }
 
-// registryFile is the on-disk JSON shape of the registry config file.
-type registryFile struct {
-	Projects []string `json:"projects"`
+// registryEntry is the on-disk JSON shape of one registry entry: an
+// operator-chosen name (the URL segment the daemon serves it under) and its
+// filesystem root. The flat-string form ("projects": ["/abs/root"]) is not
+// supported — json.Unmarshal of a string into this struct fails naturally,
+// which is exactly the "no backwards compatibility" behavior the brief calls
+// for.
+type registryEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
-// Registry is the daemon's explicit list of project roots. It is read once at
-// startup from a config file — no scanning, no auto-adopting directories the
-// daemon finds. Changing the registered roots means editing the config file
-// and restarting (v1). Every handler resolves ONLY against these roots via
-// Projects()/Project() — the single choke point the zero-path-inputs
-// enforcement (see api.go's resolution helpers) builds on.
+// registryFile is the on-disk JSON shape of the registry config file.
+type registryFile struct {
+	Projects []registryEntry `json:"projects"`
+}
+
+// Entry is one registered project: an operator-chosen name (the URL segment
+// that resolves to it) and its absolute, cleaned filesystem root.
+type Entry struct {
+	Name string
+	Path string
+}
+
+// projectNamePattern is the URL-safe charset a registry entry's name must
+// match: ASCII letters, digits, dot, underscore, hyphen. A name is served
+// verbatim in /projects and matched byte-for-byte against incoming URL
+// segments (see api.go's resolveProject), so keeping the charset
+// conservative avoids any ambiguity from encoding, case-folding, or reserved
+// URL characters — a stricter requirement than validSegment's structural
+// no-traversal/no-separator discipline, which this also reuses.
+var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// validProjectName reports whether name is an acceptable registry entry
+// name: validSegment's structural discipline (non-empty, not "." or "..", no
+// path separator, no NUL) plus the conservative URL-safe charset above.
+func validProjectName(name string) bool {
+	return validSegment(name) && projectNamePattern.MatchString(name)
+}
+
+// Registry is the daemon's explicit list of named project entries. It is
+// read once at startup from a config file — no scanning, no auto-adopting
+// directories the daemon finds. Changing the registered entries means
+// editing the config file and restarting (v1). Every handler resolves ONLY
+// against these entries via Entries()/Project() — the single choke point the
+// zero-path-inputs enforcement (see api.go's resolution helpers) builds on.
 type Registry struct {
-	projects []string // absolute, cleaned, in config-file order
+	entries []Entry // name + absolute, cleaned path, in config-file order
 }
 
 // LoadRegistry reads the registry config file at path and validates every
 // entry. A missing file is an empty registry, not an error (a fresh checkout
 // simply has nothing registered yet). An unreadable-but-present file, an
-// unparseable file, or an entry that is not an existing directory is an
-// error — a broken registry must never silently serve a subset.
+// unparseable file, an invalid or duplicate name, a duplicate path, or an
+// entry whose path is not an existing directory is an error — a broken
+// registry must never silently serve a subset.
 //
-// Each registered root must exist as a directory. A root without docs/ is
-// accepted (it lists no jobs rather than failing startup); the caller may
-// warn about it — see (*Registry).WarnMissingDocs.
+// Each entry's name must be non-empty, a single URL-safe path segment
+// (validProjectName), and unique across the registry. Each entry's path must
+// exist as a directory; a root without docs/ is accepted (it lists no jobs
+// rather than failing startup) — the caller may warn about it, see
+// (*Registry).WarnMissingDocs. Two entries registering the same path (under
+// different names) are also refused: a path is intended to be reachable
+// under exactly one operator-chosen identity, and rejecting keeps the
+// "refuse to start on anything surprising" discipline the rest of the
+// registry's validation follows, rather than silently picking one name over
+// the other.
 func LoadRegistry(path string) (*Registry, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -79,62 +122,66 @@ func LoadRegistry(path string) (*Registry, error) {
 	}
 
 	reg := &Registry{}
-	seen := make(map[string]bool)
-	for _, p := range raw.Projects {
-		if p == "" {
-			continue
+	seenNames := make(map[string]bool)
+	seenPaths := make(map[string]string) // abs path -> the name that claimed it
+	for _, e := range raw.Projects {
+		if !validProjectName(e.Name) {
+			return nil, fmt.Errorf("registry %s: entry name %q is invalid — it must be non-empty, a single URL-safe path segment (%s), not \".\" or \"..\"", path, e.Name, projectNamePattern.String())
 		}
-		abs, err := filepath.Abs(p)
+		if seenNames[e.Name] {
+			return nil, fmt.Errorf("registry %s: duplicate entry name %q", path, e.Name)
+		}
+
+		abs, err := filepath.Abs(e.Path)
 		if err != nil {
-			return nil, fmt.Errorf("registry %s: resolve %q: %w", path, p, err)
+			return nil, fmt.Errorf("registry %s: entry %q: resolve %q: %w", path, e.Name, e.Path, err)
 		}
 		abs = filepath.Clean(abs)
-		if seen[abs] {
-			continue // duplicate registrations collapse to one
+		if other, ok := seenPaths[abs]; ok {
+			return nil, fmt.Errorf("registry %s: entry %q and %q both register path %q", path, other, e.Name, abs)
 		}
 		info, err := os.Stat(abs)
 		if err != nil {
-			return nil, fmt.Errorf("registry %s: %q is not an existing directory: %w", path, p, err)
+			return nil, fmt.Errorf("registry %s: entry %q: %q is not an existing directory: %w", path, e.Name, e.Path, err)
 		}
 		if !info.IsDir() {
-			return nil, fmt.Errorf("registry %s: %q is not a directory", path, p)
+			return nil, fmt.Errorf("registry %s: entry %q: %q is not a directory", path, e.Name, e.Path)
 		}
-		seen[abs] = true
-		reg.projects = append(reg.projects, abs)
+
+		seenNames[e.Name] = true
+		seenPaths[abs] = e.Name
+		reg.entries = append(reg.entries, Entry{Name: e.Name, Path: abs})
 	}
 	return reg, nil
 }
 
-// Projects returns an ordered copy of the registered project roots. The copy
-// guarantees a caller cannot mutate the registry's internal slice.
-func (r *Registry) Projects() []string {
-	return append([]string(nil), r.projects...)
+// Entries returns an ordered copy of the registered entries (name + path).
+// The copy guarantees a caller cannot mutate the registry's internal slice.
+func (r *Registry) Entries() []Entry {
+	return append([]Entry(nil), r.entries...)
 }
 
-// Project resolves a URL project segment against the registered roots: an
-// exact path match first, then a unique base-name match (e.g. "/projects/foo"
-// resolves a root registered at /home/user/foo). Nothing is ever joined into
-// a filesystem path here — the returned root IS one of the registered roots,
-// never a derivation from the input. ok is false when the segment matches no
-// root, or when several roots share the same base name (ambiguous — the
-// caller returns 404 rather than guessing).
+// Projects returns an ordered copy of the registered project roots' paths.
+// The copy guarantees a caller cannot mutate the registry's internal slice.
+func (r *Registry) Projects() []string {
+	paths := make([]string, len(r.entries))
+	for i, e := range r.entries {
+		paths[i] = e.Path
+	}
+	return paths
+}
+
+// Project resolves a URL project segment against the registered entries by
+// configured name ONLY — names are validated unique at load time, so there
+// is no ambiguity to resolve. Nothing is ever joined into a filesystem path
+// here — the returned root IS one of the registered paths, never a
+// derivation from the input. ok is false when the segment matches no entry's
+// name.
 func (r *Registry) Project(segment string) (string, bool) {
-	for _, root := range r.projects {
-		if root == segment {
-			return root, true
+	for _, e := range r.entries {
+		if e.Name == segment {
+			return e.Path, true
 		}
-	}
-	var match string
-	for _, root := range r.projects {
-		if filepath.Base(root) == segment {
-			if match != "" {
-				return "", false // ambiguous base name
-			}
-			match = root
-		}
-	}
-	if match != "" {
-		return match, true
 	}
 	return "", false
 }
@@ -144,9 +191,9 @@ func (r *Registry) Project(segment string) (string, bool) {
 // a root without docs/ lists no jobs rather than failing startup" behavior
 // the brief calls for. w may be nil (no warnings).
 func (r *Registry) WarnMissingDocs(w io.Writer) {
-	for _, root := range r.projects {
-		if !fs.IsDir(filepath.Join(root, "docs")) {
-			fmt.Fprintf(w, "Warning: registered project %s has no docs/ directory — it will list no jobs.\n", root)
+	for _, e := range r.entries {
+		if !fs.IsDir(filepath.Join(e.Path, "docs")) {
+			fmt.Fprintf(w, "Warning: registered project %s (%s) has no docs/ directory — it will list no jobs.\n", e.Name, e.Path)
 		}
 	}
 }

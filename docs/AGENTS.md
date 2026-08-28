@@ -521,13 +521,20 @@ holds subscription credentials), so the v1 surface is deliberately read-only
 and the security invariants below are non-negotiable.
 
 - **Project registry.** An explicit config file, `<checkout>/config/serve.json`
-  (overridable via `--registry`), holding `{"projects": ["/abs/root", ...]}`.
-  No scanning, no auto-adopting directories the daemon finds. Registrations
-  are read once at startup; changing them means editing the file and
-  restarting (v1). Each entry is validated as an existing directory at
-  startup; a root without `docs/` is accepted (it lists no jobs rather than
-  failing startup). Every handler resolves ONLY against the registered roots —
-  the single choke point the zero-path-inputs rule builds on.
+  (overridable via `--registry`), holding
+  `{"projects": [{"name": "my-project", "path": "/abs/root"}, ...]}` — each
+  entry an operator-chosen `name` (the URL segment the project is served
+  under) plus its `path`. No scanning, no auto-adopting directories the
+  daemon finds. Registrations are read once at startup; changing them means
+  editing the file and restarting (v1). Each entry is validated at startup:
+  `name` non-empty, a single URL-safe path segment (no `/` or `\`, not `.` or
+  `..`, charset `[A-Za-z0-9._-]`), unique across the registry; `path` an
+  existing directory. A bad entry — an invalid or duplicate name, a duplicate
+  path, or a nonexistent directory — refuses the whole daemon to start, never
+  silently serving a subset; a root without `docs/` is accepted (it lists no
+  jobs rather than failing startup). Every handler resolves ONLY against the
+  registered entries, matching a URL segment by configured `name` — the
+  single choke point the zero-path-inputs rule builds on.
 - **Read-only API.** The state the TUI renders, over HTTP as JSON + raw
   markdown (never ANSI): `GET /health` (version, docker image present,
   per-profile readiness), `GET /projects`, `GET /projects/<p>/jobs` (the

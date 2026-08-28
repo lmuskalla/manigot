@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,7 +15,7 @@ import (
 func testServer(t *testing.T, token string, audit io.Writer) (*Server, string) {
 	t.Helper()
 	root := t.TempDir()
-	reg := &Registry{projects: []string{filepath.Clean(root)}}
+	reg := &Registry{entries: []Entry{entryFor(root)}}
 	return New(reg, "test-version", token, audit), root
 }
 

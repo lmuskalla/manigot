@@ -1160,17 +1160,20 @@ by design (mutating endpoints, live run supervision with streamed logs, and
 any frontend are later jobs — see the out-of-scope list in
 [`docs/jobs/wood_listener-architecture/brief.md`](docs/jobs/wood_listener-architecture/brief.md)).
 
-**Registry.** An explicit config file of project roots — no scanning, no
+**Registry.** An explicit config file of named project roots — no scanning, no
 auto-adopting directories the daemon finds:
 
 ```bash
 # <manigot checkout>/config/serve.json  (override with --registry)
-{"projects": ["/abs/project/root", ...]}
+{"projects": [{"name": "my-project", "path": "/abs/project/root"}, ...]}
 ```
 
-Registrations are read once at startup; changing them means editing the file
-and restarting (v1). Each entry must be an existing directory; a root without
-`docs/` is accepted and simply lists no jobs.
+`name` is required — the URL segment the project is served under, chosen by
+you (a single URL-safe path segment, unique across the registry). Nothing is
+auto-derived from the directory name. Registrations are read once at startup;
+changing them means editing the file and restarting (v1). Each entry's `path`
+must be an existing directory; a root without `docs/` is accepted and simply
+lists no jobs.
 
 **Binding + auth.** The daemon binds `127.0.0.1:8080` by default and is
 tokenless in that shape — the machine's own user is the trust boundary, as it

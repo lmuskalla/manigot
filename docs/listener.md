@@ -80,10 +80,13 @@ The basis for `mg job`. Scope is the daemon and a **read-only** API.
 1. **`mg serve` subcommand** — a new subcommand in the single binary's
    dispatcher (like `tui` and `jdi`), long-running, listening on a port.
    Bind address/port via flags with a sensible localhost default.
-2. **Project registry** — an explicit config file of project roots. No
-   scanning, no auto-adopting directories the daemon finds. Registrations are
-   read at startup; changing them means editing the config and restarting
-   (v1). The daemon resolves nothing outside the registered roots.
+2. **Project registry** — an explicit config file of named project roots:
+   `{"projects": [{"name": "my-project", "path": "/abs/root"}, ...]}`, where
+   `name` is the required, operator-chosen URL segment the project is served
+   under. No scanning, no auto-adopting directories the daemon finds.
+   Registrations are read at startup; changing them means editing the config
+   and restarting (v1). The daemon resolves nothing outside the registered
+   roots, and a URL segment resolves by configured `name` only.
 3. **Read-only API** — the state the TUI renders today, exposed over HTTP:
    - projects list
    - jobs per project — the TUI's info design: id / status / stage / type /

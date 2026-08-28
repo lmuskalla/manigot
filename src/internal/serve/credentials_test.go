@@ -92,7 +92,7 @@ func TestCredentialsNeverReturned(t *testing.T) {
 	runGitT(t, gitProj, "commit", "-q", "-m", "add the feature")
 	runGitT(t, gitProj, "checkout", "-q", "main")
 
-	reg := &Registry{projects: []string{filepath.Clean(jobProj), filepath.Clean(gitProj)}}
+	reg := &Registry{entries: []Entry{entryFor(jobProj), entryFor(gitProj)}}
 	token := envLines["MG_SERVE_TOKEN"]
 	var audit strings.Builder
 	srv := New(reg, "test-version", token, &audit)
@@ -167,7 +167,7 @@ func assertBodyHasNoCredentials(t *testing.T, body string, envLines map[string]s
 func TestCredentialValuesDoNotAppearInErrorMessages(t *testing.T) {
 	t.Setenv("MG_SERVE_TOKEN", "fixture-token-12345")
 	root := fakeJobProject(t, "wood_oak", minimalBrief("Oak", "wod", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "fixture-token-12345", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "fixture-token-12345", nil)
 
 	// The error envelope shape is exactly {"error": "..."} — nothing else.
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/nope/files/brief.md", "Bearer fixture-token-12345")

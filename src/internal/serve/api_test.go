@@ -46,7 +46,7 @@ func minimalBrief(title, id, status, typ, date string) string {
 // — each root's absolute path and base name — and nothing else.
 func TestHandleProjectsListsRegisteredRoots(t *testing.T) {
 	root := t.TempDir()
-	reg := &Registry{projects: []string{filepath.Clean(root)}}
+	reg := &Registry{entries: []Entry{entryFor(root)}}
 	srv := New(reg, "test-version", "", nil)
 
 	rec := get(t, srv, "/projects", "")
@@ -87,7 +87,7 @@ func TestHandleProjectJobsInfoDesign(t *testing.T) {
 	root := fakeJobProject(t, "older_job", minimalBrief("Older", "old", "open", "feature", "2026-08-01"), "tasks.md")
 	_ = fakeJobProjectInto(t, root, "newer_job", minimalBrief("Newer", "new", "open", "fix", "2026-08-10"), "tasks.md", "implementation.md")
 
-	reg := &Registry{projects: []string{filepath.Clean(root)}}
+	reg := &Registry{entries: []Entry{entryFor(root)}}
 	srv := New(reg, "test-version", "", nil)
 
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs", "")
@@ -152,7 +152,7 @@ func TestHandleProjectJobsJDIState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reg := &Registry{projects: []string{filepath.Clean(root)}}
+	reg := &Registry{entries: []Entry{entryFor(root)}}
 	srv := New(reg, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs", "")
 	if rec.Code != http.StatusOK {
@@ -179,7 +179,7 @@ func TestHandleProjectJobsJDIState(t *testing.T) {
 // in its row.
 func TestHandleProjectJobsNoJDIState(t *testing.T) {
 	root := fakeJobProject(t, "plain_job", minimalBrief("Plain", "pln", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs", "")
 	var body struct {
 		Jobs []jobRow `json:"jobs"`
@@ -196,7 +196,7 @@ func TestHandleProjectJobsNoJDIState(t *testing.T) {
 // markdown text with the markdown content type.
 func TestHandleJobFileServesRawMarkdown(t *testing.T) {
 	root := fakeJobProject(t, "some_job", minimalBrief("Some", "som", "open", "feature", "2026-08-01"), "tasks.md")
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/some_job/files/brief.md", "")
 	if rec.Code != http.StatusOK {
@@ -214,7 +214,7 @@ func TestHandleJobFileServesRawMarkdown(t *testing.T) {
 // yet (e.g. verdict.md before review) is a normal 404, not an error.
 func TestHandleJobFileMissingIs404(t *testing.T) {
 	root := fakeJobProject(t, "some_job", minimalBrief("Some", "som", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	if rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/some_job/files/verdict.md", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("missing verdict.md: status = %d, want 404", rec.Code)
 	}
@@ -228,7 +228,7 @@ func TestHandleJobFileMissingIs404(t *testing.T) {
 // be rejected here.)
 func TestHandleJobFileNonWhitelistedIs404(t *testing.T) {
 	root := fakeJobProject(t, "some_job", minimalBrief("Some", "som", "open", "feature", "2026-08-01"), "session.log")
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	for _, file := range []string{"session.log", "run.log", "brief", "README.md", "..%2fbrief.md", "..%2f..%2fetc%2fpasswd", "%2e%2e%2fbrief.md", "brief.md%00"} {
 		rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/some_job/files/"+file, "")
@@ -251,7 +251,7 @@ func TestHandleJobFileNonWhitelistedIs404(t *testing.T) {
 // `..` is redirected by ServeMux's own sanitization first.
 func TestHandleProjectJobsUnknownProjectIs404(t *testing.T) {
 	root := fakeJobProject(t, "some_job", minimalBrief("Some", "som", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	for _, seg := range []string{"no-such-project", "%2e%2e", "%2e", "%2fetc", "a%2fb", "a%5cb", "a%00b", "..%2f..%2fetc%2fpasswd"} {
 		rec := get(t, srv, "/projects/"+seg+"/jobs", "")
@@ -274,7 +274,7 @@ func TestHandleProjectJobsUnknownProjectIs404(t *testing.T) {
 // unique prefix match) is a 404.
 func TestHandleJobFileUnknownJobIs404(t *testing.T) {
 	root := fakeJobProject(t, "some_job", minimalBrief("Some", "som", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/no-such-job/files/brief.md", "")
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
@@ -286,7 +286,7 @@ func TestHandleJobFileUnknownJobIs404(t *testing.T) {
 func TestHandleJobResolvesByIDNameAndPrefix(t *testing.T) {
 	root := fakeJobProject(t, "wood_oak", minimalBrief("Oak", "wod", "open", "feature", "2026-08-01"))
 	_ = fakeJobProjectInto(t, root, "iron_steel", minimalBrief("Steel", "irn", "open", "fix", "2026-08-02"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	base := "/projects/" + filepath.Base(root) + "/jobs/"
 	for _, seg := range []string{"wod", "wood_oak", "wood", "iron", "irn"} {
@@ -302,7 +302,7 @@ func TestHandleJobResolvesByIDNameAndPrefix(t *testing.T) {
 func TestHandleJobAmbiguousPrefixIs409(t *testing.T) {
 	root := fakeJobProject(t, "wood_a", minimalBrief("A", "aaa", "open", "feature", "2026-08-01"))
 	_ = fakeJobProjectInto(t, root, "wood_b", minimalBrief("B", "bbb", "open", "feature", "2026-08-02"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/wood/files/brief.md", "")
 	if rec.Code != http.StatusConflict {
@@ -366,7 +366,7 @@ func TestHandleJobJDIStatusAndLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/driven_job/jdi", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -391,7 +391,7 @@ func TestHandleJobJDIStatusAndLogs(t *testing.T) {
 // error.
 func TestHandleJobJDIUndrivenJobIsNulls(t *testing.T) {
 	root := fakeJobProject(t, "plain_job", minimalBrief("Plain", "pln", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/plain_job/jdi", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -420,7 +420,7 @@ func TestHandleJobJDIEmptyLogsPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/driven_job/jdi", "")
 	var body jobJDIResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -435,7 +435,7 @@ func TestHandleJobJDIEmptyLogsPresent(t *testing.T) {
 // the same choke point: an unknown job is a 404.
 func TestHandleJobJDIUnknownJobIs404(t *testing.T) {
 	root := fakeJobProject(t, "plain_job", minimalBrief("Plain", "pln", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/nope/jdi", "")
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
@@ -457,7 +457,7 @@ func TestHandleJobDiffQuickEyeball(t *testing.T) {
 	runGitT(t, dir, "commit", "-q", "-m", "add the feature")
 	runGitT(t, dir, "checkout", "-q", "main")
 
-	srv := New(&Registry{projects: []string{filepath.Clean(dir)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(dir)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(dir)+"/jobs/wood_test/diff", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -489,7 +489,7 @@ func TestHandleJobDiffFullPatch(t *testing.T) {
 	runGitT(t, dir, "commit", "-q", "-m", "add the feature")
 	runGitT(t, dir, "checkout", "-q", "main")
 
-	srv := New(&Registry{projects: []string{filepath.Clean(dir)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(dir)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(dir)+"/jobs/wood_test/diff?full=1", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -536,7 +536,7 @@ func TestHandleJobDiffResolvesBaseBranchFromConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := New(&Registry{projects: []string{filepath.Clean(dir)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(dir)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(dir)+"/jobs/wood_test/diff", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
@@ -557,7 +557,7 @@ func TestHandleJobDiffResolvesBaseBranchFromConfig(t *testing.T) {
 func TestHandleJobDiffUnknownJobIs404(t *testing.T) {
 	t.Setenv("PATH", pathWithRealGitOnly(t))
 	dir := initGitRepo(t)
-	srv := New(&Registry{projects: []string{filepath.Clean(dir)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(dir)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(dir)+"/jobs/nope/diff", "")
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404 (body %s)", rec.Code, rec.Body.String())
@@ -577,7 +577,7 @@ func TestHandleJobDiffAmbiguousIs409(t *testing.T) {
 	runGitT(t, dir, "checkout", "-q", "-b", "feature/wood_b")
 	runGitT(t, dir, "checkout", "-q", "main")
 
-	srv := New(&Registry{projects: []string{filepath.Clean(dir)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(dir)}}, "test-version", "", nil)
 	rec := get(t, srv, "/projects/"+filepath.Base(dir)+"/jobs/wood/diff", "")
 	if rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
@@ -596,7 +596,7 @@ func TestHandleProjectAgentsNameAndDescription(t *testing.T) {
 		"reviewer": "name: reviewer\ndescription: Reviews changes.\n",
 	})
 	root := t.TempDir() // no docs/ needed — agents are global
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/agents", "")
 	if rec.Code != http.StatusOK {

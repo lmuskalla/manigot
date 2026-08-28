@@ -135,7 +135,7 @@ func TestHostileURLsRejectedAtEveryPathPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reg := &Registry{projects: []string{filepath.Clean(root)}}
+	reg := &Registry{entries: []Entry{entryFor(root)}}
 	srv := New(reg, "test-version", "", nil)
 	base := filepath.Base(root)
 
@@ -191,7 +191,7 @@ func TestHostileURLsRejectedAtEveryPathPosition(t *testing.T) {
 // from the segment itself.
 func TestResolveJobNeverTreatsSegmentAsPath(t *testing.T) {
 	root := fakeJobProject(t, "wood_oak", minimalBrief("Oak", "wod", "open", "feature", "2026-08-01"))
-	srv := New(&Registry{projects: []string{filepath.Clean(root)}}, "test-version", "", nil)
+	srv := New(&Registry{entries: []Entry{entryFor(root)}}, "test-version", "", nil)
 
 	// A valid-looking identifier that matches nothing → 404.
 	rec := get(t, srv, "/projects/"+filepath.Base(root)+"/jobs/wood_birch/files/brief.md", "")
