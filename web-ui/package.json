@@ -1,0 +1,31 @@
+{
+  "name": "manigot-web-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "manigot control plane — web client for the mg serve daemon",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fontsource-variable/familjen-grotesk": "^5.2.5",
+    "@fontsource/ibm-plex-mono": "^5.2.5",
+    "dompurify": "^3.2.6",
+    "marked": "^15.0.7"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/svelte": "^5.2.1",
+    "jsdom": "^26.0.0",
+    "svelte": "^5.20.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.6"
+  }
+}

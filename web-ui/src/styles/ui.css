@@ -1,0 +1,256 @@
+/* ── shared controls — buttons, chips, fields, badges ────────────────────────
+   Used across components; kept here so specificity stays flat (one class,
+   no canceling chains). */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--ink-0);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 520;
+  padding: 7px 14px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast),
+    transform var(--t-fast);
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-3);
+  border-color: var(--accent);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 620;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #b9a1fa, var(--accent-bright));
+  border-color: transparent;
+}
+
+.btn-danger {
+  background: var(--st-human-dim);
+  border-color: rgba(242, 85, 90, 0.5);
+  color: #ff8d91;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(242, 85, 90, 0.24);
+  border-color: var(--st-human);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-1);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-2);
+  border-color: var(--line);
+  color: var(--ink-0);
+}
+
+.btn-sm {
+  font-size: 12.5px;
+  padding: 4px 10px;
+}
+
+/* spinner inside busy buttons */
+.spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+  opacity: 0.8;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* chips — status/type/jdi badges */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-1);
+  background: var(--bg-2);
+  white-space: nowrap;
+  line-height: 1.7;
+}
+.chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.chip-open {
+  color: var(--st-open);
+  border-color: rgba(227, 179, 65, 0.4);
+  background: var(--st-open-dim);
+}
+.chip-done {
+  color: var(--st-done);
+  border-color: rgba(76, 195, 138, 0.4);
+  background: var(--st-done-dim);
+}
+.chip-human {
+  color: #ff8d91;
+  border-color: rgba(242, 85, 90, 0.5);
+  background: var(--st-human-dim);
+  animation: heartbeat 2.4s ease-in-out infinite;
+}
+.chip-running {
+  color: var(--accent-bright);
+  border-color: rgba(139, 108, 246, 0.45);
+  background: var(--st-running-dim);
+}
+.chip-neutral {
+  color: var(--ink-1);
+}
+@keyframes heartbeat {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(242, 85, 90, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(242, 85, 90, 0.12);
+  }
+}
+
+/* fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--r-4);
+}
+.field > label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.input,
+.textarea,
+.select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-0);
+  background: var(--bg-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s);
+  padding: 8px 11px;
+  width: 100%;
+  transition: border-color var(--t-fast);
+}
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 4;
+}
+.select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 55%,
+    calc(100% - 11px) 55%;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 30px;
+}
+
+/* segmented control — tab-ish filters */
+.seg-group {
+  display: inline-flex;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 2px;
+  gap: 2px;
+}
+.seg-group button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 520;
+  padding: 4px 11px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+.seg-group button:hover {
+  color: var(--ink-0);
+}
+.seg-group button[aria-pressed='true'] {
+  background: var(--bg-3);
+  color: var(--ink-0);
+  box-shadow: 0 1px 0 rgba(173, 154, 214, 0.08) inset;
+}
+
+/* eyebrow — small mono section label */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* key hint */
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.5;
+}
