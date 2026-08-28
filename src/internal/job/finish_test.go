@@ -24,6 +24,170 @@ func recordingConfirm(recorded *[]string) ConfirmFunc {
 	}
 }
 
+// decliningGitSolverConfirm answers yes to every prompt except the @git-solver
+// offer, which it declines — the "roll back and leave the repo clean" path.
+func decliningGitSolverConfirm(recorded *[]string) ConfirmFunc {
+	return func(prompt string) (bool, error) {
+		*recorded = append(*recorded, prompt)
+		if strings.Contains(prompt, "@git-solver") {
+			return false, nil
+		}
+		return true, nil
+	}
+}
+
+// conflictJob sets up a job whose squash merge into main will conflict: both
+// sides modify docs/jobs/.gitkeep differently. Returns the create result.
+func conflictJob(t *testing.T) (root string, res CreateResult) {
+	t.Helper()
+	root, res = createWorkedJob(t)
+	writeTestFile(t, filepath.Join(root, "docs", "jobs", ".gitkeep"), "main side\n")
+	gitCmd(t, root, "add", "-A")
+	gitCmd(t, root, "commit", "-q", "-m", "main side change")
+	writeTestFile(t, filepath.Join(res.WorktreePath, "docs", "jobs", ".gitkeep"), "job side\n")
+	gitCmd(t, res.WorktreePath, "add", "-A")
+	gitCmd(t, res.WorktreePath, "commit", "-q", "-m", "job side change")
+	return root, res
+}
+
+// mergeConflictError asserts the FinishJob error is the failed squash merge
+// itself (not a handoff or an unrelated failure).
+func mergeConflictError(t *testing.T, err error) {
+	t.Helper()
+	if errors.Is(err, ErrGitSolverHandoff) {
+		t.Fatalf("FinishJob handed off to git-solver, want the merge error")
+	}
+	if err == nil || !strings.Contains(err.Error(), "git merge --squash") {
+		t.Fatalf("FinishJob error = %v, want the squash-merge failure", err)
+	}
+}
+
+func TestFinishJobMergeConflictDeclinedRollsBack(t *testing.T) {
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+
+	var prompts []string
+	var out bytes.Buffer
+	_, err := FinishJob(root, "ab12cd", decliningGitSolverConfirm(&prompts), &out)
+	mergeConflictError(t, err)
+	// The offer was made and declined (it is the last prompt asked).
+	if len(prompts) == 0 || prompts[len(prompts)-1] != "  Start @git-solver now (mg host)? [y/N] " {
+		t.Errorf("git-solver offer not the last prompt asked: %v", prompts)
+	}
+	if !strings.Contains(out.String(), "Rolled the failed merge back") {
+		t.Errorf("missing rollback line:\n%s", out.String())
+	}
+	// Rolled back: the main worktree is clean again, no unmerged entries.
+	if dirty := gitCmd(t, root, "status", "--porcelain"); dirty != "" {
+		t.Errorf("main worktree not clean after rollback:\n%s", dirty)
+	}
+	// The job's branch + worktree survive the failed finish.
+	if ok, _ := gitExists(root, "feature/ab12cd_roundtrip-job"); !ok {
+		t.Error("job branch was deleted despite the failed merge")
+	}
+	if _, err := os.Stat(res.WorktreePath); err != nil {
+		t.Errorf("job worktree was removed despite the failed merge: %v", err)
+	}
+}
+
+func TestFinishJobMergeConflictHandsOffToGitSolver(t *testing.T) {
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+
+	// Stub the launch: record the args, report a successful spawn.
+	var launchedAgent, launchedPrompt, launchedRoot string
+	orig := GitSolverLaunch
+	GitSolverLaunch = func(agent, prompt, projectRoot, profile, terminal string) (string, error) {
+		launchedAgent, launchedPrompt, launchedRoot = agent, prompt, projectRoot
+		return "tmux pane", nil
+	}
+	defer func() { GitSolverLaunch = orig }()
+
+	var out bytes.Buffer
+	_, err := FinishJob(root, "ab12cd", yesConfirm, &out)
+	if !errors.Is(err, ErrGitSolverHandoff) {
+		t.Fatalf("FinishJob = %v, want ErrGitSolverHandoff\n%s", err, out.String())
+	}
+	if launchedAgent != "git-solver" || launchedRoot != root {
+		t.Errorf("launch args: agent=%q root=%q, want git-solver at the project root", launchedAgent, launchedRoot)
+	}
+	for _, want := range []string{"ab12cd_roundtrip-job", "feature/ab12cd_roundtrip-job", "docs/jobs/archive/ab12cd_roundtrip-job"} {
+		if !strings.Contains(launchedPrompt, want) {
+			t.Errorf("git-solver prompt missing %q:\n%s", want, launchedPrompt)
+		}
+	}
+	if !strings.Contains(out.String(), "→ Started @git-solver in tmux pane") {
+		t.Errorf("missing handoff line:\n%s", out.String())
+	}
+	// The broken state is left in place for git-solver to fix — no rollback.
+	if u := gitCmd(t, root, "ls-files", "-u"); u == "" {
+		t.Errorf("no unmerged entries left for git-solver:\n%s", out.String())
+	}
+}
+
+func TestFinishJobMergeConflictLaunchFailureRollsBack(t *testing.T) {
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+
+	orig := GitSolverLaunch
+	GitSolverLaunch = func(agent, prompt, projectRoot, profile, terminal string) (string, error) {
+		return "", errors.New("no terminal launcher found")
+	}
+	defer func() { GitSolverLaunch = orig }()
+
+	var out bytes.Buffer
+	_, err := FinishJob(root, "ab12cd", yesConfirm, &out)
+	mergeConflictError(t, err)
+	if !strings.Contains(out.String(), "could not start @git-solver") {
+		t.Errorf("missing launch-failure warning:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Rolled the failed merge back") {
+		t.Errorf("missing rollback line:\n%s", out.String())
+	}
+	if dirty := gitCmd(t, root, "status", "--porcelain"); dirty != "" {
+		t.Errorf("main worktree not clean after rollback:\n%s", dirty)
+	}
+}
+
+func TestFinishJobMergeConflictDirtyMainWorktreeNotRolledBack(t *testing.T) {
+	// The main worktree holds an uncommitted tracked change before the merge:
+	// rollback would destroy it, so FinishJob must refuse to reset and say so.
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+	writeTestFile(t, filepath.Join(root, "notes.txt"), "user's uncommitted work\n")
+	gitCmd(t, root, "add", "notes.txt")
+	gitCmd(t, root, "commit", "-q", "-m", "track notes")
+	writeTestFile(t, filepath.Join(root, "notes.txt"), "user's uncommitted edit\n")
+
+	var prompts []string
+	var out bytes.Buffer
+	_, err := FinishJob(root, "ab12cd", decliningGitSolverConfirm(&prompts), &out)
+	mergeConflictError(t, err)
+	if !strings.Contains(out.String(), "had uncommitted changes before the merge — could not auto-roll-back") {
+		t.Errorf("missing no-rollback warning:\n%s", out.String())
+	}
+	// The user's uncommitted edit survived untouched.
+	data, rerr := os.ReadFile(filepath.Join(root, "notes.txt"))
+	if rerr != nil || string(data) != "user's uncommitted edit\n" {
+		t.Errorf("user's uncommitted edit lost: %q, %v", data, rerr)
+	}
+}
+
+func TestGitSolverPrompt(t *testing.T) {
+	p := gitSolverPrompt("ab12cd_roundtrip-job", "feature/ab12cd_roundtrip-job", "main")
+	for _, want := range []string{
+		"ab12cd_roundtrip-job",
+		"feature/ab12cd_roundtrip-job",
+		"main",
+		"docs/jobs/archive/ab12cd_roundtrip-job",
+		".manigot/jdi-status",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("git-solver prompt missing %q:\n%s", want, p)
+		}
+	}
+}
+
 // createWorkedJob creates a job and adds some work (implementation.md +
 // verdict.md + commits), returning the create result. The job's worktree is
 // left clean and on the job branch.

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lmuskalla/manigot/internal/git"
+	"github.com/lmuskalla/manigot/internal/launch"
 	"github.com/lmuskalla/manigot/internal/project"
 )
 
@@ -24,6 +25,20 @@ var ErrCancelled = errors.New("cancelled")
 // to distinguish "there is no such job, try the orphaned-worktree path" from a
 // real failure.
 var ErrJobNotFound = errors.New("job not found")
+
+// ErrGitSolverHandoff is returned by FinishJob when the user accepts the offer
+// to hand a failed squash merge to @git-solver: the git-solver session was
+// started (detached, via GitSolverLaunch) to resolve the conflict and finish
+// the cleanup, so `mg done` is done for now — the CLI treats it as a clean
+// exit, not an error.
+var ErrGitSolverHandoff = errors.New("handed off to @git-solver")
+
+// GitSolverLaunch starts @git-solver on the host (`mg host`) in a new
+// terminal/pane, pointed at the project root, with a prompt describing the
+// interrupted `mg done` — the production wiring behind FinishJob's
+// merge-failure handoff. A package-level variable so tests can stub it,
+// mirroring launch.ExeOverride's seam pattern.
+var GitSolverLaunch = launch.HostAgent
 
 // jobNotFoundErr is the not-found error shape: its Error() text is exactly
 // the wording finish-job.sh and delete-job.sh used (pinned by tests), while
@@ -196,9 +211,23 @@ func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishR
 		return FinishResult{}, err
 	}
 
+	// Capture the pre-merge state so a failed squash merge can be rolled back
+	// cleanly: a conflicted `git merge --squash` leaves the main worktree with
+	// a half-staged, conflicted index and no MERGE_HEAD to abort from, and the
+	// only clean undo is `git reset --hard` to the pre-merge HEAD — safe only
+	// when the main worktree held no tracked local changes before the merge.
+	preMergeHead, err := git.RevParse(root, "HEAD")
+	if err != nil {
+		return FinishResult{}, err
+	}
+	mainDirty, err := git.WorkingTreeDirty(root)
+	if err != nil {
+		return FinishResult{}, err
+	}
+
 	fmt.Fprintf(out, "→ Squash-merging %s...\n", branch)
 	if err := git.SquashMerge(root, branch); err != nil {
-		return FinishResult{}, err
+		return handleSquashMergeFailure(out, confirm, root, jobName, branch, baseBranch, preMergeHead, mainDirty, err)
 	}
 	subject := jobTitle
 	if subject == "" {
@@ -261,6 +290,64 @@ func askConfirm(confirm ConfirmFunc, out io.Writer, prompt string) error {
 		return ErrCancelled
 	}
 	return nil
+}
+
+// handleSquashMergeFailure runs when the squash merge fails — usually a
+// conflict. It offers to hand the broken state to @git-solver (mg host), which
+// resolves the conflict and finishes the cleanup `mg done` would have done
+// (worktree, branch, mg-jdi status); when the user declines, or the launch
+// itself fails, it rolls the main worktree back to the pre-merge HEAD (via
+// ResetHard — safe only when the main worktree was clean before the merge) so
+// the repo is never left half-merged. Returns ErrGitSolverHandoff on a
+// successful handoff; otherwise returns mergeErr for the caller to surface.
+func handleSquashMergeFailure(out io.Writer, confirm ConfirmFunc, root, jobName, branch, baseBranch, preMergeHead string, mainDirty bool, mergeErr error) (FinishResult, error) {
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "✗ Squash merge failed:")
+	fmt.Fprintln(out, "  "+mergeErr.Error())
+	fmt.Fprintln(out, "  The main worktree may be left with a conflicted merge; the job directory is")
+	fmt.Fprintf(out, "  already archived on %s, and the job's worktree and branch still exist.\n", branch)
+	fmt.Fprintln(out, "  @git-solver can resolve the conflict and finish the cleanup (worktree, branch, mg-jdi status).")
+	if err := askConfirm(confirm, out, "  Start @git-solver now (mg host)? [y/N] "); err == nil {
+		desc, lerr := GitSolverLaunch("git-solver", gitSolverPrompt(jobName, branch, baseBranch), root, "", "")
+		if lerr != nil {
+			fmt.Fprintf(out, "  Warning: could not start @git-solver (%v) — rolling the merge back.\n", lerr)
+		} else {
+			fmt.Fprintf(out, "→ Started @git-solver in %s — it will resolve the conflict and finish the cleanup.\n", desc)
+			fmt.Fprintln(out, "  Re-check the job with `mg jobs` when the session ends.")
+			return FinishResult{}, ErrGitSolverHandoff
+		}
+	}
+	// Declined (or the launch failed): roll the merge back so the repo is left
+	// clean. Only safe when the main worktree held no tracked local changes
+	// before the merge — reset --hard would destroy them.
+	if !mainDirty {
+		if rerr := git.ResetHard(root, preMergeHead); rerr != nil {
+			fmt.Fprintf(out, "  Warning: could not roll the merge back: %v\n", rerr)
+			fmt.Fprintln(out, "  Resolve the conflicted merge manually, or run `mg host -a git-solver` from the project root.")
+		} else {
+			fmt.Fprintln(out, "→ Rolled the failed merge back — the main worktree is clean again.")
+			fmt.Fprintf(out, "  The job is archived on %s; its worktree and branch remain.\n", branch)
+			fmt.Fprintln(out, "  To finish the job, run `mg host -a git-solver` from the project root (recommended),")
+			fmt.Fprintf(out, "  or resolve the merge manually and remove the worktree/branch with `mg delete %s`.\n", jobName)
+		}
+	} else {
+		fmt.Fprintln(out, "  The main worktree had uncommitted changes before the merge — could not auto-roll-back.")
+		fmt.Fprintln(out, "  Resolve the conflicted merge manually, or run `mg host -a git-solver` from the project root.")
+	}
+	return FinishResult{}, mergeErr
+}
+
+// gitSolverPrompt builds the instruction handed to @git-solver when mg done's
+// squash merge fails: the state of the interrupted finish (job archived on the
+// branch, worktree + branch + mg-jdi sidecar remaining) and the cleanup
+// expected of it.
+func gitSolverPrompt(jobName, branch, baseBranch string) string {
+	return fmt.Sprintf(
+		"An interrupted `mg done` for job %s: the squash merge of branch %s into %s conflicted and was left in the main worktree (a conflicted `git merge --squash` in progress — there is no MERGE_HEAD). "+
+			"The job directory was already archived (docs/jobs/archive/%s) on branch %s before the merge failed; the job's worktree and branch still exist. "+
+			"Please: (1) inspect the actual state (git status, git log, git worktree list, conflict markers), (2) resolve the conflicts and commit the merge in the main worktree, "+
+			"(3) remove the job's worktree and delete branch %s — the cleanup `mg done` would have done — (4) remove the job's mg-jdi status sidecar under .manigot/jdi-status/ if present, (5) report what you did. Do not push.",
+		jobName, branch, baseBranch, jobName, branch, branch)
 }
 
 // jobNotFoundError builds the "job not found among local branches" error with
