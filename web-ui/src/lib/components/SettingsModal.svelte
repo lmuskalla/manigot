@@ -22,7 +22,9 @@
       toasts.ok('Connected to the daemon')
       onclose()
     } else {
-      toasts.error('Could not reach the daemon — check the URL')
+      // connection.lastError is precise (CORS / unreachable / token / …);
+      // surface it instead of a generic "check the URL".
+      toasts.error(connection.lastError || 'Could not reach the daemon — check the URL')
     }
   }
 </script>
@@ -38,7 +40,12 @@
       spellcheck="false"
       autocomplete="off"
     />
-    <p class="hint">Where <code>mg serve</code> listens. Leave empty when this page is served by the daemon itself.</p>
+    <p class="hint">
+      The daemon is a same-origin API (no CORS headers) — a cross-origin URL is blocked by the
+      browser. When this page runs from the vite dev server, use <code>/api</code>: vite proxies it
+      to <code>127.0.0.1:8080</code> for you. Leave empty when the page is served by the daemon
+      itself (production, same origin).
+    </p>
   </div>
   <div class="field">
     <label for="conn-token">bearer token</label>

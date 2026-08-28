@@ -63,7 +63,37 @@ describe('client', () => {
         throw new TypeError('Failed to fetch')
       }),
     )
+    // Same-origin base — the failure is a plain network error, not CORS.
+    client.setConnection({ baseUrl: '/api', token: '' })
     await expect(client.getHealth()).rejects.toThrow(/cannot reach the daemon/)
+  })
+
+  it('explains cross-origin failure as a CORS block with the /api hint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+    // jsdom's location.origin is http://localhost:3000 — an absolute daemon
+    // URL on another origin must be flagged as the CORS block it is.
+    client.setConnection({ baseUrl: 'http://127.0.0.1:8080', token: '' })
+    const err = await client.getHealth().catch((e) => e)
+    expect(err.message).toMatch(/cross-origin URL blocked/i)
+    expect(err.message).toContain('/api')
+  })
+
+  it('does not claim CORS for a same-origin base', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+    client.setConnection({ baseUrl: '/api', token: '' })
+    const err = await client.getHealth().catch((e) => e)
+    expect(err.message).toMatch(/cannot reach the daemon/)
+    expect(err.message).not.toMatch(/cross-origin/i)
   })
 
   it('returns raw text for job files', async () => {

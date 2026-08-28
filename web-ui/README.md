@@ -17,15 +17,21 @@ npm run test       # vitest suite
 ```
 
 The app talks to the daemon through the connection setting (Settings modal /
-`?api=` URL param). Served by the daemon itself (same origin) there is
-nothing to configure; against a remote daemon set the URL and, when the bind
-is non-loopback, the bearer token (`mg serve-token` writes one to the
-daemon's `.env` — tokens never ride in URLs).
+`?api=` URL param). The daemon is a same-origin JSON API — it sends no CORS
+headers, so the browser blocks any direct cross-origin URL (the error will
+say "cross-origin URL blocked"). In dev, use the vite proxy path instead:
 
 ```sh
 npm run dev
-# open http://localhost:5173/?api=http://127.0.0.1:8080
+# open http://localhost:5173/?api=/api
 ```
+
+`/api` is same-origin (vite proxies it to `127.0.0.1:8080`, forwarding the
+bearer token). Served by the daemon itself (production, same origin) there
+is nothing to configure; against a remote daemon behind a reverse proxy the
+proxy serves both the UI and `/api`. For a non-loopback daemon bind, set the
+bearer token in the settings modal (`mg serve-token` writes one to the
+daemon's `.env` — tokens never ride in URLs).
 
 Development conveniences:
 

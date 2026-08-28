@@ -323,9 +323,8 @@
     font-size: 13px;
   }
   .offline-banner span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* the message can be long (CORS guidance); wrap instead of truncating */
+    overflow-wrap: anywhere;
   }
 
   .landing {

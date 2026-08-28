@@ -84,7 +84,29 @@ async function request(method: string, path: string, opts: ReqOpts = {}): Promis
     })
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') throw e
-    throw new ApiError(0, `cannot reach the daemon at ${conn.baseUrl || '(same origin)'} — ${e instanceof Error ? e.message : String(e)}`)
+    // A fetch that throws before any response is either a network failure or
+    // a CORS block — the two look identical to JS (TypeError "Failed to
+    // fetch"). The daemon is deliberately CORS-less (same-origin JSON API),
+    // so a cross-origin absolute URL can never work from a browser: the
+    // request dies in the preflight with no response at all. Surface that
+    // as the likely cause so the user reaches for the proxy path (/api)
+    // instead of hunting a nonexistent URL typo.
+    const target = conn.baseUrl || location.origin
+    try {
+      if (new URL(target, location.href).origin !== location.origin) {
+        throw new ApiError(
+          0,
+          `cross-origin URL blocked by the browser — the daemon sends no CORS headers by design; in dev set the URL to /api (vite proxies it to 127.0.0.1:8080)`,
+        )
+      }
+    } catch (err) {
+      if (err instanceof ApiError) throw err
+      /* unparseable base — fall through to the raw fetch error */
+    }
+    throw new ApiError(
+      0,
+      `cannot reach the daemon at ${conn.baseUrl || '(same origin)'} — ${e instanceof Error ? e.message : String(e)}`,
+    )
   }
 
   if (res.status === 401) {
