@@ -33,28 +33,28 @@ func TestSettingsTabCyclesFocus(t *testing.T) {
 		t.Fatal("expected initial focus editor")
 	}
 	v.update(key(t, tea.KeyTab))
-	if v.focus != stFocusBranch {
-		t.Errorf("after tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
-	}
-	v.update(key(t, tea.KeyTab))
-	if v.focus != stFocusJobPrefix {
-		t.Errorf("after second tab, focus = %d, want %d (job branch prefix)", v.focus, stFocusJobPrefix)
-	}
-	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusCount {
-		t.Errorf("after third tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
+		t.Errorf("after tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusProfile {
-		t.Errorf("after fourth tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
+		t.Errorf("after second tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusTerminal {
-		t.Errorf("after fifth tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
+		t.Errorf("after third tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusTheme {
-		t.Errorf("after sixth tab, focus = %d, want %d (theme)", v.focus, stFocusTheme)
+		t.Errorf("after fourth tab, focus = %d, want %d (theme)", v.focus, stFocusTheme)
+	}
+	v.update(key(t, tea.KeyTab))
+	if v.focus != stFocusBranch {
+		t.Errorf("after fifth tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
+	}
+	v.update(key(t, tea.KeyTab))
+	if v.focus != stFocusJobPrefix {
+		t.Errorf("after sixth tab, focus = %d, want %d (job branch prefix)", v.focus, stFocusJobPrefix)
 	}
 	v.update(key(t, tea.KeyTab))
 	if v.focus != stFocusEditor {
@@ -67,30 +67,30 @@ func TestSettingsShiftTabCyclesFocusBackward(t *testing.T) {
 	if v.focus != stFocusEditor {
 		t.Fatal("expected initial focus editor")
 	}
-	// shift+tab from editor wraps back to theme.
-	v.update(keyMsg("shift+tab"))
-	if v.focus != stFocusTheme {
-		t.Errorf("after shift+tab, focus = %d, want %d (theme)", v.focus, stFocusTheme)
-	}
-	v.update(keyMsg("shift+tab"))
-	if v.focus != stFocusTerminal {
-		t.Errorf("after second shift+tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
-	}
-	v.update(keyMsg("shift+tab"))
-	if v.focus != stFocusProfile {
-		t.Errorf("after third shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
-	}
-	v.update(keyMsg("shift+tab"))
-	if v.focus != stFocusCount {
-		t.Errorf("after fourth shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
-	}
+	// shift+tab from editor wraps back to job branch prefix.
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusJobPrefix {
-		t.Errorf("after fifth shift+tab, focus = %d, want %d (job branch prefix)", v.focus, stFocusJobPrefix)
+		t.Errorf("after shift+tab, focus = %d, want %d (job branch prefix)", v.focus, stFocusJobPrefix)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusBranch {
-		t.Errorf("after sixth shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
+		t.Errorf("after second shift+tab, focus = %d, want %d (base branch)", v.focus, stFocusBranch)
+	}
+	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusTheme {
+		t.Errorf("after third shift+tab, focus = %d, want %d (theme)", v.focus, stFocusTheme)
+	}
+	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusTerminal {
+		t.Errorf("after fourth shift+tab, focus = %d, want %d (terminal)", v.focus, stFocusTerminal)
+	}
+	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusProfile {
+		t.Errorf("after fifth shift+tab, focus = %d, want %d (profile)", v.focus, stFocusProfile)
+	}
+	v.update(keyMsg("shift+tab"))
+	if v.focus != stFocusCount {
+		t.Errorf("after sixth shift+tab, focus = %d, want %d (recent activity count)", v.focus, stFocusCount)
 	}
 	v.update(keyMsg("shift+tab"))
 	if v.focus != stFocusEditor {
@@ -107,11 +107,9 @@ func TestSettingsProfileCycleOnlyWhenProfileFocused(t *testing.T) {
 		t.Errorf("left/right while editor focused changed profile: %d -> %d", before, v.profile)
 	}
 
-	// focus on profile (four tabs away now): right cycles claude-pro -> zai ->
+	// focus on profile (two tabs away now): right cycles claude-pro -> zai ->
 	// opencode-go -> opencode-zen -> opencode-zen-free -> claude-pro.
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
-	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
-	v.update(key(t, tea.KeyTab)) // job branch prefix -> recent activity count
+	v.update(key(t, tea.KeyTab)) // editor -> recent activity count
 	v.update(key(t, tea.KeyTab)) // recent activity count -> profile
 	// left/right must not mutate the text inputs while profile is focused either.
 	branchBefore := v.baseBranch.Value()
@@ -155,8 +153,10 @@ func TestSettingsEditorEdits(t *testing.T) {
 
 func TestSettingsBaseBranchEdits(t *testing.T) {
 	v := newSettingsView(config.Settings{Editor: "x"}, project.Settings{BaseBranch: "main"}, 80, 24)
-	// Focus the base branch field, then type into it.
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
+	// Focus the base branch field (two shift+tabs from editor: editor ->
+	// job branch prefix -> base branch), then type into it.
+	v.update(keyMsg("shift+tab")) // editor -> job branch prefix
+	v.update(keyMsg("shift+tab")) // job branch prefix -> base branch
 	v.update(key(t, tea.KeyRunes, 'd', 'e', 'v'))
 	if got := v.baseBranch.Value(); got != "maindev" {
 		t.Errorf("base branch after typing = %q, want maindev", got)
@@ -179,9 +179,9 @@ func TestSettingsSeededFromProjectSettings(t *testing.T) {
 
 func TestSettingsJobPrefixEdits(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
-	// Focus the job branch prefix field (two tabs), then type into it.
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
-	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
+	// Focus the job branch prefix field (one shift+tab from editor, its
+	// immediate predecessor in tab order), then type into it.
+	v.update(keyMsg("shift+tab")) // editor -> job branch prefix
 	v.update(key(t, tea.KeyRunes, 'j', 'o', 'b', 's'))
 	if got := v.jobBranchPrefix.Value(); got != "jobs" {
 		t.Errorf("job branch prefix after typing = %q, want jobs", got)
@@ -212,7 +212,8 @@ func TestSettingsJobPrefixSeededFromProjectSettings(t *testing.T) {
 func TestSettingsProjectValueTrimsAndStaysSeparateFromGlobal(t *testing.T) {
 	v := newSettingsView(config.Settings{Editor: "vim", Profile: config.ProfileZAI}, project.Settings{}, 80, 24)
 	// Set a base branch with surrounding whitespace; projectValue should trim it.
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
+	v.update(keyMsg("shift+tab")) // editor -> job branch prefix
+	v.update(keyMsg("shift+tab")) // job branch prefix -> base branch
 	v.update(key(t, tea.KeyRunes, ' ', 't', 'r', 'u', 'n', 'k', ' '))
 	if got := v.projectValue(); got != (project.Settings{BaseBranch: "trunk"}) {
 		t.Errorf("projectValue = %+v, want {trunk}", got)
@@ -310,9 +311,7 @@ func TestSettingsTerminalSeeded(t *testing.T) {
 
 func TestSettingsTerminalEdits(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
-	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
-	v.update(key(t, tea.KeyTab)) // job branch prefix -> recent activity count
+	v.update(key(t, tea.KeyTab)) // editor -> recent activity count
 	v.update(key(t, tea.KeyTab)) // recent activity count -> profile
 	v.update(key(t, tea.KeyTab)) // profile -> terminal
 	if v.focus != stFocusTerminal {
@@ -348,9 +347,7 @@ func TestSettingsThemeSeeded(t *testing.T) {
 
 func TestSettingsThemeEdits(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
-	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
-	v.update(key(t, tea.KeyTab)) // job branch prefix -> recent activity count
+	v.update(key(t, tea.KeyTab)) // editor -> recent activity count
 	v.update(key(t, tea.KeyTab)) // recent activity count -> profile
 	v.update(key(t, tea.KeyTab)) // profile -> terminal
 	v.update(key(t, tea.KeyTab)) // terminal -> theme
@@ -394,9 +391,7 @@ func TestSettingsRecentCountSeeded(t *testing.T) {
 
 func TestSettingsRecentCountEdits(t *testing.T) {
 	v := newSettingsView(config.Settings{}, project.Settings{}, 80, 24)
-	v.update(key(t, tea.KeyTab)) // editor -> base branch
-	v.update(key(t, tea.KeyTab)) // base branch -> job branch prefix
-	v.update(key(t, tea.KeyTab)) // job branch prefix -> recent activity count
+	v.update(key(t, tea.KeyTab)) // editor -> recent activity count
 	v.recentCount.SetValue("")   // clear the seeded default
 	v.update(key(t, tea.KeyRunes, '3'))
 	if got := v.recentCount.Value(); got != "3" {

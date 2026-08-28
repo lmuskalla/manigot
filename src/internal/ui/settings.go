@@ -36,19 +36,19 @@ const stFieldCount = 7
 const settingsLabelWidth = 17
 
 // Focus indices for the settings form's fields, in tab cycle order: editor →
-// base branch → job branch prefix → recent activity count → profile →
-// terminal → theme → editor. Used by update() and render() instead of bare
-// ints. Terminal was appended after Profile, and Theme after Terminal, rather
-// than inserted next to Editor, so the existing constants keep their values
-// unchanged.
+// recent activity count → profile → terminal → theme → base branch → job
+// branch prefix → editor. This mirrors the form's top-to-bottom render order
+// (render(), below) so tab always moves down the visible layout instead of
+// jumping between sections. Used by update() and render() instead of bare
+// ints.
 const (
 	stFocusEditor    = 0
-	stFocusBranch    = 1
-	stFocusJobPrefix = 2
-	stFocusCount     = 3
-	stFocusProfile   = 4
-	stFocusTerminal  = 5
-	stFocusTheme     = 6
+	stFocusCount     = 1
+	stFocusProfile   = 2
+	stFocusTerminal  = 3
+	stFocusTheme     = 4
+	stFocusBranch    = 5
+	stFocusJobPrefix = 6
 )
 
 // stAction is what update returns for the App to act on.
@@ -96,7 +96,7 @@ type settingsView struct {
 	terminal        textinput.Model
 	theme           textinput.Model
 	profile         int // index into profileOptions
-	focus           int // stFocusEditor / stFocusBranch / stFocusJobPrefix / stFocusCount / stFocusProfile / stFocusTerminal / stFocusTheme
+	focus           int // stFocusEditor / stFocusCount / stFocusProfile / stFocusTerminal / stFocusTheme / stFocusBranch / stFocusJobPrefix
 	width           int
 	height          int
 	status          string // validation/save error message
@@ -468,10 +468,6 @@ func (v *settingsView) hint() string {
 	prefix := "enter save · esc cancel"
 	switch v.focus {
 	case stFocusEditor:
-		return "tab/shift+tab base branch · " + prefix
-	case stFocusBranch:
-		return "tab/shift+tab job branch prefix · " + prefix
-	case stFocusJobPrefix:
 		return "tab/shift+tab recent activity · " + prefix
 	case stFocusCount:
 		return "tab/shift+tab profile · " + prefix
@@ -479,7 +475,11 @@ func (v *settingsView) hint() string {
 		return "←/→ change profile · tab/shift+tab terminal · " + prefix
 	case stFocusTerminal:
 		return "tab/shift+tab theme · " + prefix
-	default: // stFocusTheme
+	case stFocusTheme:
+		return "tab/shift+tab base branch · " + prefix
+	case stFocusBranch:
+		return "tab/shift+tab job branch prefix · " + prefix
+	default: // stFocusJobPrefix
 		return "tab/shift+tab editor · " + prefix
 	}
 }
