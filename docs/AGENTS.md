@@ -588,8 +588,11 @@ and the security invariants below are non-negotiable.
   which editor opens `brief.md`, the recent-activity count, and which
   terminal spawns a session (used only when the TUI is not inside tmux —
   inside tmux the launch is always a tmux split pane, regardless of the
-  setting). Missing is not an error — every reader falls
-  back to defaults.
+  setting). The terminal override is the default every launch path falls
+  back to — the TUI passes it explicitly, and CLI paths like `mg done`'s
+  git-solver handoff resolve it via `launch.TerminalSetting`, so the same
+  setting applies everywhere, not just from the TUI. Missing is not an error
+  — every reader falls back to defaults.
 - `.manigot/manigot.json` (in the target project, committable) — project
   conventions: `baseBranch` (the ref new job branches are cut from and
   finished jobs are merged into, default `main`) and `jobBranchPrefix` (the

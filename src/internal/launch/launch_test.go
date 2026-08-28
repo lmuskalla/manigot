@@ -633,6 +633,46 @@ func TestLaunchDetachedRoutesToTmuxPane(t *testing.T) {
 	}
 }
 
+// TestLaunchDetachedFallsBackToTerminalSetting verifies that an empty
+// terminal falls back to the user's configured override (TerminalSetting)
+// before auto-detect: with the setting naming a nonexistent binary, the
+// launch fails naming that binary — proving the setting was consulted and
+// used. The candidate table is stubbed empty so the test is hermetic on any
+// machine (no real terminal is ever spawned).
+func TestLaunchDetachedFallsBackToTerminalSetting(t *testing.T) {
+	t.Setenv("TMUX", "")
+	origSetting := TerminalSetting
+	origCands := terminalCandidates
+	TerminalSetting = func() string { return "definitely-not-a-terminal-9x7z" }
+	terminalCandidates = nil
+	t.Cleanup(func() {
+		TerminalSetting = origSetting
+		terminalCandidates = origCands
+	})
+
+	_, err := launchDetached("echo hi", "")
+	if err == nil || !strings.Contains(err.Error(), "definitely-not-a-terminal-9x7z") {
+		t.Errorf("launchDetached with an empty terminal = %v, want it to fall back to TerminalSetting", err)
+	}
+}
+
+// TestLaunchDetachedExplicitTerminalWinsOverSetting verifies a caller's
+// explicit terminal still beats the configured override.
+func TestLaunchDetachedExplicitTerminalWinsOverSetting(t *testing.T) {
+	t.Setenv("TMUX", "")
+	origSetting := TerminalSetting
+	TerminalSetting = func() string { return "configured-terminal-9x7z" }
+	t.Cleanup(func() { TerminalSetting = origSetting })
+
+	_, err := launchDetached("echo hi", "explicit-terminal-9x7z")
+	if err == nil || !strings.Contains(err.Error(), "explicit-terminal-9x7z") {
+		t.Errorf("launchDetached with an explicit terminal = %v, want the explicit value to win", err)
+	}
+	if strings.Contains(err.Error(), "configured-terminal-9x7z") {
+		t.Errorf("configured override leaked through despite an explicit terminal: %v", err)
+	}
+}
+
 // TestLaunchTmuxPaneContinuesAfterSelectPaneFailure documents the best-effort
 // tagging decision from the TASK-2/TASK-3 rework: the pane is already live and
 // the in-memory tmuxLastPaneID covers replacement within this TUI process, so

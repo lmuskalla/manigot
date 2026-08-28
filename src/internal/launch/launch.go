@@ -48,7 +48,10 @@ import (
 // config.Settings.Terminal: when non-empty and the TUI is NOT inside tmux, that
 // terminal is invoked directly instead of the auto-detect chain below — see
 // buildOverrideCmd; inside tmux the split pane wins regardless of this setting.
-// Empty reproduces today's auto-detect behavior unchanged. It returns a short
+// Empty falls back to the configured override itself (TerminalSetting), so
+// callers that don't have the setting loaded — CLI paths like `mg done`'s
+// git-solver handoff — still honor it; only when the setting is also unset does
+// the auto-detect chain apply. It returns a short
 // human description of where it opened (e.g. "tmux pane", "Terminal.app",
 // "gnome-terminal", or the override's own binary name) so the caller can surface
 // it in a status line.
@@ -237,6 +240,22 @@ func Tail(logPath, terminal string) (string, error) {
 // so tests (in this package and internal/ui) can point Agent/Quick/AgentQuick
 // at a stub or a resolution failure instead of the real os.Executable().
 var ExeOverride = func() (string, error) { return os.Executable() }
+
+// TerminalSetting returns the user's configured terminal override — the
+// `terminal` field of config/tui-settings.json — or "" when unset or
+// unreadable. It is the default every terminal-launch path falls back to when
+// the caller passes an empty terminal (see launchDetached), so the setting is
+// honored from the TUI — which passes it explicitly — and from CLI paths like
+// `mg done`'s git-solver handoff alike, instead of silently degrading to
+// auto-detect. An exported package-level variable, mirroring ExeOverride, so
+// tests can stub it.
+var TerminalSetting = func() string {
+	s, err := config.Load()
+	if err != nil {
+		return ""
+	}
+	return s.Terminal
+}
 
 // JdiExe returns the path of the binary implementing the `mg jdi` subcommand —
 // the running binary itself. An exported package-level variable, mirroring
@@ -439,6 +458,14 @@ func killPreviousTmuxPane() error {
 // runs the TUI inside tmux always gets the split-pane behavior, and the
 // override applies only outside tmux.
 //
+// An empty terminal falls back to TerminalSetting — the user's configured
+// override itself — before auto-detect, so every launch path honors the same
+// setting even when the caller doesn't have it loaded (the TUI passes it
+// explicitly; CLI paths like `mg done`'s git-solver handoff pass "" and get
+// the setting here). Only when the setting is also unset does the auto-detect
+// chain below apply. Inside tmux the terminal value is never consulted, so
+// the resolution is harmless there — the tmux split pane wins regardless.
+//
 // Inside tmux, the launch is handled by launchTmuxPane: it implements the
 // replace policy (killing the previously manigot-opened pane before splitting
 // a new one) and needs the split-window client's stdout (the new pane's id),
@@ -450,6 +477,15 @@ func killPreviousTmuxPane() error {
 // fails on its own (e.g. no display server) is not surfaced here — holdOnFailure
 // covers the inner command's own fast failures instead.
 func launchDetached(inner, terminal string) (string, error) {
+	// The caller's explicit terminal wins; an empty one falls back to the
+	// user's configured override (TerminalSetting) so the setting is honored
+	// from every launch path, TUI and CLI alike. Auto-detect applies only when
+	// neither is set. Inside tmux the resolved value is never consulted — the
+	// tmux split pane below wins regardless.
+	if terminal == "" {
+		terminal = TerminalSetting()
+	}
+
 	// Inside tmux with a tmux binary on PATH, the tmux split pane always wins —
 	// even when an override is set. The override applies only outside tmux.
 	if os.Getenv("TMUX") != "" {
