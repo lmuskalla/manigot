@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1478,5 +1479,101 @@ func TestWarnTmuxClipboardTmuxFailure(t *testing.T) {
 	fakeTmux(t, "", true)
 	if diag := tmuxWarnDiag(t, Options{}, true); strings.Contains(diag, "set-clipboard") {
 		t.Errorf("failing tmux query must not warn:\n%s", diag)
+	}
+}
+
+// --- Run's stdout capture (the tailing fix's "are we grabbing the output?" --
+//
+// The concrete answer to the brief's "check if we're actually grabbing the
+// output or not": DockerInvocation.Run wires the docker process's stdout to
+// whatever io.Writer it was given (cmd.Stdout = stdout, see Run). When that
+// writer is not an *os.File — as in mg-jdi's commandAgentRunner, which passes
+// a bytes.Buffer — exec.Cmd creates a pipe, reads the child's stdout from it
+// in a goroutine, and writes every chunk to the writer: no bytes are dropped,
+// byte order is preserved, and each chunk is forwarded as it arrives. The
+// streaming granularity a live tail sees is therefore whatever the
+// in-container CLI flushes per write (docker forwards container stdout as it
+// comes; opencode's Go CLI writes its JSONL events straight to the pipe, which
+// is unbuffered at the OS level — so per-event flushing is expected, and any
+// CLI-internal buffering would only deliver the same bytes in bursts, never
+// lose them). The tests below pin that contract with a fake `docker` emitting
+// an opencode `--print` JSONL stream.
+
+// fakeDocker puts an executable `docker` first on PATH that runs body — a
+// stand-in for the host's real docker so Run's capture path can be exercised
+// without one installed.
+func fakeDocker(t *testing.T, body string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\n" + body + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+}
+
+// TestDockerInvocationRunCapturesFullStdout pins the --print capture path:
+// every byte the container writes to stdout lands in the caller's writer,
+// byte-for-byte — the "no bytes dropped" half of the tailing fix.
+func TestDockerInvocationRunCapturesFullStdout(t *testing.T) {
+	// A minimal `opencode run --format json` JSONL stream (the 3-line
+	// step_start/text/step_finish shape captured live), emitted via a quoted
+	// heredoc so the fake docker writes each line as its own flush.
+	const stream = `{"type":"step_start","part":{"type":"step-start"}}
+{"type":"text","part":{"type":"text","text":"Looked at tasks.md."}}
+{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}
+`
+	fakeDocker(t, "cat <<'EOF'\n"+stream+"EOF")
+
+	var stdout bytes.Buffer
+	inv := DockerInvocation{Argv: []string{"docker", "run", "--rm", "manigot"}}
+	code, ran := inv.Run(nil, &stdout, &strings.Builder{})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !ran {
+		t.Error("ran = false, want true (docker was exec'd)")
+	}
+	if stdout.String() != stream {
+		t.Errorf("stdout capture = %q, want the exact stream %q", stdout.String(), stream)
+	}
+}
+
+// TestDockerInvocationRunPreservesMissingTrailingNewline: a stream that does
+// not end in a newline arrives exactly as-is — the capture path adds nothing
+// and drops nothing.
+func TestDockerInvocationRunPreservesMissingTrailingNewline(t *testing.T) {
+	const stream = `{"type":"text","part":{"type":"text","text":"no trailing newline"}}`
+	fakeDocker(t, "printf '%s' '"+stream+"'")
+
+	var stdout bytes.Buffer
+	inv := DockerInvocation{Argv: []string{"docker", "run", "--rm", "manigot"}}
+	if code, ran := inv.Run(nil, &stdout, &strings.Builder{}); code != 0 || !ran {
+		t.Fatalf("Run = (%d, %v), want (0, true)", code, ran)
+	}
+	if stdout.String() != stream {
+		t.Errorf("stdout capture = %q, want the exact stream %q (no bytes added or dropped)", stdout.String(), stream)
+	}
+}
+
+// TestDockerInvocationRunCapturesStdoutOnNonZeroExit: a failed invocation
+// (docker exits non-zero) still delivers its full stdout to the caller —
+// mg-jdi persists the raw output of failed invocations too (Run returns
+// stdout.Bytes() alongside the error), so a failure's blow-by-blow survives.
+func TestDockerInvocationRunCapturesStdoutOnNonZeroExit(t *testing.T) {
+	const stream = "partial output before the failure\n"
+	fakeDocker(t, "printf '%s' 'partial output before the failure\n' && exit 7")
+
+	var stdout bytes.Buffer
+	inv := DockerInvocation{Argv: []string{"docker", "run", "--rm", "manigot"}}
+	code, ran := inv.Run(nil, &stdout, &strings.Builder{})
+	if code != 7 {
+		t.Errorf("exit code = %d, want 7", code)
+	}
+	if !ran {
+		t.Error("ran = false, want true (a non-zero exit still counts as ran)")
+	}
+	if stdout.String() != stream {
+		t.Errorf("stdout capture = %q, want %q", stdout.String(), stream)
 	}
 }

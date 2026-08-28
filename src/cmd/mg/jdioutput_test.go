@@ -500,13 +500,27 @@ func TestEnsureSidecarIgnoredActuallyWorksWithGit(t *testing.T) {
 	}
 }
 
-// --- session.log append helper (appendSessionLog) ---------------------------
+// --- session.log live-stream helper (openSessionLog + sessionLog) ----------
 
-func TestAppendSessionLogCreatesOnFirstUse(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.log")
-	if err := appendSessionLog(path, "analyst", 1, []byte("Wrote tasks.md.\n")); err != nil {
-		t.Fatalf("appendSessionLog: %v", err)
+// writeAndClose streams raw into a freshly opened session.log section and
+// closes it, failing the test on either error.
+func writeAndClose(t *testing.T, path, agent string, attempt int, raw []byte) {
+	t.Helper()
+	s, err := openSessionLog(path, agent, attempt)
+	if err != nil {
+		t.Fatalf("openSessionLog: %v", err)
 	}
+	if _, err := s.Write(raw); err != nil {
+		t.Fatalf("sessionLog.Write: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("sessionLog.Close: %v", err)
+	}
+}
+
+func TestOpenSessionLogCreatesOnFirstUse(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.log")
+	writeAndClose(t, path, "analyst", 1, []byte("Wrote tasks.md.\n"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("reading session.log: %v", err)
@@ -520,14 +534,10 @@ func TestAppendSessionLogCreatesOnFirstUse(t *testing.T) {
 	}
 }
 
-func TestAppendSessionLogAppendsAcrossSections(t *testing.T) {
+func TestOpenSessionLogAppendsAcrossSections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.log")
-	if err := appendSessionLog(path, "analyst", 1, []byte("first output\n")); err != nil {
-		t.Fatal(err)
-	}
-	if err := appendSessionLog(path, "developer", 2, []byte("second output\n")); err != nil {
-		t.Fatal(err)
-	}
+	writeAndClose(t, path, "analyst", 1, []byte("first output\n"))
+	writeAndClose(t, path, "developer", 2, []byte("second output\n"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -541,11 +551,9 @@ func TestAppendSessionLogAppendsAcrossSections(t *testing.T) {
 	}
 }
 
-func TestAppendSessionLogHeaderCarriesAgentAttemptTimestamp(t *testing.T) {
+func TestOpenSessionLogHeaderCarriesAgentAttemptTimestamp(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.log")
-	if err := appendSessionLog(path, "reviewer", 3, []byte("ok\n")); err != nil {
-		t.Fatal(err)
-	}
+	writeAndClose(t, path, "reviewer", 3, []byte("ok\n"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -562,12 +570,10 @@ func TestAppendSessionLogHeaderCarriesAgentAttemptTimestamp(t *testing.T) {
 	}
 }
 
-func TestAppendSessionLogPreservesRawVerbatim(t *testing.T) {
+func TestOpenSessionLogPreservesRawVerbatim(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.log")
 	raw := []byte("line one\nline two\nline three\n")
-	if err := appendSessionLog(path, "analyst", 1, raw); err != nil {
-		t.Fatal(err)
-	}
+	writeAndClose(t, path, "analyst", 1, raw)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -577,17 +583,13 @@ func TestAppendSessionLogPreservesRawVerbatim(t *testing.T) {
 	}
 }
 
-func TestAppendSessionLogSectionsSeparated(t *testing.T) {
+func TestOpenSessionLogSectionsSeparated(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.log")
 	// Two sections where the first's raw output deliberately lacks a
 	// trailing newline: the blank-line separator plus the trailing-newline
 	// guarantee must keep the second section's header from gluing to it.
-	if err := appendSessionLog(path, "analyst", 1, []byte("no trailing newline")); err != nil {
-		t.Fatal(err)
-	}
-	if err := appendSessionLog(path, "developer", 1, []byte("second\n")); err != nil {
-		t.Fatal(err)
-	}
+	writeAndClose(t, path, "analyst", 1, []byte("no trailing newline"))
+	writeAndClose(t, path, "developer", 1, []byte("second\n"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -598,12 +600,10 @@ func TestAppendSessionLogSectionsSeparated(t *testing.T) {
 	}
 }
 
-func TestAppendSessionLogTrailingNewlineGuarantee(t *testing.T) {
-	// Raw output without a trailing newline gets one appended...
+func TestOpenSessionLogTrailingNewlineGuarantee(t *testing.T) {
+	// Raw output without a trailing newline gets one appended on Close...
 	path := filepath.Join(t.TempDir(), "session.log")
-	if err := appendSessionLog(path, "analyst", 1, []byte("no newline")); err != nil {
-		t.Fatal(err)
-	}
+	writeAndClose(t, path, "analyst", 1, []byte("no newline"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -613,9 +613,7 @@ func TestAppendSessionLogTrailingNewlineGuarantee(t *testing.T) {
 	}
 	// ...and output that already ends with one is not double-newlined.
 	path2 := filepath.Join(t.TempDir(), "session.log")
-	if err := appendSessionLog(path2, "analyst", 1, []byte("has newline\n")); err != nil {
-		t.Fatal(err)
-	}
+	writeAndClose(t, path2, "analyst", 1, []byte("has newline\n"))
 	data2, err := os.ReadFile(path2)
 	if err != nil {
 		t.Fatal(err)
@@ -625,9 +623,15 @@ func TestAppendSessionLogTrailingNewlineGuarantee(t *testing.T) {
 	}
 }
 
-func TestAppendSessionLogEmptyRawStillWritesHeader(t *testing.T) {
+func TestOpenSessionLogEmptyRawStillWritesHeader(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.log")
-	if err := appendSessionLog(path, "analyst", 1, nil); err != nil {
+	// An invocation that produces no output still opens + closes its
+	// section: the header (with its own trailing newline) is the section.
+	s, err := openSessionLog(path, "analyst", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
@@ -636,5 +640,8 @@ func TestAppendSessionLogEmptyRawStillWritesHeader(t *testing.T) {
 	}
 	if got := string(data); !strings.Contains(got, "analyst (attempt 1)") {
 		t.Errorf("session.log = %q, want the header even for empty output", got)
+	}
+	if !strings.HasSuffix(string(data), "===\n") {
+		t.Errorf("session.log = %q, want the header's own newline as the section end", string(data))
 	}
 }

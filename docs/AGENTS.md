@@ -467,10 +467,15 @@ launches the highlighted agent, esc clears the filter before cancelling, and
 q cancels. The detail view's `t` key opens the job's branch diff in tig on
 the host (`mg diff <job> --tig`) in a tmux split pane / new terminal exactly
 like an agent launch; the footer hint and the key are gated on tig being
-installed on the host. The detail view's `l` key tails the job's mg-jdi
-`run.log` live — a plain `tail -f` of the same sidecar the log tab reads,
-spawned in a tmux split pane / new terminal like an agent launch; the footer
-hint and the key are gated on a `run.log` existing for the job.
+installed on the host. The detail view's `l` key tails the job's
+`session.log` live — the verbose raw stream mg-jdi writes each invocation's
+output into as it happens, a plain `tail -f` of the job's own
+`docs/jobs/<id>_<slug>/session.log` — spawned in a tmux split pane / new
+terminal like an agent launch; the footer hint and the key are gated on a
+`session.log` existing for the job (created at mg-jdi run start). This is
+the log-vs-tail distinction: the log tab (key 5) reads the sidecar's
+`run.log`, the per-invocation *event summary* (agent invoked / result / next
+agent invoked), while `l` tails the verbose *raw stream*.
 
 `mg jdi` drives a job's fixed `@analyst` → `@developer` → `@reviewer`
 sequence end to end via the session launcher's `--print` path, stopping at

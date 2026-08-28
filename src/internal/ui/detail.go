@@ -388,14 +388,15 @@ func (d *detailView) readFile(t *fileTab) (data []byte, ok bool) {
 // reload re-reads all four files (used by App.refresh).
 func (d *detailView) reload() { d.loadTabs() }
 
-// runLogExists reports whether a run.log sidecar exists for this job — the
+// sessionLogExists reports whether a session.log exists for this job — the
 // gate for both the "l" tail key (app.go's updateDetail) and its footer hint
-// (renderFooter), the same condition under which the log tab shows real
-// content (job.ReadJDIRunLogTail). A simple existence check, not a liveness
-// check: `tail -f` idles harmlessly once a run ends, so the pane is
+// (renderFooter). session.log lives in the job's own directory and is created
+// at mg-jdi run start (see cmd/mg's ensureSessionLogFile), so the gate is
+// stable from the moment a run begins. A simple existence check, not a
+// liveness check: `tail -f` idles harmlessly once a run ends, so the pane is
 // reachable for any job mg-jdi has ever driven.
-func (d *detailView) runLogExists() bool {
-	_, err := os.Stat(job.JDIRunLogPath(d.job.Root, d.job.Name))
+func (d *detailView) sessionLogExists() bool {
+	_, err := os.Stat(filepath.Join(d.job.Dir, "session.log"))
 	return err == nil
 }
 
@@ -932,9 +933,9 @@ func (d *detailView) renderFooter() string {
 		// same availability gate the key itself checks, see app.go).
 		hint += " · t tig"
 	}
-	if d.runLogExists() {
-		// "l" tails the job's mg-jdi run.log in a spawned pane — reachable
-		// whenever a run.log exists for this job (the same gate the key
+	if d.sessionLogExists() {
+		// "l" tails the job's session.log in a spawned pane — reachable
+		// whenever a session.log exists for this job (the same gate the key
 		// itself checks, see app.go), regardless of branch or tig.
 		hint += " · l tail"
 	}

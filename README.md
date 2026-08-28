@@ -862,12 +862,13 @@ no separate configuration needed there.
 output to its own terminal as each invocation completes, and rings the
 terminal bell when it stops. Every invocation's raw step-level output — the
 whole blow-by-blow of tool calls and intermediate messages, not just the
-final answer — is also persisted to the job's own `session.log`
-(`docs/jobs/<id>_<slug>/session.log`), so what an agent did during an
-unattended run survives and rides the job's branch into the archive
-(rendering/tailing it is a separate, later feature). A TUI-launched run (see
-below) has no terminal of its own at all — the list's status badge and the
-detail view's log tab are how you watch it there instead.
+final answer — is also streamed live into the job's own `session.log`
+(`docs/jobs/<id>_<slug>/session.log`) as the invocation runs, so what an
+agent did during an unattended run survives and rides the job's branch into
+the archive (the TUI's `l` key tails it live — see below). A TUI-launched
+run (see below) has no terminal of its own at all — the list's status badge,
+the detail view's log tab, and the `l` tail are how you watch it there
+instead.
 
 **Getting notified.** When `mg jdi` runs unattended on a VPS, you don't want
 to watch the terminal for it to stop. Set `NTFY_TOPIC` in `manigot/.env`
@@ -982,7 +983,7 @@ Detail view:
 | `x` / `del` | permanently delete the job — shows an in-TUI confirmation (with a dirty-worktree warning when the job's worktree has uncommitted changes), then runs the in-process delete lifecycle. `x` exists because the physical Delete/Entf key's escape sequence isn't decoded consistently by every terminal — both trigger the same action |
 | `P` | push this job's branch to `origin` (`git push -u origin <branch>`) — a quick way to make it visible on another host via `git pull` |
 | `t` | open the job's branch diff in tig (`mg diff <id> --tig`) — spawns in a tmux split pane / new terminal like agent launches; only available when tig is installed on the host |
-| `l` | tail this job's `mg jdi` `run.log` live — spawns `tail -f` in a tmux split pane / new terminal like agent launches; only available once an `mg jdi` run has happened for this job (the same gate as the log tab's real content) |
+| `l` | tail this job's `mg jdi` `session.log` live — the verbose raw stream of the current invocation, spawned as `tail -f` in a tmux split pane / new terminal like agent launches; only available once an `mg jdi` run has happened for this job (a `session.log` exists, created at run start) |
 | `c` | commit all uncommitted changes in this job's worktree (`git add -A` + `git commit` with a `[<id>] chore: commit all` message) — a catch-all sweep for the files agents sometimes leave behind, so `D`'s clean-tree check isn't tripped |
 | `g` | open the git panel — pick one of the detail view's git commands for this job's worktree: commit all, push to origin, or merge default branch (see below) |
 | `ctrl+r` | refresh (the TUI also refreshes itself automatically every second) |
@@ -992,7 +993,9 @@ The **log** tab shows `mg jdi`'s `run.log` for this job — one section per
 agent invocation, with a timestamp/agent/attempt header; the attempt number
 counts that agent's invocations within the run (per agent, not per run), so
 a bounce back to the developer shows that developer's second call as attempt
-2. It reads
+2. It is the *event summary* (agent invoked / result / next agent invoked) —
+for the verbose raw stream of what an agent actually did, press `l` instead
+(see below). It reads
 "_no mg jdi run has happened for this job yet_" until the first `mg jdi` run
 against it; large files are tailed, not loaded in full. Never editable.
 
@@ -1128,12 +1131,14 @@ while a run is active*, driving the animated indicator below:
   never shown as if it were current.
 - **Log tab** — see [Keybindings](#keybindings) above.
 - **Live tail pane** — press `l` in the detail view (available once a
-  `run.log` exists for the job) to spawn a live `tail -f` of the job's
-  `run.log` in a tmux split pane / new terminal — the same sidecar the log
-  tab reads, but updating without any refresh. Like the log tab, it updates
-  per agent invocation (mg-jdi appends at invocation boundaries, not
-  mid-invocation), and `tail -f` idles harmlessly once a run ends; end the
-  pane with Ctrl+C like any tail.
+  `session.log` exists for the job — it is created at mg-jdi run start) to
+  spawn a live `tail -f` of the job's `session.log` in a tmux split pane /
+  new terminal — the verbose raw stream, distinct from the log tab's
+  `run.log` event summary, and updating without any refresh. Because mg-jdi
+  streams each invocation's raw output into `session.log` *as it happens*
+  (not just at invocation boundaries like `run.log`), the tail shows the
+  currently running agent's blow-by-blow live; `tail -f` idles harmlessly
+  once a run ends, and you end the pane with Ctrl+C like any tail.
 
 **Notification.** A direct `mg jdi --job <id>` run rings the terminal bell
 itself when it stops (see [Autonomous mode](#autonomous-mode-mg-jdi)). A

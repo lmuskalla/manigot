@@ -152,7 +152,10 @@ func commit(t *testing.T, root, msg string) {
 
 // fakeRunner implements AgentRunner by calling fn, which simulates an agent
 // invocation's effect on disk/git — the same effect a real one would have
-// via its own file writes and commits — and returns canned output.
+// via its own file writes and commits — and returns canned output. It also
+// tees the canned output into the live writer (the session.log section the
+// loop opened), mirroring the real runner's io.MultiWriter, so the
+// loop-level session.log tests exercise the full stream path.
 type fakeRunner struct {
 	root  string
 	calls []string
@@ -160,9 +163,13 @@ type fakeRunner struct {
 	t     *testing.T
 }
 
-func (f *fakeRunner) Run(agent string, j job.Job) ([]byte, error) {
+func (f *fakeRunner) Run(agent string, j job.Job, live io.Writer) ([]byte, error) {
 	f.calls = append(f.calls, agent)
-	return f.fn(f.t, f.root, j, agent, len(f.calls)), nil
+	out := f.fn(f.t, f.root, j, agent, len(f.calls))
+	if len(out) > 0 && live != nil {
+		live.Write(out)
+	}
+	return out, nil
 }
 
 // TestRunJDIJobShortFlagAccepted pins that `-j` is a recognized alias of
@@ -426,7 +433,9 @@ func TestRunStopsOnNeedsHumanMarker(t *testing.T) {
 // "text"-event's part.text (see orchestrate.realOpenCodeJSONL) — not just
 // against the plain-text / Claude-JSON shapes the other marker tests use.
 // It also pins the run.log contract for an opencode-driven run: the log must
-// show the extracted prose (ResultText), never the raw JSONL blob.
+// show the extracted prose (ResultText), never the raw JSONL blob — while the
+// job's session.log holds the raw stream verbatim (the "are we actually
+// grabbing the output" answer for opencode).
 func TestRunStopsOnNeedsHumanMarkerInOpenCodeJSONL(t *testing.T) {
 	root, j := initTestRepo(t)
 
@@ -459,6 +468,19 @@ func TestRunStopsOnNeedsHumanMarkerInOpenCodeJSONL(t *testing.T) {
 	}
 	if !strings.Contains(out, "which auth provider should this use?") {
 		t.Errorf("run.log missing the marker reason prose, got:\n%s", out)
+	}
+	// The raw stream (the truth) also lands in the job's session.log: the
+	// capture path persists the full JSONL verbatim — every event line of the
+	// opencode-shaped stream, run.log's extracted-prose summary
+	// notwithstanding.
+	sess, err := os.ReadFile(filepath.Join(j.Dir, "session.log"))
+	if err != nil {
+		t.Fatalf("reading session.log: %v", err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(realShape), "\n") {
+		if !strings.Contains(string(sess), line) {
+			t.Errorf("session.log missing raw JSONL line %q, got:\n%s", line, sess)
+		}
 	}
 }
 
@@ -753,7 +775,7 @@ func TestRunFullLogSequenceDedupsMatchingOutput(t *testing.T) {
 
 type errRunner struct{}
 
-func (errRunner) Run(agent string, j job.Job) ([]byte, error) {
+func (errRunner) Run(agent string, j job.Job, live io.Writer) ([]byte, error) {
 	return nil, errors.New("boom")
 }
 
@@ -1067,7 +1089,7 @@ func TestCommandAgentRunnerPrunesBeforeRun(t *testing.T) {
 	t.Cleanup(func() { pruneOrphans = old })
 
 	r := &commandAgentRunner{projectRoot: dir, profile: "zai"}
-	_, err := r.Run("analyst", j)
+	_, err := r.Run("analyst", j, io.Discard)
 	if err == nil {
 		t.Fatal("Run = nil error, want the docker-launch failure (docker is not on the test PATH)")
 	}
@@ -1092,7 +1114,7 @@ func TestCommandAgentRunnerPruneFailureDoesNotAbort(t *testing.T) {
 	t.Cleanup(func() { pruneOrphans = old })
 
 	r := &commandAgentRunner{projectRoot: dir, profile: "zai"}
-	_, err := r.Run("analyst", j)
+	_, err := r.Run("analyst", j, io.Discard)
 	if err == nil {
 		t.Fatal("Run = nil error, want the docker-launch failure (docker is not on the test PATH)")
 	}
@@ -1104,16 +1126,20 @@ func TestCommandAgentRunnerPruneFailureDoesNotAbort(t *testing.T) {
 	}
 }
 
-// TestRunWritesSessionLogPerInvocation pins TASK-1's session.log persistence
-// at the loop level: Run appends one section per invocation — header
-// (agent + attempt + timestamp) followed by the raw captured output — to
-// docs/jobs/<id>_<slug>/session.log, for every invocation in order. REQUIRED
+// TestRunWritesSessionLogPerInvocation pins the live session.log streaming
+// at the loop level: Run opens one section per invocation — header (agent +
+// attempt + timestamp) written before the invocation, raw captured output
+// tee'd in during it — to docs/jobs/<id>_<slug>/session.log, for every
+// invocation in order. REQUIRED
 // (TASK-5): the git-level assertion that the worktree is clean after Run —
 // the final section must have been committed by the loop-exit sweep, or mg
 // done's clean-tree check would refuse a just-finished run. The job runs in
 // a REAL linked worktree (initLinkedWorktreeRepo), the production shape, so
 // the sweep actually commits the final section into the job's own worktree
-// and the clean-tree assertion exercises it meaningfully.
+// and the clean-tree assertion exercises it meaningfully. (The fake runner
+// itself sweeps nothing — only the loop-exit sweep can have committed the
+// section here, mirroring the container-never-started degrade of the real
+// runner.)
 func TestRunWritesSessionLogPerInvocation(t *testing.T) {
 	root, wt, j := initLinkedWorktreeRepo(t)
 	r := &fakeRunner{t: t, root: wt, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
@@ -1161,6 +1187,49 @@ func TestRunWritesSessionLogPerInvocation(t *testing.T) {
 	// never refuse a just-finished run.
 	if status := mgGit(t, wt, "status", "--porcelain"); status != "" {
 		t.Errorf("job worktree not clean after Run (final session.log section must be committed by the loop-exit sweep):\n%s", status)
+	}
+}
+
+// TestRunWritesSessionLogHeaderBeforeInvocation pins the live-streaming
+// contract's first half: the section header (agent, attempt, timestamp) is
+// written to the job's session.log BEFORE the invocation starts — the fake
+// runner's fn checks, at call time, that its own header is already in the
+// file. (The second half — the raw bytes arriving during the run — is the
+// tee the fake runner performs in Run, whose end state
+// TestRunWritesSessionLogPerInvocation asserts.)
+func TestRunWritesSessionLogHeaderBeforeInvocation(t *testing.T) {
+	root, j := initTestRepo(t)
+	// fn's call parameter is the run-wide invocation count; the session.log
+	// header uses the per-agent attempt (the same number logAgentInvoked's
+	// "invoked (attempt N)" header carries), so count per agent here.
+	attempts := map[string]int{}
+	r := &fakeRunner{t: t, root: root, fn: func(t *testing.T, root string, j job.Job, agent string, call int) []byte {
+		attempts[agent]++
+		data, err := os.ReadFile(filepath.Join(j.Dir, "session.log"))
+		if err != nil {
+			t.Fatalf("reading session.log at invocation time: %v", err)
+		}
+		if !strings.Contains(string(data), fmt.Sprintf("%s (attempt %d)", agent, attempts[agent])) {
+			t.Errorf("session.log at invocation time missing the %s (attempt %d) header — the header must be written before the invocation starts:\n%s", agent, attempts[agent], data)
+		}
+		switch agent {
+		case "analyst":
+			writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
+			commit(t, root, "[aaaa01] tasks: add breakdown")
+		case "developer":
+			writeJobFile(t, j, "implementation.md", "# Implementation\n\nTASK-1: did the thing\n")
+			commit(t, root, "[aaaa01] TASK-1: do the thing")
+		case "reviewer":
+			writeJobFile(t, j, "verdict.md", "# Verdict\n\nTASK-1: PASS\n\n## Overall\n\nAPPROVED\n")
+			commit(t, root, "[aaaa01] verdict: approved")
+		}
+		return []byte("ok")
+	}}
+
+	var log bytes.Buffer
+	got := Run(root, j, r, &log, nil)
+	if got.Kind != orchestrate.StopFinished {
+		t.Fatalf("Run.Kind = %v, want StopFinished (reason: %s)", got.Kind, got.Reason)
 	}
 }
 
@@ -1316,7 +1385,7 @@ func TestCommandAgentRunnerSweepsJobWorktree(t *testing.T) {
 	writeJobFile(t, j, "tasks.md", "# Tasks\n\nTASK-1: do the thing\n")
 
 	r := &commandAgentRunner{projectRoot: dir, profile: "zai"}
-	if _, err := r.Run("analyst", j); err != nil {
+	if _, err := r.Run("analyst", j, io.Discard); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if want := "[" + j.ID + "] chore: commit all"; mgGit(t, wt, "log", "-1", "--format=%s") != want {

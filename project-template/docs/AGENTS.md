@@ -60,8 +60,10 @@ pushes, and the other destructive subcommands are refused.
 The manigot TUI's job detail view also offers a `t` key that opens the job's
 branch diff in tig (`mg diff <job> --tig`) in a tmux split pane / new
 terminal, gated on tig being installed on the host, and an `l` key that
-tails the job's mg-jdi `run.log` live in a tmux split pane / new terminal,
-gated on a run.log existing for the job.
+tails the job's `session.log` — the verbose raw stream mg-jdi writes each
+invocation's output into as it happens, distinct from the log tab's
+`run.log` event summary — live in a tmux split pane / new terminal, gated on
+a session.log existing for the job (created at mg-jdi run start).
 `mg serve` is the listener: a long-running daemon exposing a read-only control
 API over a registry of project roots (an explicit config file,
 `<manigot checkout>/config/serve.json`, holding `{"projects": ["/abs/root",

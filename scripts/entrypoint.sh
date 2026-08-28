@@ -339,8 +339,9 @@ else
         # assistant / user / result events, one object per line — whose
         # final "result" event's "result" field carries the final response
         # text. That is strictly more than the old single-result json form:
-        # the full stream is what mg-jdi persists to the job's session.log
-        # (see jdioutput.go's appendSessionLog), not just the final answer.
+        # the full stream is what mg-jdi streams live into the job's
+        # session.log (see jdioutput.go's openSessionLog), not just the final
+        # answer.
         # --verbose is required: claude rejects stream-json under --print
         # without it ("--output-format=stream-json requires --verbose"),
         # verified against the installed version (2.1.247). Stream-json has

@@ -146,6 +146,15 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 	// to a fresh log excepted, which is what wroteSection captures.
 	logDest = &sectionWriter{w: logDest, wroteSection: wroteSection}
 
+	// Ensure the job's session.log exists before the loop so the TUI's "l"
+	// tail gate — the file's existence, see internal/ui's sessionLogExists —
+	// is stable from the moment a run begins, mirroring run.log's own
+	// up-front creation above. Best-effort: a failure only warns; the loop
+	// still creates the file per invocation (see openSessionLog).
+	if err := ensureSessionLogFile(filepath.Join(j.Dir, "session.log")); err != nil {
+		fmt.Fprintf(stderr, "mg jdi: warning: could not create session log: %v\n", err)
+	}
+
 	// Status sidecar: best-effort — a write failure
 	// (e.g. a read-only filesystem) must not abort the loop itself, only
 	// mean the TUI's list-row badge and stop-notification dedup won't see it.
@@ -299,14 +308,20 @@ func resolveJob(root, arg string) (job.Job, error) {
 // returns its captured output (the session launcher's --print path — a
 // `claude --print --verbose --output-format stream-json` event stream, an
 // `opencode run --format json` event stream, or plain text; see
-// internal/orchestrate.DetectSignal, which handles all three). Run's loop
-// persists the raw bytes to the job's session.log (appendSessionLog) and
-// extracts the response prose for run.log via orchestrate.ResultText.
+// internal/orchestrate.DetectSignal, which handles all three). live is the
+// writer the invocation's raw output is streamed into as it arrives — Run's
+// loop passes the job's open session.log section (see openSessionLog), so
+// the verbose log grows live during the invocation instead of only after it
+// finishes; implementations must tee every captured byte into it (the real
+// runner does via io.MultiWriter — see commandAgentRunner.Run). Run's loop
+// persists the returned bytes to run.log's per-invocation summary
+// (logInvocation) and extracts the response prose via
+// orchestrate.ResultText.
 //
 // Implemented by commandAgentRunner for real invocations; the tests use a
 // fake instead of spawning real containers.
 type AgentRunner interface {
-	Run(agent string, j job.Job) ([]byte, error)
+	Run(agent string, j job.Job, live io.Writer) ([]byte, error)
 }
 
 // commandAgentRunner is the real AgentRunner: it calls the session package's
@@ -337,15 +352,18 @@ func (r *commandAgentRunner) agentInvocation(agent string, j job.Job) session.Op
 // Run invokes the session launcher's --print path synchronously and returns
 // its stdout. The --print path keeps stdout clean of its own diagnostics
 // (they go to the diag writer), so stdout here is exactly the agent's own
-// response. j.Name (the exact job directory name) is passed rather than j.ID
-// to remove any ambiguity in the --job resolution.
+// response. live receives the exact same bytes as they arrive — the io.
+// MultiWriter tee that makes the job's session.log grow live during the
+// invocation (the loop passes the open sessionLog section; see Run). j.Name
+// (the exact job directory name) is passed rather than j.ID to remove any
+// ambiguity in the --job resolution.
 //
 // r.profile is passed explicitly rather than left to the launcher's own
 // default (main's --profile flag, validated and defaulted to
 // config.ProfileClaudePro there) so a run keeps using the profile it was
 // started with even when the user later changes their default profile via
 // `mg profiles` mid-run.
-func (r *commandAgentRunner) Run(agent string, j job.Job) ([]byte, error) {
+func (r *commandAgentRunner) Run(agent string, j job.Job, live io.Writer) ([]byte, error) {
 	opts := r.agentInvocation(agent, j)
 	info, err := session.ResolveProfile(opts)
 	if err != nil {
@@ -373,15 +391,20 @@ func (r *commandAgentRunner) Run(agent string, j job.Job) ([]byte, error) {
 		fmt.Fprintf(&diag, "mg: warning: could not prune orphaned containers: %v\n", err)
 	}
 
+	// Tee the container's stdout into both the capture buffer (returned to
+	// the loop for DetectSignal/ResultText) and the live session.log writer,
+	// so the verbose log grows as the bytes arrive rather than post-hoc.
 	var stdout bytes.Buffer
-	code, ran := inv.Run(os.Stdin, &stdout, &diag)
+	code, ran := inv.Run(os.Stdin, io.MultiWriter(&stdout, live), &diag)
 	// The same host-side sweep as the interactive session path: every mg-jdi
 	// --print invocation ends with leftover changes committed, including the
 	// analyst's tasks.md (the analyst is read-only and cannot commit it
-	// itself). The sweep runs before the loop's post-run stall probe reads
-	// HEAD, so the sweep commit correctly counts as agent progress. Sweep only
-	// when the container actually ran — an agent that never started must not
-	// trigger a commit.
+	// itself) and this invocation's just-streamed session.log section (the
+	// header was written before the run and the raw bytes during it, so the
+	// section is complete by the time this sweep runs). The sweep runs before
+	// the loop's post-run stall probe reads HEAD, so the sweep commit
+	// correctly counts as agent progress. Sweep only when the container
+	// actually ran — an agent that never started must not trigger a commit.
 	if ran {
 		session.SweepJobWorktree(root, &diag)
 	}
@@ -471,15 +494,21 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 	// by logImmediateStop a line above — see logJobFinished's own doc.
 	//
 	// Loop-exit sweep first: the per-invocation sweep
-	// (session.SweepJobWorktree inside commandAgentRunner.Run) runs BEFORE
-	// the loop's session.log append, so the final section would otherwise
-	// stay an uncommitted tracked modification — session.log is untracked
-	// when iteration 1 appends it, iteration 2's sweep `git add -A` commits
-	// it (now TRACKED), every later append is a tracked modification, and
-	// git.WorkingTreeDirty DOES report tracked modifications, so mg done's
-	// clean-tree check (finish.go) would refuse to finish the job. Commit
-	// everything left — the final session.log section above all — with the
-	// sweep's own message. Linked worktrees only: for a pre-worktree job
+	// (session.SweepJobWorktree inside commandAgentRunner.Run) now runs AFTER
+	// each invocation's live session.log writes — the section header is
+	// written before the invocation and the raw bytes are tee'd into the
+	// file during it, so by the time the sweep runs the section is complete,
+	// and the sweep's `git add -A` commits it (untracked on iteration 1,
+	// a tracked modification thereafter) exactly as it commits the agent's
+	// own files. What the per-invocation sweep can't cover is a run whose
+	// container never started (ran=false — the sweep is skipped, but the
+	// header may already be in the file) or a test fake runner that sweeps
+	// nothing at all; without this loop-exit sweep the final section would
+	// then stay an uncommitted tracked modification — git.WorkingTreeDirty
+	// DOES report tracked modifications, so mg done's clean-tree check
+	// (finish.go) would refuse to finish the job. Commit everything left —
+	// the final session.log section above all — with the sweep's own
+	// message. Linked worktrees only: for a pre-worktree job
 	// (branch checked out in the MAIN worktree itself — an explicitly
 	// supported, Discover-visible state) the resolved worktree IS j.Root,
 	// where the user's own uncommitted work lives — sweeping there would
@@ -545,8 +574,35 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		headBefore, _ := git.HeadCommitWithContext(probeCtx, root, j.Branch)
 		cancelProbes() // pre-agent probes done; the agent invocation below can take minutes
 
-		out, runErr := runner.Run(decision.Agent, j)
+		// Session log: open the job's session.log and write the section
+		// header (agent, attempt, timestamp) BEFORE the invocation, then
+		// stream the invocation's raw bytes into it live as they arrive —
+		// the runner tees through the live writer (see commandAgentRunner.
+		// Run's io.MultiWriter), so a `tail -f` on the file sees the
+		// blow-by-blow grow during the run instead of only after it
+		// finishes. This replaces the old post-hoc appendSessionLog call.
+		// The section is written for EVERY invocation, failed ones included,
+		// so what an agent did during an unattended run survives. Best-effort:
+		// an open failure only warns through the log writer (Run has no
+		// stderr) and never aborts the loop — the invocation still runs and
+		// its output still lands in run.log's summary; only this invocation's
+		// verbose persistence is lost, and the next invocation retries the
+		// open on its own.
+		sess, sessErr := openSessionLog(filepath.Join(j.Dir, "session.log"), decision.Agent, attempts[decision.Agent])
+		if sessErr != nil {
+			fmt.Fprintf(log, "mg jdi: warning: could not open session log: %v\n", sessErr)
+		}
+		live := io.Writer(io.Discard)
+		if sess != nil {
+			live = sess
+		}
+		out, runErr := runner.Run(decision.Agent, j, live)
 		agentEverRan = true
+		if sess != nil {
+			if cerr := sess.Close(); cerr != nil {
+				fmt.Fprintf(log, "mg jdi: warning: could not finalize session log: %v\n", cerr)
+			}
+		}
 
 		// Read the just-run agent's expected target file fresh off
 		// disk, so logInvocation can skip re-printing output that's already
@@ -570,19 +626,6 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		// directly (it does its own JSON extraction), independent of what
 		// logInvocation writes for a human to read.
 		logInvocation(log, decision.Agent, attempts[decision.Agent], out, targetFile, targetContent)
-
-		// Session log: persist this invocation's raw captured output — the
-		// whole step-level event stream, not just the final answer — to the
-		// job's own session.log (docs/jobs/<id>_<slug>/session.log), for
-		// every invocation including failed ones, so what an agent did
-		// during an unattended run survives. Best-effort: a failure only
-		// warns through the log writer (Run has no stderr) and never aborts
-		// the loop. The section stays uncommitted until the finish closure's
-		// loop-exit sweep below — the per-invocation sweep inside
-		// commandAgentRunner.Run already ran before this append.
-		if err := appendSessionLog(filepath.Join(j.Dir, "session.log"), decision.Agent, attempts[decision.Agent], out); err != nil {
-			fmt.Fprintf(log, "mg jdi: warning: could not append to session log: %v\n", err)
-		}
 
 		if sig, ok := orchestrate.DetectSignal(out); ok {
 			lastAgent = decision.Agent
