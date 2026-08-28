@@ -279,11 +279,12 @@ func TestSettingsRenderFitsHeightBudget(t *testing.T) {
 	// The settings form is not scrollable (app.go renders it as a raw string
 	// wrapped in uiPaddingStyle). It was tightened to fit a 24-row terminal's
 	// 22 content rows (24 - 2*uiPaddingY), but a blank line now separates
-	// every setting for readability, which pushes it past that budget — on a
-	// small terminal the bottom of the form may clip or scroll. This is a
-	// regression guard against further, unintended growth rather than a hard
-	// budget.
-	const maxLines = 30
+	// every setting for readability, and another separates the footer's
+	// shortcut hint from the form above it, which pushes it past that
+	// budget — on a small terminal the bottom of the form may clip or
+	// scroll. This is a regression guard against further, unintended growth
+	// rather than a hard budget.
+	const maxLines = 31
 	if got := len(strings.Split(v.render(), "\n")); got > maxLines {
 		t.Errorf("render has %d lines, want at most %d", got, maxLines)
 	}

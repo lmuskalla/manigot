@@ -451,7 +451,7 @@ func (v *settingsView) render() string {
 	b.WriteString(settingsField(v.focus == stFocusJobPrefix, "Job branch prefix", v.jobBranchPrefix.View()))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("  blank = feature/… · namespace for job branches"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Footer: status or a focus-aware hint.
 	if v.status != "" {
