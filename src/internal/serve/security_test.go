@@ -205,3 +205,70 @@ func TestResolveJobNeverTreatsSegmentAsPath(t *testing.T) {
 		t.Errorf("matched job segment: status = %d, want 200", rec.Code)
 	}
 }
+
+// TestHostileURLsRejectedOnMutatingSurface extends the hostile-segment suite
+// to job two's mutating endpoints: every new URL position (the {agent} and
+// {name} segments, and the mutating methods on the existing {project}/{job}
+// positions) must reject encoded traversal with a 4xx and never leak content
+// from outside the registered roots. Mutating requests are never allowed to
+// reach a handler's critical section with a hostile segment — validation
+// happens in the same resolveProject/resolveJob/validSegment choke points the
+// read-only surface uses.
+func TestHostileURLsRejectedOnMutatingSurface(t *testing.T) {
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("TOP-SECRET-MUTATE"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A checkout so agentlist.Discover succeeds (the launch-agent handler
+	// lists agents before validating the {agent} segment) — the hostile
+	// segment then correctly 404s as an unknown agent rather than hitting the
+	// "cannot list agents" 500 path.
+	fakeCheckout(t, map[string]string{
+		"analyst": "name: analyst\ndescription: Breaks requests into tasks.\n",
+	})
+	root := fakeJobProject(t, "wood_oak", minimalBrief("Oak", "wod", "open", "feature", "2026-08-01"))
+	reg := &Registry{entries: []Entry{entryFor(root)}}
+	srv := New(reg, "test-version", "", nil)
+	base := filepath.Base(root)
+
+	type mutURL struct {
+		method, path string
+		desc         string
+	}
+	var urls []mutURL
+
+	// Project position on the create route (the one mutating route with a
+	// {project} segment and no {job}).
+	for _, seg := range hostileSegments {
+		urls = append(urls, mutURL{http.MethodPost, "/projects/" + seg + "/jobs", "create project segment " + seg})
+	}
+	// Job position on every mutating route.
+	for _, seg := range hostileSegments {
+		urls = append(urls,
+			mutURL{http.MethodPut, "/projects/" + base + "/jobs/" + seg + "/files/brief", "edit-brief job segment " + seg},
+			mutURL{http.MethodPost, "/projects/" + base + "/jobs/" + seg + "/agents/analyst", "launch-agent job segment " + seg},
+			mutURL{http.MethodPost, "/projects/" + base + "/jobs/" + seg + "/jdi", "launch-jdi job segment " + seg},
+			mutURL{http.MethodPost, "/projects/" + base + "/jobs/" + seg + "/done", "done job segment " + seg},
+			mutURL{http.MethodPost, "/projects/" + base + "/jobs/" + seg + "/delete", "delete job segment " + seg},
+			mutURL{http.MethodPost, "/projects/" + base + "/jobs/" + seg + "/push", "push job segment " + seg},
+		)
+	}
+	// Agent position: hostile segments as the {agent}.
+	for _, seg := range hostileSegments {
+		urls = append(urls, mutURL{http.MethodPost, "/projects/" + base + "/jobs/wood_oak/agents/" + seg, "agent segment " + seg})
+	}
+	// Orphan-name position: hostile segments as the {name}.
+	for _, seg := range hostileSegments {
+		urls = append(urls, mutURL{http.MethodPost, "/projects/" + base + "/orphans/" + seg + "/delete", "orphan name segment " + seg})
+	}
+
+	for _, u := range urls {
+		rec := request(t, srv, u.method, u.path, "", "")
+		if rec.Code < 400 || rec.Code >= 500 {
+			t.Errorf("%s (%s %s): status = %d, want 4xx", u.desc, u.method, u.path, rec.Code)
+		}
+		if body := rec.Body.String(); strings.Contains(body, "TOP-SECRET") {
+			t.Errorf("%s (%s %s): response leaks secret content: %s", u.desc, u.method, u.path, body)
+		}
+	}
+}

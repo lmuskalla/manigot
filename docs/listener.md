@@ -161,27 +161,18 @@ Non-negotiable:
   reader side, riding the `session.log` capture already landed), answer
   `NEEDS-HUMAN-INPUT:` markers, `done`/`delete`/push. Per-project serialization
   enforced here.
-
-  **Gaps identified 2026-08-28, to fold into the brief:** the scope above
-  covers the job-lifecycle loop but was never checked against full CLI/TUI
-  parity for *unattended* operation, and two things fall out of that:
-  - **Orphan cleanup** — `mg prune` (orphaned containers) and orphaned-worktree
-    removal (`mg jobs`' offer / `job.RemoveOrphans`) aren't in scope anywhere.
-    A remote/headless daemon running jobs with nobody at a terminal will
-    accumulate exactly this cruft with no one to run the CLI cleanup by hand —
-    this needs an endpoint (or a background sweep), not just CLI parity.
-  - **`mg done` conflict handling** — today a squash-merge conflict is an
-    interactive prompt (offer to hand off to `@git-solver` via `mg host`, or
-    roll back on decline). The `done` endpoint hits the same conflict with no
-    human at a terminal to answer it; the brief needs to pin what the API does
-    instead (e.g. report the conflict and require an explicit follow-up call
-    rather than blocking on a prompt that can't happen over HTTP).
-
-  Deliberately still out of scope, not gaps: interactive sessions (`mg`,
-  `mg host` — no isolation by design, no terminal to attach anyway), and
-  host-machine config commands (`mg profiles`/`mg theme`/`mg setup`/
-  `mg serve-token` — credential/environment configuration, not job/run
-  control). These stay CLI-only on purpose.
+  > **DONE (job `farmer`, 2026-08-28):** the mutating API shipped as scoped —
+  > create / edit-brief / launch-agent / launch-jdi / done / delete / push /
+  > prune / orphan list+delete, with per-project serialization via
+  > `serve.ProjectLocks` (git-mutating ops lock; launches, prune and reads do
+  > not), `done` reporting squash-merge conflicts as a structured 409 (no
+  > auto-rollback, no @git-solver handoff) and requiring `{"force": true}`
+  > past the verdict warnings, and run supervision as an SSE
+  > `session-log/stream` endpoint with `?from=` resume and graceful-shutdown
+  > participation. "Answering" a `NEEDS-HUMAN-INPUT:` marker is deliberately
+  > not its own endpoint — it is the composition of edit-brief + relaunch via
+  > the endpoints above, per the brief's own decision. The web UI (job three)
+  > builds on this surface, not on polling.
 - **Job three — one frontend:** an embedded web UI port of the TUI's
   information design (on-brand one-binary, works from a phone, matches the VPS
   story). The native GUI is then a port of the same API client + same info

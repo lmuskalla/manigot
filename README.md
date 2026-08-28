@@ -297,7 +297,7 @@ its first argument:
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
 | `mg host` | run a session directly on the host, without the docker container — the profile's CLI runs as-is from the project root, so the agent can touch the host itself (thematic alias: `mg wild`, same command/behavior) |
-| `mg serve` | the listener: a long-running daemon exposing a read-only control API (projects, jobs, job files, jdi status + logs, diff, agents, health) over a registry of project roots, so any surface — a web UI, a native GUI, a future CLI — can attach to it as a client, from localhost or from a VPS; see [Listener](#listener) below |
+| `mg serve` | the listener: a long-running daemon exposing a control API (projects, jobs, job files, jdi status + logs, diff, agents, health, mutating lifecycle endpoints, and a live session-log SSE stream) over a registry of project roots, so any surface — a web UI, a native GUI, a future CLI — can attach to it as a client, from localhost or from a VPS; see [Listener](#listener) below |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
@@ -1152,13 +1152,14 @@ TUI session started watching it.
 
 ## Listener
 
-`mg serve` is the listener: a long-running daemon exposing a **read-only**
-control API over a registry of project roots, so any surface — a web UI, a
-native GUI, a future CLI — can attach to it as a client, from localhost or
-from a VPS. It is job one of the control-plane sequence; the API is read-only
-by design (mutating endpoints, live run supervision with streamed logs, and
-any frontend are later jobs — see the out-of-scope list in
+`mg serve` is the listener: a long-running daemon exposing a control API over
+a registry of project roots, so any surface — a web UI, a native GUI, a
+future CLI — can attach to it as a client, from localhost or from a VPS. It
+is the first two jobs of the control-plane sequence (read-only API, then
+mutating endpoints + live run supervision with streamed logs — see the
+out-of-scope list in
 [`docs/jobs/wood_listener-architecture/brief.md`](docs/jobs/wood_listener-architecture/brief.md)).
+Any frontend is a later job.
 
 **Registry.** An explicit config file of named project roots — no scanning, no
 auto-adopting directories the daemon finds:
@@ -1185,21 +1186,67 @@ missing or wrong token is a `401`. TLS is the reverse proxy's job (Caddy /
 nginx) — the daemon always serves plain HTTP and never terminates TLS, the
 only safe posture behind a proxy. A token without TLS is no protection.
 
-**API.** `GET /health` (version, docker image present, per-profile
+**API (read-only).** `GET /health` (version, docker image present, per-profile
 readiness), `GET /projects`, `GET /projects/<p>/jobs` (id / status / stage /
 type / date / title, plus per-job mg-jdi state),
 `GET /projects/<p>/jobs/<j>/files/<brief|tasks|implementation|verdict>`
 (raw markdown), `GET /projects/<p>/jobs/<j>/jdi` (status + `run.log` +
 `session.log` tails), `GET /projects/<p>/jobs/<j>/diff` (the `mg diff` quick
-eyeball, `?full=1` for the patch), and `GET /projects/<p>/agents`.
+eyeball, `?full=1` for the patch), `GET /projects/<p>/agents`, and
+`GET /projects/<p>/orphans`.
+
+**API (mutating).** The daemon drives a job's lifecycle, not just reports on
+it. Each git-mutating operation is serialized per project via
+`serve.ProjectLocks`:
+
+- `POST /projects/<p>/jobs` — create a job (`{"title": "...", "type":
+  "feature|fix|chore", "baseBranch": "..."}`) → `201` with the job row +
+  branch/worktree path.
+- `PUT /projects/<p>/jobs/<j>/files/brief` — replace `brief.md` wholesale
+  (an HTTP body write, no `$EDITOR`), then commit it in the job's worktree.
+  The one writable job file.
+- `POST /projects/<p>/jobs/<j>/agents/<agent>` — launch one agent one-shot,
+  detached → `202`; the caller watches the job's `session.log` (below). The
+  agent name is validated first (`404` on unknown).
+- `POST /projects/<p>/jobs/<j>/jdi` — launch `mg jdi` detached → `202`;
+  `409` when the job's status sidecar already says running (best-effort
+  double-launch guard).
+- `POST /projects/<p>/jobs/<j>/done` — archive a finished job. The
+  "verdict not approved" / "no verdict.md" warnings require `{"force":
+  true}` (a `409` echoing the CLI's warning text otherwise, never a silent
+  auto-approve); a squash-merge conflict is a structured `409` — no
+  automatic rollback, no @git-solver handoff, resolved through an explicit
+  follow-up call.
+- `POST /projects/<p>/jobs/<j>/delete` — permanently delete a job (the HTTP
+  call itself is the confirmation).
+- `POST /projects/<p>/jobs/<j>/push` — `git push -u origin <branch>`,
+  bounded by a 30s timeout.
+- `POST /prune` — prune orphaned manigot-* containers (top-level:
+  containers are not partitioned by project), reporting removed + running
+  counts.
+- `POST /projects/<p>/orphans/<name>/delete` — remove one named orphaned
+  worktree (one named resource per call, never a delete-everything route).
+
+**API (live run supervision).** `GET /projects/<p>/jobs/<j>/session-log/stream`
+is Server-Sent Events over the plain `net/http` server — the network twin of
+the TUI's `l` key, tailing the same `docs/jobs/<id>_<slug>/session.log`. It
+starts at the file's current size (tail -f), at byte 0 when the file doesn't
+exist yet (the launch-then-watch flow), or at `?from=<byte offset>` (the
+reconnect contract); each new line is flushed as an SSE `data:` frame with a
+keepalive comment on idle. The stream stops on client disconnect and
+participates in the daemon's graceful shutdown (an open stream unblocks the
+drain instead of holding it).
 
 **Security invariants** (non-negotiable): URL segments are validated as
 plain identifiers and resolved only against the registry / discovered jobs /
 the file whitelist — never joined into filesystem paths, and traversal in any
 encoding is rejected; credentials are never returned in any response and never
 logged (each request is audit-logged with timestamp, client, operation, auth
-outcome and status — never the token); and mutating operations (a later job)
-must serialize per project root via the `serve.ProjectLocks` pattern.
+outcome and status — never the token); and the git-mutating operations
+(create, edit-brief, done, delete, push, orphan-delete) serialize per project
+root via the `serve.ProjectLocks` pattern — while launch-agent, launch-jdi,
+prune and every read endpoint deliberately do NOT take the lock, so a job
+launch never waits behind an unrelated merge.
 
 ---
 

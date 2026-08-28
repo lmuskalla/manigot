@@ -66,8 +66,8 @@ invocation's output into as it happens, distinct from the log tab's
 through `jq` when available on the host, falling back to a plain `tail -f`
 otherwise), gated on a session.log existing for the job (created at mg-jdi
 run start).
-`mg serve` is the listener: a long-running daemon exposing a read-only control
-API over a registry of named project roots (an explicit config file,
+`mg serve` is the listener: a long-running daemon exposing a control API
+over a registry of named project roots (an explicit config file,
 `<manigot checkout>/config/serve.json`, holding `{"projects":
 [{"name": "my-project", "path": "/abs/root"}, ...]}` — `name` is the required,
 operator-chosen URL segment the project is served under; no scanning;
@@ -78,10 +78,19 @@ the machine's own user is the trust boundary); a non-loopback bind REQUIRES a
 bearer token (`--token` or `$MG_SERVE_TOKEN`) or the daemon refuses to start,
 and TLS is the reverse proxy's job (Caddy/nginx), never the daemon's. The v1
 API is read-only (projects, jobs, job files, jdi status + logs, diff, agents,
-health) and is a new trust boundary: URL segments are never joined into
+health); job two added the mutating lifecycle (create job, edit brief, launch
+one agent detached, launch mg jdi detached, done, delete, push, prune,
+orphaned-worktree list + delete) and a live session-log SSE stream
+(`GET .../jobs/<j>/session-log/stream` — the network twin of the TUI's `l`
+tail, resumable via `?from=<byte offset>`), with the detached launches
+returning 202 and the caller watching the job's session.log. The whole
+surface is a new trust boundary: URL segments are never joined into
 filesystem paths, credentials are never returned in any response, every
-request is audit-logged (never the token), and mutating operations (a later
-job) must serialize per project root via the `serve.ProjectLocks` pattern.
+request is audit-logged (never the token), and the git-mutating operations
+(create, edit-brief, done, delete, push, orphan-delete) serialize per project
+root via the `serve.ProjectLocks` pattern — while launch-agent, launch-jdi,
+prune and every read endpoint deliberately do NOT take the lock, so a job
+launch never waits behind an unrelated merge.
 The token is provisioned out-of-band: `mg serve-token` generates a fresh one
 into the manigot `.env` as `MG_SERVE_TOKEN`, read once at daemon startup — the
 API itself never issues, creates, or returns one.

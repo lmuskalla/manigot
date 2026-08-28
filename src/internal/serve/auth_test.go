@@ -31,6 +31,39 @@ func get(t *testing.T, srv *Server, path, auth string) *httptest.ResponseRecorde
 	return rec
 }
 
+// request performs an arbitrary-method request against the handler with an
+// optional body and Authorization header — the mutating-endpoint twin of get
+// (post/put/patch/delete). body is sent verbatim as the request body; "" sends
+// no body at all.
+func request(t *testing.T, srv *Server, method, path, auth, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var rd io.Reader
+	if body != "" {
+		rd = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, rd)
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// post performs a POST against the handler with an optional JSON body and
+// Authorization header.
+func post(t *testing.T, srv *Server, path, auth, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return request(t, srv, http.MethodPost, path, auth, body)
+}
+
+// put performs a PUT against the handler with an optional raw body and
+// Authorization header.
+func put(t *testing.T, srv *Server, path, auth, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return request(t, srv, http.MethodPut, path, auth, body)
+}
+
 // TestTokenRequiredPins the auth contract: with a token configured, the
 // correct bearer header passes, and a missing or wrong token is a 401 before
 // any handler logic runs.

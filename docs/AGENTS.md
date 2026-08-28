@@ -508,17 +508,17 @@ either way.
 
 ### Listener / control plane
 
-`mg serve` is the listener: a long-running daemon that exposes a **read-only**
-control API over a registry of project roots, so any surface — a web UI, a
-native GUI, a future CLI — can attach to it as a client, from localhost or
-from a VPS. It is job one of the control-plane sequence (`mg serve` + project
-registry + read-only API + localhost default + audit log + serialization
-skeleton); mutating endpoints, live run supervision with streamed logs, and
-any frontend are later jobs. The daemon is additive — the TUI stays
-in-process and every existing command keeps working untouched — and it is a
-**new trust boundary** with root-adjacent power (it drives docker and git and
-holds subscription credentials), so the v1 surface is deliberately read-only
-and the security invariants below are non-negotiable.
+`mg serve` is the listener: a long-running daemon exposing a control API over
+a registry of project roots, so any surface — a web UI, a native GUI, a future
+CLI — can attach to it as a client, from localhost or from a VPS. It is the
+first two jobs of the control-plane sequence (`mg serve` + project registry +
+read-only API + localhost default + audit log + serialization skeleton, then
+mutating endpoints + live run supervision with streamed logs); any frontend is
+a later job. The daemon is additive — the TUI stays in-process and every
+existing command keeps working untouched — and it is a **new trust boundary**
+with root-adjacent power (it drives docker and git and holds subscription
+credentials), so the surface is deliberately conservative and the security
+invariants below are non-negotiable.
 
 - **Project registry.** An explicit config file, `<checkout>/config/serve.json`
   (overridable via `--registry`), holding
@@ -542,7 +542,76 @@ and the security invariants below are non-negotiable.
   state), `GET /projects/<p>/jobs/<j>/files/<brief|tasks|implementation|verdict>`,
   `GET /projects/<p>/jobs/<j>/jdi` (status + `run.log` + `session.log` tails),
   `GET /projects/<p>/jobs/<j>/diff` (the `mg diff` quick eyeball, `?full=1`
-  for the patch), and `GET /projects/<p>/agents` (name + description only).
+  for the patch), `GET /projects/<p>/agents` (name + description only), and
+  `GET /projects/<p>/orphans` (orphaned-worktree listing).
+- **Mutating API.** The daemon can drive a job's lifecycle, not just report on
+  it — each mutating endpoint serialized per project via `serve.ProjectLocks`
+  (see the boundary below):
+  - `POST /projects/<p>/jobs` — create a job (`job.CreateJob`), body
+    `{"title": "...", "type": "feature|fix|chore", "baseBranch": "..."}`;
+    returns 201 with the created job's row plus branch/worktree path.
+  - `PUT /projects/<p>/jobs/<j>/files/brief` — replace a job's `brief.md`
+    wholesale (an HTTP body write, no `$EDITOR`), then commit it in the job's
+    own worktree via `session.SweepJobWorktree` so the edit never sits as an
+    uncommitted change. The one writable job file — tasks/implementation/
+    verdict stay read-only, written only by their respective agents.
+  - `POST /projects/<p>/jobs/<j>/agents/<agent>` — launch one agent, one-shot,
+    detached, via `internal/session`'s one-shot run primitive (never an
+    attached/interactive session). The agent name is validated against
+    `agentlist.Discover` first (a fast 404 on an unknown name); an optional
+    `{"profile": "..."}` body field defaults to `claude-pro`. Returns **202
+    Accepted** — the run happens in a background goroutine; the caller watches
+    it via the session-log SSE stream or by polling `GET .../jdi`'s
+    `sessionLog` tail. The run writes a `session.log` section in the job dir
+    (a one-shot invocation outside the mg-jdi loop now has a live, tailable
+    log — the writer-side capture the mg-jdi loop already had).
+  - `POST /projects/<p>/jobs/<j>/jdi` — launch `mg jdi` detached for the job
+    (`launch.Jdi`, a detached subprocess). Refuses with 409 when the job's
+    status sidecar already says running — a best-effort double-launch guard,
+    not airtight (two launches issued back-to-back before the first writes its
+    status could still both proceed). Returns 202 Accepted.
+  - `POST /projects/<p>/jobs/<j>/done` — archive a finished job
+    (`job.FinishJobWithOptions`). The "verdict not approved" / "no verdict.md"
+    warnings the CLI interactively confirms past require `{"force": true}` —
+    a 409 echoing the CLI's own warning text otherwise, never a silent
+    auto-approve. A squash-merge conflict is a structured **409**
+    (`job.ErrSquashMergeConflict`): no automatic rollback, no @git-solver
+    handoff — the job is already archived-and-committed in its own worktree at
+    that point (that step cannot be undone), and the main worktree is left in
+    its conflicted-merge state for an explicit follow-up decision through some
+    other call (e.g. launching @git-solver via the agent endpoint, or `mg
+    host` from a terminal).
+  - `POST /projects/<p>/jobs/<j>/delete` — permanently delete a job
+    (`job.DeleteJob`); the HTTP call itself is the confirmation (the same
+    pre-approved-confirm precedent the TUI established). Returns the
+    DeleteResult.
+  - `POST /projects/<p>/jobs/<j>/push` — `git push -u origin <branch>`
+    (mirroring the TUI git panel's push), bounded by a 30s timeout so a
+    stalled remote can't hang the request; a failure surfaces as a structured
+    error with git's own message.
+  - `POST /prune` — prune orphaned manigot-* containers
+    (`session.PruneOrphans`), deliberately top-level (not under a project):
+    containers are not partitioned by project. Reports removed + running
+    counts.
+  - `GET /projects/<p>/orphans` — list the project's orphaned worktrees
+    (`job.DiscoverOrphans`), read-only.
+  - `POST /projects/<p>/orphans/<name>/delete` — remove one named orphan
+    (`job.MatchOrphan` then `job.RemoveOrphansConfirmed`), the HTTP call
+    itself the confirmation. One named resource per call, never a
+    delete-everything route.
+- **Live run supervision.** `GET /projects/<p>/jobs/<j>/session-log/stream` —
+  Server-Sent Events over the plain `net/http` server (no WebSocket upgrade,
+  no new dependency): the network twin of the TUI's `l` key, tailing the same
+  `docs/jobs/<id>_<slug>/session.log` the TUI tails locally. It starts at the
+  file's current size (tail -f — only new growth), at byte 0 when the file
+  doesn't exist yet (the launch-then-watch flow), or at `?from=<byte offset>`
+  (the reconnect contract — a client resumes where it dropped and loses
+  nothing); a truncated file resets to byte 0 with a fresh `start` event. Each
+  new line is flushed as an SSE `data:` frame, with a keepalive comment on
+  idle. The stream stops on client disconnect **and** participates in the
+  daemon's graceful shutdown: `Server.Shutdown` cancels a server-scoped
+  context before draining, so an open stream unblocks and the drain returns
+  promptly instead of waiting out its full timeout.
 - **Binding + auth.** Binds `127.0.0.1:8080` by default, tokenless — the
   machine's own user is the trust boundary, as it is for the CLI. A
   non-loopback bind (neither 127.0.0.0/8 nor `::1`) REQUIRES a bearer token
@@ -562,10 +631,15 @@ and the security invariants below are non-negotiable.
   jobs / the file whitelist; they are never joined into filesystem paths, and
   traversal in any encoding is rejected. (2) **Credentials never returned** —
   no `.env` content, no keys, no tokens in any response, ever (enforced by
-  tests over the whole surface). (3) **Per-project serialization** —
-  `serve.ProjectLocks` (keyed by registered root) is the concurrency pattern
-  job two's mutating handlers MUST use; `internal/git` has no locking today,
-  and v1 read endpoints deliberately take no locks.
+  tests over the whole surface, mutating endpoints included). (3) **Per-project
+  serialization** — `serve.ProjectLocks` (keyed by registered root) serializes
+  the git-mutating operations contending on the same project's git metadata:
+  create, edit-brief, done, delete, push, and orphan-delete take
+  `s.locks.Lock(root)`. Launch-agent, launch-jdi, prune, and every read
+  endpoint deliberately do NOT — launching an agent or streaming logs doesn't
+  touch git state and must not wait behind an unrelated done/delete (a
+  job-launch that blocks behind a merge would defeat the point of a responsive
+  control plane). `internal/git` has no locking today.
 
 ### Config files
 
@@ -704,10 +778,11 @@ and the security invariants below are non-negotiable.
   that must touch the host itself (thematic alias: `mg wild`, same
   command/behavior)
 - `mg serve [--addr <host>] [--port <n>] [--registry <path>] [--token <value>]`
-  — the listener: a long-running daemon exposing a read-only control API
-  (projects, jobs, job files, jdi status + logs, diff, agents, health) over a
-  registry of project roots, so any surface — a web UI, a native GUI, a future
-  CLI — can attach to it as a client, from localhost or from a VPS. Binds
+  — the listener: a long-running daemon exposing a control API (projects,
+  jobs, job files, jdi status + logs, diff, agents, health, mutating lifecycle
+  endpoints, and a live session-log SSE stream) over a registry of project
+  roots, so any surface — a web UI, a native GUI, a future CLI — can attach to
+  it as a client, from localhost or from a VPS. Binds
   `127.0.0.1:8080` by default (tokenless — the machine's own user is the trust
   boundary); a non-loopback bind REQUIRES a bearer token (`--token` or
   `$MG_SERVE_TOKEN`) or the daemon refuses to start. TLS is the reverse

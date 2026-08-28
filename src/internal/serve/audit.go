@@ -40,6 +40,19 @@ func (rec *statusRecorder) WriteHeader(status int) {
 	rec.ResponseWriter.WriteHeader(status)
 }
 
+// Flush delegates to the underlying writer's Flush when it has one — the
+// session-log SSE stream (stream.go) type-asserts the writer it receives for
+// http.Flusher and would otherwise fail every stream with "streaming
+// unsupported", since embedding the http.ResponseWriter interface alone does
+// not promote Flush. Always defining the method (not conditionally) keeps the
+// assertion in stream.go succeeding regardless of the underlying writer; the
+// delegation is a no-op for writers that can't flush.
+func (rec *statusRecorder) Flush() {
+	if f, ok := rec.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // setAuthOutcome records the request's auth classification for the audit
 // line. The token middleware calls it on the wrapped writer (the audit
 // middleware is always the outer layer, so the writer it receives is a

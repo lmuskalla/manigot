@@ -33,6 +33,37 @@ var ErrJobNotFound = errors.New("job not found")
 // exit, not an error.
 var ErrGitSolverHandoff = errors.New("handed off to @git-solver")
 
+// ErrSquashMergeConflict is returned by FinishJobWithOptions when
+// FinishOptions.NoConflictRecovery is set and the squash merge conflicts: no
+// automatic recovery is attempted (neither the @git-solver offer nor the
+// fallback rollback — see FinishOptions's own doc for why), so the main
+// worktree is left in its conflicted-merge state and the caller must resolve
+// it — by hand, or by triggering @git-solver through a separate call —
+// before the job can be finished. The job itself is already
+// archived-and-committed in its own worktree by the time this can happen
+// (that step runs before the merge attempt), which cannot be undone without a
+// much larger restructuring than this — a caller must not assume "nothing
+// happened" from this error alone.
+var ErrSquashMergeConflict = errors.New("squash merge conflict — no automatic recovery attempted")
+
+// FinishOptions carries FinishJob's optional behavior knobs, kept separate
+// from its original positional parameters so every existing caller (the
+// CLI's `mg done`, the TUI — both via FinishJob itself) keeps its current
+// confirm-based behavior byte-for-byte unchanged; only a caller that opts in
+// via FinishJobWithOptions sees the new behavior.
+type FinishOptions struct {
+	// NoConflictRecovery, when true, makes a squash-merge conflict return
+	// ErrSquashMergeConflict immediately instead of taking FinishJob's
+	// default interactive prompt-then-recover path (offer @git-solver, or
+	// roll the main worktree back on decline). Intended for a caller with no
+	// human able to answer that interactive prompt (e.g. the HTTP daemon) —
+	// per the product decision recorded in this job's brief: report a
+	// structured error and leave things as-is, requiring an explicit
+	// follow-up decision through some other call, rather than silently
+	// picking one of the two existing interactive behaviors.
+	NoConflictRecovery bool
+}
+
 // GitSolverLaunch starts @git-solver on the host (`mg host`) in a new
 // terminal/pane, pointed at the project root, with a prompt describing the
 // interrupted `mg done` — the production wiring behind FinishJob's
@@ -82,6 +113,13 @@ type FinishResult struct {
 // declined answer returns ErrCancelled, the script's `exit 0`); informational
 // output goes to out.
 func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishResult, error) {
+	return FinishJobWithOptions(root, jobArg, confirm, out, FinishOptions{})
+}
+
+// FinishJobWithOptions is FinishJob plus FinishOptions — see its own doc for
+// the one behavior it can change (squash-merge-conflict recovery). Every
+// other step is identical to FinishJob.
+func FinishJobWithOptions(root, jobArg string, confirm ConfirmFunc, out io.Writer, opts FinishOptions) (FinishResult, error) {
 
 	// ── Resolve the job's branch + worktree ────────────────────────────────
 	branches, berr := git.LocalBranches(root)
@@ -227,6 +265,17 @@ func FinishJob(root, jobArg string, confirm ConfirmFunc, out io.Writer) (FinishR
 
 	fmt.Fprintf(out, "→ Squash-merging %s...\n", branch)
 	if err := git.SquashMerge(root, branch); err != nil {
+		if opts.NoConflictRecovery {
+			fmt.Fprintln(out, "")
+			fmt.Fprintln(out, "✗ Squash merge failed:")
+			fmt.Fprintln(out, "  "+err.Error())
+			fmt.Fprintln(out, "  No automatic recovery was attempted (NoConflictRecovery): the main worktree is")
+			fmt.Fprintf(out, "  left in its conflicted-merge state. The job directory is already archived on\n")
+			fmt.Fprintf(out, "  %s, and the job's worktree and branch still exist — that step cannot be\n", branch)
+			fmt.Fprintln(out, "  undone without a much larger restructuring. Resolve the conflict manually, or")
+			fmt.Fprintln(out, "  trigger @git-solver through a separate call, then finish the job again.")
+			return FinishResult{}, fmt.Errorf("%w: %v", ErrSquashMergeConflict, err)
+		}
 		return handleSquashMergeFailure(out, confirm, root, jobName, branch, baseBranch, preMergeHead, mainDirty, err)
 	}
 	subject := jobTitle

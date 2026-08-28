@@ -150,8 +150,8 @@ func runJDI(args []string, stdout, stderr io.Writer) int {
 	// tail gate — the file's existence, see internal/ui's sessionLogExists —
 	// is stable from the moment a run begins, mirroring run.log's own
 	// up-front creation above. Best-effort: a failure only warns; the loop
-	// still creates the file per invocation (see openSessionLog).
-	if err := ensureSessionLogFile(filepath.Join(j.Dir, "session.log")); err != nil {
+	// still creates the file per invocation (see job.OpenSessionLog).
+	if err := job.EnsureSessionLogFile(filepath.Join(j.Dir, "session.log")); err != nil {
 		fmt.Fprintf(stderr, "mg jdi: warning: could not create session log: %v\n", err)
 	}
 
@@ -310,7 +310,7 @@ func resolveJob(root, arg string) (job.Job, error) {
 // `opencode run --format json` event stream, or plain text; see
 // internal/orchestrate.DetectSignal, which handles all three). live is the
 // writer the invocation's raw output is streamed into as it arrives — Run's
-// loop passes the job's open session.log section (see openSessionLog), so
+// loop passes the job's open session.log section (see job.OpenSessionLog), so
 // the verbose log grows live during the invocation instead of only after it
 // finishes; implementations must tee every captured byte into it (the real
 // runner does via io.MultiWriter — see commandAgentRunner.Run). Run's loop
@@ -354,7 +354,7 @@ func (r *commandAgentRunner) agentInvocation(agent string, j job.Job) session.Op
 // (they go to the diag writer), so stdout here is exactly the agent's own
 // response. live receives the exact same bytes as they arrive — the io.
 // MultiWriter tee that makes the job's session.log grow live during the
-// invocation (the loop passes the open sessionLog section; see Run). j.Name
+// invocation (the loop passes the open job.SessionLog section; see Run). j.Name
 // (the exact job directory name) is passed rather than j.ID to remove any
 // ambiguity in the --job resolution.
 //
@@ -588,7 +588,7 @@ func Run(root string, j job.Job, runner AgentRunner, log io.Writer, status Statu
 		// its output still lands in run.log's summary; only this invocation's
 		// verbose persistence is lost, and the next invocation retries the
 		// open on its own.
-		sess, sessErr := openSessionLog(filepath.Join(j.Dir, "session.log"), decision.Agent, attempts[decision.Agent])
+		sess, sessErr := job.OpenSessionLog(filepath.Join(j.Dir, "session.log"), decision.Agent, attempts[decision.Agent])
 		if sessErr != nil {
 			fmt.Fprintf(log, "mg jdi: warning: could not open session log: %v\n", sessErr)
 		}

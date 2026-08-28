@@ -173,6 +173,104 @@ func TestFinishJobMergeConflictDirtyMainWorktreeNotRolledBack(t *testing.T) {
 	}
 }
 
+// --- FinishJobWithOptions / FinishOptions.NoConflictRecovery ---------------
+
+func TestFinishJobWithOptionsNoConflictRecoveryReturnsDistinguishableError(t *testing.T) {
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+
+	// The squash-merge-conflict prompt (offer @git-solver) must never be
+	// asked — that is the one prompt NoConflictRecovery skips. The earlier
+	// "Proceed?" confirmation (asked before FinishJob attempts anything) is
+	// unrelated and still happens normally.
+	var prompts []string
+	var out bytes.Buffer
+	_, err := FinishJobWithOptions(root, "ab12cd", recordingConfirm(&prompts), &out, FinishOptions{NoConflictRecovery: true})
+	if !errors.Is(err, ErrSquashMergeConflict) {
+		t.Fatalf("FinishJobWithOptions error = %v, want ErrSquashMergeConflict", err)
+	}
+	if !strings.Contains(err.Error(), "git merge --squash") {
+		t.Errorf("error lost the underlying merge failure detail: %v", err)
+	}
+	for _, p := range prompts {
+		if strings.Contains(p, "@git-solver") {
+			t.Errorf("NoConflictRecovery still asked the @git-solver offer: %v", prompts)
+		}
+	}
+}
+
+func TestFinishJobWithOptionsNoConflictRecoveryLeavesStateInPlace(t *testing.T) {
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+
+	// GitSolverLaunch must never be invoked — NoConflictRecovery skips the
+	// whole prompt-then-recover path, offer included.
+	orig := GitSolverLaunch
+	launched := false
+	GitSolverLaunch = func(agent, prompt, projectRoot, profile, terminal string) (string, error) {
+		launched = true
+		return "", nil
+	}
+	defer func() { GitSolverLaunch = orig }()
+
+	var out bytes.Buffer
+	_, err := FinishJobWithOptions(root, "ab12cd", yesConfirm, &out, FinishOptions{NoConflictRecovery: true})
+	if !errors.Is(err, ErrSquashMergeConflict) {
+		t.Fatalf("FinishJobWithOptions error = %v, want ErrSquashMergeConflict", err)
+	}
+	if launched {
+		t.Error("NoConflictRecovery invoked @git-solver — it must skip the whole prompt-then-recover path")
+	}
+	// No rollback: the conflicted merge is left in place for a follow-up call
+	// to resolve.
+	if u := gitCmd(t, root, "ls-files", "-u"); u == "" {
+		t.Errorf("no unmerged entries left in place despite NoConflictRecovery:\n%s", out.String())
+	}
+	// The job's branch + worktree survive, same as the interactive paths.
+	if ok, _ := gitExists(root, "feature/ab12cd_roundtrip-job"); !ok {
+		t.Error("job branch was deleted despite NoConflictRecovery")
+	}
+	if _, err := os.Stat(res.WorktreePath); err != nil {
+		t.Errorf("job worktree was removed despite NoConflictRecovery: %v", err)
+	}
+}
+
+func TestFinishJobWithOptionsDefaultOptionsMatchFinishJob(t *testing.T) {
+	// FinishOptions{} (the zero value) must behave exactly like plain
+	// FinishJob — the additive guarantee: a caller that doesn't opt in sees
+	// no behavior change at all, squash-merge conflicts included.
+	root, res := conflictJob(t)
+	defer os.RemoveAll(res.WorktreePath)
+
+	var prompts []string
+	var out bytes.Buffer
+	_, err := FinishJobWithOptions(root, "ab12cd", decliningGitSolverConfirm(&prompts), &out, FinishOptions{})
+	mergeConflictError(t, err)
+	if len(prompts) == 0 || prompts[len(prompts)-1] != "  Start @git-solver now (mg host)? [y/N] " {
+		t.Errorf("git-solver offer not asked under the zero-value FinishOptions: %v", prompts)
+	}
+	if !strings.Contains(out.String(), "Rolled the failed merge back") {
+		t.Errorf("missing rollback line under zero-value FinishOptions:\n%s", out.String())
+	}
+}
+
+func TestFinishJobWithOptionsNoConflictRecoverySuccessfulMergeUnaffected(t *testing.T) {
+	// A clean (non-conflicting) finish behaves identically whether or not
+	// NoConflictRecovery is set — the option only changes what happens on a
+	// squash-merge conflict.
+	root, res := createWorkedJob(t)
+
+	var out bytes.Buffer
+	fin, err := FinishJobWithOptions(root, "ab12cd", yesConfirm, &out, FinishOptions{NoConflictRecovery: true})
+	if err != nil {
+		t.Fatalf("FinishJobWithOptions: %v\n%s", err, out.String())
+	}
+	if fin.JobName != "ab12cd_roundtrip-job" || fin.Branch != "feature/ab12cd_roundtrip-job" || fin.BaseBranch != "main" {
+		t.Errorf("FinishResult = %+v", fin)
+	}
+	_ = res
+}
+
 func TestGitSolverPrompt(t *testing.T) {
 	p := gitSolverPrompt("ab12cd_roundtrip-job", "feature/ab12cd_roundtrip-job", "main")
 	for _, want := range []string{

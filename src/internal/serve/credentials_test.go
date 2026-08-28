@@ -121,6 +121,53 @@ func TestCredentialsNeverReturned(t *testing.T) {
 		assertBodyHasNoCredentials(t, rec.Body.String(), envLines, envFile.String())
 	}
 
+	// Job two's mutating surface — every mutating endpoint's response or error
+	// body (the 2xx success envelopes and the 4xx/5xx structured errors alike)
+	// must never echo .env content. All of these run against the fake non-git
+	// jobProj (gitProj has no docs/jobs, so its mutating routes resolve no
+	// job), which exercises the resolution + error-envelope paths; the success
+	// envelopes (create, edit-brief, orphans-list) carry only identifiers and
+	// status text.
+	mutating := []struct {
+		method, path, body string
+	}{
+		// create: succeeds (non-git fallback) — the 201 envelope must not echo
+		// credentials.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs", `{"title":"Cred Check"}`},
+		// create with a bad type: a 400 error envelope.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs", `{"title":"X","type":"bogus"}`},
+		// edit-brief: succeeds — the write + (non-git) warning envelope.
+		{http.MethodPut, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/files/brief", "# Brief: Cred Check\n"},
+		// launch-agent: 404 for an unknown agent (agentlist.Discover reads the
+		// checkout's agents — see fakeCheckout above), never a credential echo.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/agents/no-such-agent", ""},
+		// launch-jdi: 202 (the mg binary is stubbed), or a structured error.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/jdi", ""},
+		// done: 409 verdict warning (the fake job has no verdict) — the
+		// warning text must not echo credentials.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/done", ""},
+		// push: non-git project → a structured 500 git error envelope.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/push", ""},
+		// prune: docker absent → a structured 500 error envelope.
+		{http.MethodPost, "/prune", ""},
+		// orphans list: read-only, an empty (or populated) list envelope.
+		{http.MethodGet, "/projects/" + filepath.Base(jobProj) + "/orphans", ""},
+		// orphan delete: 404 for an unknown orphan — the error envelope.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/orphans/no-such-orphan/delete", ""},
+		// session-log stream: a bad ?from is a 400 before any SSE body — the
+		// error envelope (the stream itself is exercised in stream_test.go).
+		{http.MethodGet, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/session-log/stream?from=-1", ""},
+		// delete: resolves a real (non-git) job — the DeleteResult envelope.
+		// Kept last: it removes wood_oak, so every earlier request still
+		// resolves the job.
+		{http.MethodPost, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/delete", ""},
+	}
+	stubJdiExe(t, "/bin/true")
+	for _, m := range mutating {
+		rec := request(t, srv, m.method, m.path, auth, m.body)
+		assertBodyHasNoCredentials(t, rec.Body.String(), envLines, envFile.String())
+	}
+
 	// The 401 body (missing and wrong token) — an unauthenticated response
 	// must not leak the token either.
 	for _, badAuth := range []string{"", "Bearer wrong"} {

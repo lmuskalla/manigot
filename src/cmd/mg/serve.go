@@ -1,9 +1,10 @@
-// mg serve — the listener: a long-running daemon exposing a read-only control
-// API over a registry of project roots, so any surface (a web UI, a native
-// GUI, a future CLI) can attach to it as a client — from localhost or from a
-// VPS. This is job one of the control-plane sequence described in
-// docs/web-interface.md and the listener brief: `mg serve` + project registry
-// + read-only API + localhost default + audit log + serialization skeleton.
+// mg serve — the listener: a long-running daemon exposing a control API over a
+// registry of project roots, so any surface (a web UI, a native GUI, a future
+// CLI) can attach to it as a client — from localhost or from a VPS. This is
+// the control-plane sequence described in docs/listener.md: `mg serve` +
+// project registry + read-only API + localhost default + audit log +
+// serialization skeleton, then the mutating lifecycle endpoints and the live
+// session-log SSE stream.
 //
 // The daemon is additive: the TUI stays in-process, and every existing
 // command keeps working untouched. It binds to 127.0.0.1:8080 by default
@@ -58,7 +59,7 @@ func serveCommand(args []string, stdout, stderr io.Writer, ln net.Listener) int 
 	tokenFlag := fs.String("token", "", "bearer token required on every request (default $MG_SERVE_TOKEN)")
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "mg serve %s\n\n", version)
-		fmt.Fprintf(stderr, "The listener: a long-running daemon exposing a read-only control API\n")
+		fmt.Fprintf(stderr, "The listener: a long-running daemon exposing a control API\n")
 		fmt.Fprintf(stderr, "over a registry of project roots (the basis for the web UI / native GUI\n")
 		fmt.Fprintf(stderr, "control-plane sequence).\n\n")
 		fmt.Fprintf(stderr, "Usage:\n")
