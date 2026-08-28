@@ -1023,6 +1023,38 @@ func RevParseToplevel(root string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// RevParse resolves rev (a branch name, "HEAD", a hash, ...) to the full
+// commit hash it names, via `git rev-parse <rev>` — the rollback target
+// capture of a failed squash merge (FinishJob records the main worktree's
+// HEAD before merging so a conflict can be undone with ResetHard).
+func RevParse(root, rev string) (string, error) {
+	out, stderr, err := run(root, "rev-parse", rev)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return "", ErrNotARepo
+		}
+		return "", wrapErr("git rev-parse "+rev, err, stderr)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ResetHard resets root's index and working tree to rev, discarding any
+// staged or uncommitted changes, via `git reset --hard <rev>` — the rollback
+// for a failed squash merge, which leaves the index half-staged with no
+// MERGE_HEAD to abort from. It is deliberately destructive: callers must
+// verify the working tree holds nothing worth keeping first (FinishJob only
+// calls it after confirming the main worktree was clean before the merge).
+func ResetHard(root, rev string) error {
+	_, stderr, err := run(root, "reset", "--hard", rev)
+	if err != nil {
+		if notARepo(stderr, err) {
+			return ErrNotARepo
+		}
+		return wrapErr("git reset --hard "+rev, err, stderr)
+	}
+	return nil
+}
+
 // ConfigUserName returns the repository's configured user.name ("" when unset
 // or not a repo) — the AUTHOR source of new-job.sh (`git config user.name`
 // with its `|| echo "unknown"` fallback applied by the caller).

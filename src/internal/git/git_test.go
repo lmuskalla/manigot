@@ -523,3 +523,95 @@ func TestCheckoutFailureSurfacesGitError(t *testing.T) {
 		t.Errorf("Checkout of a missing branch misclassified as ErrNotARepo: %v", err)
 	}
 }
+
+// gitOut runs git -C dir args and returns trimmed stdout, failing on error —
+// runGit discards output, and RevParse/ResetHard tests need to compare hashes.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestRevParse(t *testing.T) {
+	dir, def := initRepo(t)
+	want := gitOut(t, dir, "rev-parse", "HEAD")
+
+	got, err := RevParse(dir, "HEAD")
+	if err != nil {
+		t.Fatalf("RevParse HEAD: %v", err)
+	}
+	if got != want {
+		t.Errorf("RevParse HEAD = %q, want %q", got, want)
+	}
+
+	// A branch name resolves to the same commit git resolves it to.
+	gotBranch, err := RevParse(dir, def)
+	if err != nil {
+		t.Fatalf("RevParse %s: %v", def, err)
+	}
+	if gotBranch != want {
+		t.Errorf("RevParse %s = %q, want %q", def, gotBranch, want)
+	}
+}
+
+func TestRevParseNotARepo(t *testing.T) {
+	_, err := RevParse(t.TempDir(), "HEAD")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("RevParse on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
+
+func TestResetHard(t *testing.T) {
+	dir, def := initRepo(t)
+	writeFile(t, dir, "a.txt", "one\n")
+	commitAll(t, dir, "one")
+	first := gitOut(t, dir, "rev-parse", "HEAD")
+
+	writeFile(t, dir, "a.txt", "two\n")
+	commitAll(t, dir, "two")
+	// A half-done merge's residue on top: staged changes + a conflicted/edited
+	// working tree (the state a failed `git merge --squash` leaves behind),
+	// plus an untracked file the rollback must leave alone.
+	writeFile(t, dir, "a.txt", "three\n")
+	writeFile(t, dir, "b.txt", "staged\n")
+	runGit(t, dir, "add", "-A")
+	writeFile(t, dir, "untracked.txt", "keep me\n")
+
+	if err := ResetHard(dir, first); err != nil {
+		t.Fatalf("ResetHard: %v", err)
+	}
+	// Index + working tree restored exactly to `first`: HEAD moved back, the
+	// staged edits are gone, and the staged b.txt no longer exists.
+	if cur := gitOut(t, dir, "rev-parse", "HEAD"); cur != first {
+		t.Errorf("HEAD after ResetHard = %q, want %q", cur, first)
+	}
+	if got := gitOut(t, dir, "show", "HEAD:a.txt"); got != "one" {
+		t.Errorf("a.txt at HEAD after ResetHard = %q, want %q", got, "one")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+		t.Errorf("a.txt missing from working tree after ResetHard: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); !os.IsNotExist(err) {
+		t.Errorf("b.txt survived ResetHard (err = %v), want it gone", err)
+	}
+	// Untracked files are not part of a merge or a reset — they must survive,
+	// so the rollback never touches the user's own stray files.
+	if _, err := os.Stat(filepath.Join(dir, "untracked.txt")); err != nil {
+		t.Errorf("untracked.txt was removed by ResetHard: %v", err)
+	}
+	// Still on the same branch — reset moves the branch ref, not the checkout.
+	if cur := gitOut(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); cur != def {
+		t.Errorf("branch after ResetHard = %q, want %q", cur, def)
+	}
+}
+
+func TestResetHardNotARepo(t *testing.T) {
+	err := ResetHard(t.TempDir(), "HEAD")
+	if !errors.Is(err, ErrNotARepo) {
+		t.Errorf("ResetHard on non-repo: err = %v, want ErrNotARepo", err)
+	}
+}
