@@ -62,6 +62,20 @@ branch diff in tig (`mg diff <job> --tig`) in a tmux split pane / new
 terminal, gated on tig being installed on the host, and an `l` key that
 tails the job's mg-jdi `run.log` live in a tmux split pane / new terminal,
 gated on a run.log existing for the job.
+`mg serve` is the listener: a long-running daemon exposing a read-only control
+API over a registry of project roots (an explicit config file,
+`<manigot checkout>/config/serve.json`, holding `{"projects": ["/abs/root",
+...]}` — no scanning; changing it means editing and restarting), so any
+surface — a web UI, a native GUI, a future CLI — can attach to it as a client
+from localhost or a VPS. It binds `127.0.0.1:8080` by default (tokenless —
+the machine's own user is the trust boundary); a non-loopback bind REQUIRES a
+bearer token (`--token` or `$MG_SERVE_TOKEN`) or the daemon refuses to start,
+and TLS is the reverse proxy's job (Caddy/nginx), never the daemon's. The v1
+API is read-only (projects, jobs, job files, jdi status + logs, diff, agents,
+health) and is a new trust boundary: URL segments are never joined into
+filesystem paths, credentials are never returned in any response, every
+request is audit-logged (never the token), and mutating operations (a later
+job) must serialize per project root via the `serve.ProjectLocks` pattern.
 Copying text from inside a session uses OSC 52: your terminal emulator must
 support it, and tmux needs `set-clipboard on` when the session runs inside
 tmux (mg forwards your terminal environment into the container and warns at

@@ -67,8 +67,8 @@ The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
 - `cmd/mg/main.go` — the single binary's dispatcher. Every command is a
   subcommand run in-process: bare `mg` (session), `profiles`, `setup`,
   `agents`/`crew`, `job`, `jobs`, `done`, `delete`, `diff`, `init`, `tui`,
-  `jdi`/`made-man`, `help`. `make mg` builds it to `bin/mg`; `make install`
-  symlinks one `mg` onto `PATH`.
+  `jdi`/`made-man`, `serve`, `host`, `help`. `make mg` builds it to `bin/mg`;
+  `make install` symlinks one `mg` onto `PATH`.
 - `internal/session` — the docker session launcher (was `scripts/run.sh`):
   profile/tool resolution, auth validation, project-root + `--job` worktree
   resolution, docker argv/mount/env construction, and the run itself.
@@ -107,6 +107,11 @@ The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
   `mg jobs`'/`mg agents`' interactive selection on a TTY.
 - `internal/orchestrate` — the `mg jdi` state machine (`@analyst` →
   `@developer` → `@reviewer`).
+- `internal/serve` — the listener daemon (`mg serve`): the project registry,
+  the HTTP server + handlers, bearer-token auth, the audit log, and the
+  per-project serialization skeleton. One package owns the daemon, mirroring
+  how `internal/session` owns the launcher; the v1 API is read-only (see
+  "Listener / control plane" below).
 - `internal/config` — the profiles table (built-ins + the user-defined
   `config/profiles.json` store, merged by `Profiles()`/`ProfileByID()`),
   `config/tui-settings.json` settings, and manigot's `.env` read/write
@@ -487,6 +492,60 @@ approximation; an external watchdog is out of scope). `NTFY_URL` defaults to
 A send failure is a stderr warning, never an abort — `mg jdi` continues
 either way.
 
+### Listener / control plane
+
+`mg serve` is the listener: a long-running daemon that exposes a **read-only**
+control API over a registry of project roots, so any surface — a web UI, a
+native GUI, a future CLI — can attach to it as a client, from localhost or
+from a VPS. It is job one of the control-plane sequence (`mg serve` + project
+registry + read-only API + localhost default + audit log + serialization
+skeleton); mutating endpoints, live run supervision with streamed logs, and
+any frontend are later jobs. The daemon is additive — the TUI stays
+in-process and every existing command keeps working untouched — and it is a
+**new trust boundary** with root-adjacent power (it drives docker and git and
+holds subscription credentials), so the v1 surface is deliberately read-only
+and the security invariants below are non-negotiable.
+
+- **Project registry.** An explicit config file, `<checkout>/config/serve.json`
+  (overridable via `--registry`), holding `{"projects": ["/abs/root", ...]}`.
+  No scanning, no auto-adopting directories the daemon finds. Registrations
+  are read once at startup; changing them means editing the file and
+  restarting (v1). Each entry is validated as an existing directory at
+  startup; a root without `docs/` is accepted (it lists no jobs rather than
+  failing startup). Every handler resolves ONLY against the registered roots —
+  the single choke point the zero-path-inputs rule builds on.
+- **Read-only API.** The state the TUI renders, over HTTP as JSON + raw
+  markdown (never ANSI): `GET /health` (version, docker image present,
+  per-profile readiness), `GET /projects`, `GET /projects/<p>/jobs` (the
+  TUI's info design — id/status/stage/type/date/title — plus per-job mg-jdi
+  state), `GET /projects/<p>/jobs/<j>/files/<brief|tasks|implementation|verdict>`,
+  `GET /projects/<p>/jobs/<j>/jdi` (status + `run.log` + `session.log` tails),
+  `GET /projects/<p>/jobs/<j>/diff` (the `mg diff` quick eyeball, `?full=1`
+  for the patch), and `GET /projects/<p>/agents` (name + description only).
+- **Binding + auth.** Binds `127.0.0.1:8080` by default, tokenless — the
+  machine's own user is the trust boundary, as it is for the CLI. A
+  non-loopback bind (neither 127.0.0.0/8 nor `::1`) REQUIRES a bearer token
+  (`--token`, else `$MG_SERVE_TOKEN` via the config/env layer) or the daemon
+  refuses to start — the guard is unskippable, there is no flag that turns it
+  off. When configured, every request must carry `Authorization: Bearer
+  <token>`, compared in constant time. TLS is the reverse proxy's job
+  (Caddy/nginx) — the daemon always serves plain HTTP and never terminates
+  TLS, the only safe posture behind a proxy. Tokens are configured
+  out-of-band; the API never issues, creates, or returns one.
+- **Audit trail.** Every request is logged — timestamp, client IP, method +
+  path, auth outcome (authed / tokenless / 401), response status — to the
+  daemon's stderr by default. The Authorization header, the token, and request
+  bodies are never logged.
+- **Security invariants.** (1) **Zero path inputs** — URL segments are
+  validated as plain identifiers and matched against the registry / discovered
+  jobs / the file whitelist; they are never joined into filesystem paths, and
+  traversal in any encoding is rejected. (2) **Credentials never returned** —
+  no `.env` content, no keys, no tokens in any response, ever (enforced by
+  tests over the whole surface). (3) **Per-project serialization** —
+  `serve.ProjectLocks` (keyed by registered root) is the concurrency pattern
+  job two's mutating handlers MUST use; `internal/git` has no locking today,
+  and v1 read endpoints deliberately take no locks.
+
 ### Config files
 
 - `manigot/.env` (gitignored) — credentials and defaults for the profiles
@@ -618,6 +677,16 @@ either way.
   back in the checkout — and never clobbering an existing host file. For work
   that must touch the host itself (thematic alias: `mg wild`, same
   command/behavior)
+- `mg serve [--addr <host>] [--port <n>] [--registry <path>] [--token <value>]`
+  — the listener: a long-running daemon exposing a read-only control API
+  (projects, jobs, job files, jdi status + logs, diff, agents, health) over a
+  registry of project roots, so any surface — a web UI, a native GUI, a future
+  CLI — can attach to it as a client, from localhost or from a VPS. Binds
+  `127.0.0.1:8080` by default (tokenless — the machine's own user is the trust
+  boundary); a non-loopback bind REQUIRES a bearer token (`--token` or
+  `$MG_SERVE_TOKEN`) or the daemon refuses to start. TLS is the reverse
+  proxy's job (Caddy/nginx), never the daemon's. See "Listener / control
+  plane" below.
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:

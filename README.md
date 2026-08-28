@@ -297,6 +297,7 @@ its first argument:
 | `mg tui` | the terminal UI, running in-process; needs `docs/` |
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
 | `mg host` | run a session directly on the host, without the docker container — the profile's CLI runs as-is from the project root, so the agent can touch the host itself (thematic alias: `mg wild`, same command/behavior) |
+| `mg serve` | the listener: a long-running daemon exposing a read-only control API (projects, jobs, job files, jdi status + logs, diff, agents, health) over a registry of project roots, so any surface — a web UI, a native GUI, a future CLI — can attach to it as a client, from localhost or from a VPS; see [Listener](#listener) below |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
@@ -1141,6 +1142,56 @@ on its own next poll, the first time it notices that job's status turn into
 `finished` or `needs human` — once per fresh stop, not on every poll while
 it stays stopped, and never for a job that was already stopped before this
 TUI session started watching it.
+
+---
+
+## Listener
+
+`mg serve` is the listener: a long-running daemon exposing a **read-only**
+control API over a registry of project roots, so any surface — a web UI, a
+native GUI, a future CLI — can attach to it as a client, from localhost or
+from a VPS. It is job one of the control-plane sequence; the API is read-only
+by design (mutating endpoints, live run supervision with streamed logs, and
+any frontend are later jobs — see the out-of-scope list in
+[`docs/jobs/wood_listener-architecture/brief.md`](docs/jobs/wood_listener-architecture/brief.md)).
+
+**Registry.** An explicit config file of project roots — no scanning, no
+auto-adopting directories the daemon finds:
+
+```bash
+# <manigot checkout>/config/serve.json  (override with --registry)
+{"projects": ["/abs/project/root", ...]}
+```
+
+Registrations are read once at startup; changing them means editing the file
+and restarting (v1). Each entry must be an existing directory; a root without
+`docs/` is accepted and simply lists no jobs.
+
+**Binding + auth.** The daemon binds `127.0.0.1:8080` by default and is
+tokenless in that shape — the machine's own user is the trust boundary, as it
+is for the CLI. A non-loopback bind (a VPS) **requires** a bearer token —
+`--token`, else `$MG_SERVE_TOKEN` — or the daemon refuses to start; there is
+no flag that turns that guard off. When a token is configured, every request
+must carry `Authorization: Bearer <token>` (compared in constant time); a
+missing or wrong token is a `401`. TLS is the reverse proxy's job (Caddy /
+nginx) — the daemon always serves plain HTTP and never terminates TLS, the
+only safe posture behind a proxy. A token without TLS is no protection.
+
+**API.** `GET /health` (version, docker image present, per-profile
+readiness), `GET /projects`, `GET /projects/<p>/jobs` (id / status / stage /
+type / date / title, plus per-job mg-jdi state),
+`GET /projects/<p>/jobs/<j>/files/<brief|tasks|implementation|verdict>`
+(raw markdown), `GET /projects/<p>/jobs/<j>/jdi` (status + `run.log` +
+`session.log` tails), `GET /projects/<p>/jobs/<j>/diff` (the `mg diff` quick
+eyeball, `?full=1` for the patch), and `GET /projects/<p>/agents`.
+
+**Security invariants** (non-negotiable): URL segments are validated as
+plain identifiers and resolved only against the registry / discovered jobs /
+the file whitelist — never joined into filesystem paths, and traversal in any
+encoding is rejected; credentials are never returned in any response and never
+logged (each request is audit-logged with timestamp, client, operation, auth
+outcome and status — never the token); and mutating operations (a later job)
+must serialize per project root via the `serve.ProjectLocks` pattern.
 
 ---
 

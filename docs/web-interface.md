@@ -170,6 +170,15 @@ Non-negotiable hardening:
 
 ## Recommendation
 
+> **Superseded (2026-08-27):** the "Job one: the daemon" slice below — `mg serve`
+> + project registry + bearer-token auth + read-only API — is now **DONE**, as
+> the listener job (see
+> [`docs/jobs/wood_listener-architecture/brief.md`](jobs/wood_listener-architecture/brief.md),
+> which resolves the web-vs-GUI fork and supersedes this recommendation; no need
+> to re-litigate). This document remains the record of the exploration and the
+> later jobs (mutating API + run supervision, then one frontend) still sequence
+> as described.
+
 Proceed, in this order:
 
 1. **Decide the fork** — control plane for background runs, no interactive
@@ -180,9 +189,10 @@ Proceed, in this order:
    story before any web code exists.
 3. **Sequence against the roadmap:** do #4 (headless — queue + away digest) and
    #5 (event-streaming) first, then:
-   - **Job one:** the daemon — `mg serve`, project registry, bearer-token auth,
+   - **Job one:** ~~the daemon — `mg serve`, project registry, bearer-token auth,
      read-only API first (projects, jobs, files, jdi status), embedded static UI
-     later.
+     later~~ — **DONE as the listener job** (see the supersession note above;
+     the embedded UI is job three).
    - **Job two:** the mutating API + background run supervision with streamed
      logs + WebSocket/SSE.
    - **Job three:** the Svelte app — a web port of the TUI's design, embedded

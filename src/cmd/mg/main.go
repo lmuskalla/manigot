@@ -1,7 +1,7 @@
 // Package main is the single manigot host-side entry point: one `mg` binary
 // implements every command (session, profiles, setup, agents, job, jobs, done,
-// delete, init, tui, jdi, host) in-process. The only bash left in the project
-// is scripts/entrypoint.sh, which runs inside the container image.
+// delete, init, tui, jdi, serve, host) in-process. The only bash left in the
+// project is scripts/entrypoint.sh, which runs inside the container image.
 package main
 
 import (
@@ -48,6 +48,8 @@ func main() {
 		os.Exit(runTUI(args[1:], os.Stdout, os.Stderr))
 	case "jdi", "made-man":
 		os.Exit(runJDI(args[1:], os.Stdout, os.Stderr))
+	case "serve":
+		os.Exit(runServe(args[1:], os.Stdout, os.Stderr))
 	case "done":
 		os.Exit(runDone(args[1:], os.Stdin, os.Stdout, os.Stderr))
 	case "delete":
@@ -135,6 +137,10 @@ Commands:
                                    docker container; the CLI runs as-is, so
                                    the agent can touch the host itself
                                    (thematic alias: mg wild)
+  mg serve                        The listener: a long-running daemon exposing
+                                   a read-only control API over a registry of
+                                   project roots (localhost default, tokenless;
+                                   a non-loopback bind requires a bearer token)
 
   mg -h, --help, help             Show this help
 
