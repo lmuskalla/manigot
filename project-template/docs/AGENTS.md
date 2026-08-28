@@ -78,6 +78,9 @@ health) and is a new trust boundary: URL segments are never joined into
 filesystem paths, credentials are never returned in any response, every
 request is audit-logged (never the token), and mutating operations (a later
 job) must serialize per project root via the `serve.ProjectLocks` pattern.
+The token is provisioned out-of-band: `mg serve-token` generates a fresh one
+into the manigot `.env` as `MG_SERVE_TOKEN`, read once at daemon startup — the
+API itself never issues, creates, or returns one.
 Copying text from inside a session uses OSC 52: your terminal emulator must
 support it, and tmux needs `set-clipboard on` when the session runs inside
 tmux (mg forwards your terminal environment into the container and warns at

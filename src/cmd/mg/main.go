@@ -50,6 +50,8 @@ func main() {
 		os.Exit(runJDI(args[1:], os.Stdout, os.Stderr))
 	case "serve":
 		os.Exit(runServe(args[1:], os.Stdout, os.Stderr))
+	case "serve-token":
+		os.Exit(runServeToken(args[1:], os.Stdout, os.Stderr))
 	case "done":
 		os.Exit(runDone(args[1:], os.Stdin, os.Stdout, os.Stderr))
 	case "delete":
@@ -137,10 +139,12 @@ Commands:
                                    docker container; the CLI runs as-is, so
                                    the agent can touch the host itself
                                    (thematic alias: mg wild)
-  mg serve                        The listener: a long-running daemon exposing
-                                   a read-only control API over a registry of
-                                   project roots (localhost default, tokenless;
-                                   a non-loopback bind requires a bearer token)
+mg serve                        The listener: a long-running daemon exposing
+                                    a read-only control API over a registry of
+                                    project roots (localhost default, tokenless;
+                                    a non-loopback bind requires a bearer token)
+   mg serve-token                   Generate a fresh secure token for mg serve
+                                    (writes MG_SERVE_TOKEN into manigot's .env)
 
   mg -h, --help, help             Show this help
 

@@ -704,6 +704,11 @@ and the security invariants below are non-negotiable.
   `$MG_SERVE_TOKEN`) or the daemon refuses to start. TLS is the reverse
   proxy's job (Caddy/nginx), never the daemon's. See "Listener / control
   plane" below.
+- `mg serve-token` — generate a fresh secure bearer token for `mg serve` and
+  write it into manigot's `.env` as `MG_SERVE_TOKEN` (32 random bytes hex via
+  `crypto/rand`); the daemon reads the token once at startup, so it takes
+  effect on the next start. The only way the token is provisioned — the API
+  itself never issues, creates, or returns one.
 
 ## Job workflow
 Each job lives in `docs/jobs/<id>_<slug>/` with four files:

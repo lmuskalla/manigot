@@ -78,9 +78,12 @@ const (
 // to it (only the input value dims when unfocused — the headline stays bold),
 // and the examples are short dim lines; the persistence location is stated
 // once per section (in the section headline, and for the profile in its
-// headline), not per field. The render is a fixed-height, non-scrollable
-// string, so vertical separation is deliberately tight — a single blank line
-// between the two sections — to fit the 22 content rows of a 24-row terminal.
+// headline), not per field. A blank line separates the title from the first
+// section, follows each section headline, and separates each setting from the
+// next (within a section and between the two sections), so the form reads as
+// distinct rows rather than a packed wall of label+input pairs. The render is
+// a fixed-height, non-scrollable string, so on a small terminal the bottom of
+// the form may clip or scroll.
 //
 // Like newJobView, it does not persist anything itself — the App calls
 // config.Save and project.Save on submit so this stays a pure input
@@ -347,17 +350,18 @@ func settingsField(focused bool, label, value string) string {
 	return "  " + headerStyle.Render(padded) + "  " + dimStyle.Render(value)
 }
 
-// render draws the form. The layout is deliberately packed: the render is a
-// raw, non-scrollable string (app.go's stateSettings branch), so it must fit
-// the 22 content rows available at a 24-row terminal (24 - 2*uiPaddingY).
-// The bold section and per-setting headlines carry the separation, so only a
-// single blank line is kept — between the two sections — and the examples are
-// short dim lines. The base branch row deliberately has no example line: its
+// render draws the form. The render is a raw, non-scrollable string (app.go's
+// stateSettings branch): a blank line separates the title from each section
+// headline, follows each section headline, and separates each setting from
+// the next within a section, so the form no longer reads as a packed wall of
+// label+input pairs. This exceeds the 22 content rows available at a 24-row
+// terminal (24 - 2*uiPaddingY) — a small terminal will clip or scroll the
+// bottom of the form. The base branch row deliberately has no example line: its
 // placeholder ("main") already communicates the blank default.
 func (v *settingsView) render() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Settings"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Personal settings section (global): editor, recent activity count,
 	// profile, terminal, theme. The section headline carries the storage
@@ -365,20 +369,20 @@ func (v *settingsView) render() string {
 	b.WriteString(headerStyle.Render("Personal settings"))
 	b.WriteString(" — ")
 	b.WriteString(dimStyle.Render("saved in config/tui-settings.json + manigot/.env"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Editor row (global).
 	b.WriteString(settingsField(v.focus == stFocusEditor, "Editor", v.editor.View()))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("  blank = use $VISUAL / $EDITOR / nano / vi"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Recent activity count row (global): the maximum number of entries the
 	// dashboard's recent-activity strip may show.
 	b.WriteString(settingsField(v.focus == stFocusCount, "Recent activity", v.recentCount.View()))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("  1–100 · blank = 5 · dashboard recent activity strip"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Profile row (global): the label has no text input next to it — the
 	// options are listed below, one per line, the selected one highlighted.
@@ -407,6 +411,7 @@ func (v *settingsView) render() string {
 		b.WriteString("    " + mark + id + rest)
 		b.WriteString("\n")
 	}
+	b.WriteString("\n")
 
 	// Terminal row (global): the command used to spawn an agent session's
 	// terminal, replacing launch's auto-detect spawn order when set. Inside
@@ -414,7 +419,7 @@ func (v *settingsView) render() string {
 	b.WriteString(settingsField(v.focus == stFocusTerminal, "Terminal", v.terminal.View()))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("  blank = auto-detect (tmux / Terminal.app / ...) · in tmux the split pane always wins"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Theme row (global): the OpenCode theme name (e.g. "nord", "tokyonight"),
 	// shared across every OpenCode profile — Claude Code already respects the
@@ -425,8 +430,7 @@ func (v *settingsView) render() string {
 	b.WriteString(dimStyle.Render("  blank = OpenCode's own default · OpenCode only"))
 	b.WriteString("\n")
 
-	// Single blank line separating the two sections — the only vertical pause
-	// the height budget affords.
+	// Blank line separating the two sections.
 	b.WriteString("\n")
 
 	// Project settings section: base branch and job branch prefix — shared
@@ -435,12 +439,12 @@ func (v *settingsView) render() string {
 	b.WriteString(headerStyle.Render("Project settings"))
 	b.WriteString(" — ")
 	b.WriteString(dimStyle.Render("stored in .manigot/manigot.json, shared with your team"))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Base branch row (project): no example line — the placeholder ("main")
 	// already communicates the blank default.
 	b.WriteString(settingsField(v.focus == stFocusBranch, "Base branch", v.baseBranch.View()))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	// Job branch prefix row (project): the namespace job branches live under,
 	// e.g. "jobs" makes a feature job's branch "jobs/feature/<id>_<slug>".
