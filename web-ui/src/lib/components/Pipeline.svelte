@@ -153,9 +153,6 @@
     font-weight: 500;
   }
 
-  .pipeline:not(.mini) {
-    padding-bottom: 24px; /* room for labels */
-  }
   .pipeline:not(.mini) .pipe-station {
     min-width: 62px; /* reserve the label's width so it never overflows */
     justify-content: center;
