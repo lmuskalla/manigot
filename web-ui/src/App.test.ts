@@ -48,12 +48,12 @@ const devServer: (urls: Record<string, Stubbed>) => (url: string) => Stubbed =
  */
 async function freshApp() {
   vi.resetModules()
-  const { render, screen, waitFor, cleanup } = await import('@testing-library/svelte')
+  const { render, screen, waitFor, fireEvent, cleanup } = await import('@testing-library/svelte')
   const { connection } = await import('$lib/state/connection.svelte')
   const { data } = await import('$lib/state/data.svelte')
   const { default: App } = await import('./App.svelte')
   cleanupFn = cleanup
-  return { render, screen, waitFor, connection, data, App }
+  return { render, screen, waitFor, fireEvent, connection, data, App }
 }
 
 let cleanupFn: (() => void) | null = null
@@ -158,15 +158,64 @@ describe('App connection flows', () => {
     })
   })
 
-  it('leaves the landing once a project is active — the redirect hash must be single', async () => {
-    // Regression: navigate(href(...)) double-prefixed the fragment
-    // ('##/p/manigot'), which parseHash cannot parse, so the app stayed on
-    // the landing ("Connecting to the daemon…") with a connected daemon.
+  it('leaves the landing once a project is active — home shows the dashboard, not a redirect', async () => {
+    // Home used to auto-redirect to the active project's jobs view; it now
+    // renders the dashboard in place, so the hash must stay '#/' once
+    // connected instead of jumping to '#/p/manigot'.
     stubFetch(
       devServer({
         '/api/health': { status: 200, body: json(HEALTH) },
         '/api/projects': { status: 200, body: json(PROJECTS) },
         '/api/projects/manigot/jobs': { status: 200, body: json({ jobs: [] }) },
+      }),
+    )
+    const { render, screen, waitFor, fireEvent, connection, App } = await freshApp()
+    render(App)
+    await waitFor(() => expect(connection.status).toBe('down'))
+
+    connection.set('/api', '')
+    await waitFor(() => expect(connection.status).toBe('up'))
+    await waitFor(() => expect(screen.getByLabelText('project')).toBeTruthy())
+
+    // The landing must be gone, and the hash must stay '#/' — no redirect.
+    await waitFor(() => {
+      expect(location.hash).toBe('#/')
+      expect(document.querySelector('.landing')).toBeNull()
+      expect(document.querySelector('h1')?.textContent).toBe('Dashboard')
+    })
+
+    // Regression guard: switching projects still goes through
+    // navigate(href(...)) — it must not double-prefix the fragment
+    // ('##/p/manigot'), which parseHash cannot parse.
+    const select = screen.getByLabelText('project') as HTMLSelectElement
+    await fireEvent.change(select, { target: { value: 'manigot' } })
+    await waitFor(() => {
+      expect(location.hash).toBe('#/p/manigot')
+      expect(document.querySelector('h1')?.textContent).toBe('manigot')
+    })
+  })
+
+  it('renders the dashboard at #/ with cross-project counts and an attention list', async () => {
+    const jobs = {
+      jobs: [
+        { id: 'a', name: 'a_x', status: 'open', stage: 'implement', type: 'feature', date: '2026-08-28', title: 'quiet job', jdi: null },
+        {
+          id: 'b',
+          name: 'b_y',
+          status: 'open',
+          stage: 'review',
+          type: 'fix',
+          date: '2026-08-27',
+          title: 'stuck job',
+          jdi: { state: 'stopped:needs-human', agent: 'reviewer', updated: '2026-08-29T00:00:00Z' },
+        },
+      ],
+    }
+    stubFetch(
+      devServer({
+        '/api/health': { status: 200, body: json(HEALTH) },
+        '/api/projects': { status: 200, body: json(PROJECTS) },
+        '/api/projects/manigot/jobs': { status: 200, body: json(jobs) },
       }),
     )
     const { render, screen, waitFor, connection, App } = await freshApp()
@@ -175,13 +224,11 @@ describe('App connection flows', () => {
 
     connection.set('/api', '')
     await waitFor(() => expect(connection.status).toBe('up'))
-    await waitFor(() => expect(screen.getByLabelText('project')).toBeTruthy())
 
-    // The landing must be gone: the redirect landed on the jobs page.
     await waitFor(() => {
-      expect(location.hash).toBe('#/p/manigot')
-      expect(document.querySelector('.landing')).toBeNull()
-      expect(document.querySelector('h1')?.textContent).toBe('manigot')
+      expect(document.querySelector('h1')?.textContent).toBe('Dashboard')
+      expect(screen.getByText('stuck job')).toBeTruthy()
+      expect(screen.getByText('manigot', { selector: '.proj-name' })).toBeTruthy()
     })
   })
 

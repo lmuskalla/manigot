@@ -1,0 +1,3680 @@
+{
+  "url": "http://localhost:5173/?mock=1#/",
+  "capturedAt": "2026-08-29T12:57:23.803Z",
+  "options": {
+    "widths": [
+      375,
+      1280
+    ],
+    "fullPage": false,
+    "describe": false
+  },
+  "prose": [],
+  "measures": [
+    {
+      "viewport": {
+        "width": 375,
+        "height": 900
+      },
+      "devicePixelRatio": 1,
+      "documentSize": {
+        "scrollWidth": 375,
+        "scrollHeight": 900,
+        "clientWidth": 375
+      },
+      "inventory": [
+        {
+          "tag": "p",
+          "classes": [
+            "eyebrow",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "overview",
+          "interactive": false,
+          "rect": {
+            "x": 16,
+            "y": 16,
+            "width": 343,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h1",
+          "classes": [
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "Dashboard",
+          "interactive": false,
+          "rect": {
+            "x": 16,
+            "y": 34.27,
+            "width": 343,
+            "height": 30
+          },
+          "fontSize": 24,
+          "fontWeight": "640",
+          "lineHeight": "30px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2",
+          "interactive": false,
+          "rect": {
+            "x": 41,
+            "y": 97.27,
+            "width": 115.5,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "projects",
+          "interactive": false,
+          "rect": {
+            "x": 41,
+            "y": 139.56,
+            "width": 115.5,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "6",
+          "interactive": false,
+          "rect": {
+            "x": 218.5,
+            "y": 97.27,
+            "width": 115.5,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "open jobs",
+          "interactive": false,
+          "rect": {
+            "x": 218.5,
+            "y": 139.56,
+            "width": 115.5,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "1",
+          "interactive": false,
+          "rect": {
+            "x": 41,
+            "y": 202.61,
+            "width": 115.5,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(242, 85, 90)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.54,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "needs human",
+          "interactive": false,
+          "rect": {
+            "x": 41,
+            "y": 244.91,
+            "width": 115.5,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2",
+          "interactive": false,
+          "rect": {
+            "x": 218.5,
+            "y": 202.61,
+            "width": 115.5,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "running",
+          "interactive": false,
+          "rect": {
+            "x": 218.5,
+            "y": 244.91,
+            "width": 115.5,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h2",
+          "classes": [
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "Needs attention",
+          "interactive": false,
+          "rect": {
+            "x": 16,
+            "y": 310.95,
+            "width": 343,
+            "height": 19.38
+          },
+          "fontSize": 15.5,
+          "fontWeight": "640",
+          "lineHeight": "19.375px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc",
+            "needs-human"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 342.33,
+            "width": 343,
+            "height": 102.97
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 363.94,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "conflict handling over HTTP",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 355.33,
+            "width": 226.91,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "harbor_needs-human-on-conflict-handling",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 377.8,
+            "width": 226.91,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-human",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "needs human",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 407.61,
+            "width": 111.84,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(242, 85, 90, 0.14)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "14 min ago",
+          "interactive": false,
+          "rect": {
+            "x": 152.84,
+            "y": 410.66,
+            "width": 58,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 453.3,
+            "width": 343,
+            "height": 102.97
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 474.91,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "listener mutating API + run supervision",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 466.3,
+            "width": 226.91,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "farmer_part-2-of-web-ui-tui-path",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 488.77,
+            "width": 226.91,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-running",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "developer running",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 518.58,
+            "width": 156.48,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2 min ago",
+          "interactive": false,
+          "rect": {
+            "x": 197.48,
+            "y": 521.63,
+            "width": 51,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 564.27,
+            "width": 343,
+            "height": 102.97
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "solyto-api",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 585.88,
+            "width": 88.41,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "rate limit headers missing on 429",
+          "interactive": false,
+          "rect": {
+            "x": 137.41,
+            "y": 577.27,
+            "width": 204.59,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "cedar_rate-limit-headers",
+          "interactive": false,
+          "rect": {
+            "x": 137.41,
+            "y": 599.73,
+            "width": 204.59,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-running",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "analyst running",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 629.55,
+            "width": 141.61,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "just now",
+          "interactive": false,
+          "rect": {
+            "x": 182.61,
+            "y": 632.59,
+            "width": 43,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 675.23,
+            "width": 343,
+            "height": 96.88
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 696.84,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "prune orphaned containers on a timer",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 688.23,
+            "width": 226.91,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "quartz_prune-on-a-timer",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 710.7,
+            "width": 226.91,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2026-08-26",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 740.52,
+            "width": 64,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 780.11,
+            "width": 343,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 801.72,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "TUI bell rings at full volume",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 793.11,
+            "width": 172.91,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "ember_tui-bell-volume",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 815.58,
+            "width": 172.91,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "3 h ago",
+          "interactive": false,
+          "rect": {
+            "x": 304,
+            "y": 803.95,
+            "width": 38,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 854.39,
+            "width": 343,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 876,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "mg doctor health check",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 867.39,
+            "width": 172.91,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "lumen_doctor-health-check",
+          "interactive": false,
+          "rect": {
+            "x": 115.09,
+            "y": 889.86,
+            "width": 172.91,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "1 d ago",
+          "interactive": false,
+          "rect": {
+            "x": 304,
+            "y": 878.23,
+            "width": 38,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h2",
+          "classes": [
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "Projects",
+          "interactive": false,
+          "rect": {
+            "x": 16,
+            "y": 952.67,
+            "width": 343,
+            "height": 19.38
+          },
+          "fontSize": 15.5,
+          "fontWeight": "640",
+          "lineHeight": "19.375px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "proj-card",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 984.05,
+            "width": 343,
+            "height": 82.63
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 1001.05,
+            "width": 309,
+            "height": 23.25
+          },
+          "fontSize": 15,
+          "fontWeight": "600",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-count",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "5 jobs",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 1030.3,
+            "width": 309,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "proj-card",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 1078.67,
+            "width": 343,
+            "height": 82.63
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "solyto-api",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 1095.67,
+            "width": 309,
+            "height": 23.25
+          },
+          "fontSize": 15,
+          "fontWeight": "600",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-count",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "1 job",
+          "interactive": false,
+          "rect": {
+            "x": 33,
+            "y": 1124.92,
+            "width": 309,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Jobs",
+          "interactive": true,
+          "rect": {
+            "x": 0,
+            "y": 855.08,
+            "width": 125,
+            "height": 44.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "560",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Crew",
+          "interactive": true,
+          "rect": {
+            "x": 125,
+            "y": 855.08,
+            "width": 125,
+            "height": 44.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "560",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Daemon",
+          "interactive": true,
+          "rect": {
+            "x": 250,
+            "y": 855.08,
+            "width": 125,
+            "height": 44.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "560",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        }
+      ],
+      "overflow": [
+        {
+          "element": "span.name.s-1uFe6eOMGzLc\"harbor_needs-human-on-conflict-handling\"",
+          "kind": "internal-horizontal-overflow",
+          "detail": "scrollWidth 273 > clientWidth 227 (overflow-x: hidden)"
+        },
+        {
+          "element": "span.title.s-1uFe6eOMGzLc\"listener mutating API + run supervision\"",
+          "kind": "internal-horizontal-overflow",
+          "detail": "scrollWidth 250 > clientWidth 227 (overflow-x: hidden)"
+        },
+        {
+          "element": "span.title.s-1uFe6eOMGzLc\"rate limit headers missing on 429\"",
+          "kind": "internal-horizontal-overflow",
+          "detail": "scrollWidth 214 > clientWidth 205 (overflow-x: hidden)"
+        },
+        {
+          "element": "span.title.s-1uFe6eOMGzLc\"prune orphaned containers on a timer\"",
+          "kind": "internal-horizontal-overflow",
+          "detail": "scrollWidth 243 > clientWidth 227 (overflow-x: hidden)"
+        },
+        {
+          "element": "span.title.s-1uFe6eOMGzLc\"TUI bell rings at full volume\"",
+          "kind": "internal-horizontal-overflow",
+          "detail": "scrollWidth 175 > clientWidth 173 (overflow-x: hidden)"
+        },
+        {
+          "element": "span.name.s-1uFe6eOMGzLc\"lumen_doctor-health-check\"",
+          "kind": "internal-horizontal-overflow",
+          "detail": "scrollWidth 175 > clientWidth 173 (overflow-x: hidden)"
+        }
+      ],
+      "alignment": [],
+      "spacingScale": [
+        2,
+        6,
+        12,
+        16,
+        32
+      ],
+      "fonts": {
+        "status": "loaded",
+        "families": [
+          {
+            "family": "Familjen Grotesk Variable",
+            "loaded": true
+          },
+          {
+            "family": "IBM Plex Mono",
+            "loaded": true
+          }
+        ],
+        "fallbacks": []
+      },
+      "overlaps": [
+        {
+          "a": "div.page.s-1uFe6eOMGzLc\"overview Dashboard 2 projects 6 open job\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.page.s-1uFe6eOMGzLc\"overview Dashboard 2 projects 6 open job\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.page.s-1uFe6eOMGzLc\"overview Dashboard 2 projects 6 open job\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.page.s-1uFe6eOMGzLc\"overview Dashboard 2 projects 6 open job\"",
+          "b": "a.s-XsEmFtvddWTw\"Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "section.block.s-1uFe6eOMGzLc\"Needs attention manigot conflict handlin\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 91% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "section.block.s-1uFe6eOMGzLc\"Needs attention manigot conflict handlin\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "section.block.s-1uFe6eOMGzLc\"Needs attention manigot conflict handlin\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "section.block.s-1uFe6eOMGzLc\"Needs attention manigot conflict handlin\"",
+          "b": "a.s-XsEmFtvddWTw\"Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "ul.jobs.s-1uFe6eOMGzLc\"manigot conflict handling over HTTP harb\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 91% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "ul.jobs.s-1uFe6eOMGzLc\"manigot conflict handling over HTTP harb\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "ul.jobs.s-1uFe6eOMGzLc\"manigot conflict handling over HTTP harb\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "ul.jobs.s-1uFe6eOMGzLc\"manigot conflict handling over HTTP harb\"",
+          "b": "a.s-XsEmFtvddWTw\"Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "li.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 91% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "li.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "li.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "li.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "a.job.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 91% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "a.job.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "a.job.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "a.job.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 87% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.left.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 81% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.left.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 53% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.left.s-1uFe6eOMGzLc\"manigot mg doctor health check lumen_doc\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 73% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "span.proj.s-1uFe6eOMGzLc\"manigot\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "span.proj.s-1uFe6eOMGzLc\"manigot\"",
+          "b": "a.s-XsEmFtvddWTw\"Jobs\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.ident.s-1uFe6eOMGzLc\"mg doctor health check lumen_doctor-heal\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 81% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "div.ident.s-1uFe6eOMGzLc\"mg doctor health check lumen_doctor-heal\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 73% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "span.title.s-1uFe6eOMGzLc\"mg doctor health check\"",
+          "b": "nav.tabbar.s-XsEmFtvddWTw\"Jobs Crew Daemon\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 100% of the smaller (z-index 0 vs 0)"
+        },
+        {
+          "a": "span.title.s-1uFe6eOMGzLc\"mg doctor health check\"",
+          "b": "a.s-XsEmFtvddWTw\"Crew\"",
+          "zA": 0,
+          "zB": 0,
+          "detail": "rects overlap 72% of the smaller (z-index 0 vs 0)"
+        }
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "devicePixelRatio": 1,
+      "documentSize": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280
+      },
+      "inventory": [
+        {
+          "tag": "a",
+          "classes": [
+            "brand",
+            "s-XsEmFtvddWTw"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 24,
+            "width": 199,
+            "height": 25.56
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "word",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 49,
+            "y": 24,
+            "width": 56.7,
+            "height": 25.56
+          },
+          "fontSize": 16.5,
+          "fontWeight": "680",
+          "lineHeight": "25.575px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "role",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "control plane",
+          "interactive": false,
+          "rect": {
+            "x": 112.7,
+            "y": 27.92,
+            "width": 95.3,
+            "height": 17.72
+          },
+          "fontSize": 9.5,
+          "fontWeight": "400",
+          "lineHeight": "14.725px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "label",
+          "classes": [
+            "eyebrow",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "project",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 73.56,
+            "width": 199,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "select",
+          "id": "project-select",
+          "classes": [
+            "select",
+            "s-XsEmFtvddWTw"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 95.83,
+            "width": 199,
+            "height": 39.69
+          },
+          "fontSize": 14,
+          "fontWeight": "400",
+          "lineHeight": "21.7px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Jobs",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 159.52,
+            "width": 199,
+            "height": 35.69
+          },
+          "fontSize": 14,
+          "fontWeight": "520",
+          "lineHeight": "21.7px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Crew",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 197.2,
+            "width": 199,
+            "height": 35.69
+          },
+          "fontSize": 14,
+          "fontWeight": "520",
+          "lineHeight": "21.7px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Daemon",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 234.89,
+            "width": 199,
+            "height": 35.69
+          },
+          "fontSize": 14,
+          "fontWeight": "520",
+          "lineHeight": "21.7px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "conn",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "connected",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 805.88,
+            "width": 199,
+            "height": 33.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "palette-hint",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "commands",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 847.25,
+            "width": 199,
+            "height": 28.75
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "kbd",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "⌘K",
+          "interactive": false,
+          "rect": {
+            "x": 18,
+            "y": 851.25,
+            "width": 25.33,
+            "height": 20.75
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "15.75px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "eyebrow",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "overview",
+          "interactive": false,
+          "rect": {
+            "x": 264,
+            "y": 32,
+            "width": 984,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h1",
+          "classes": [
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "Dashboard",
+          "interactive": false,
+          "rect": {
+            "x": 264,
+            "y": 50.27,
+            "width": 984,
+            "height": 30
+          },
+          "fontSize": 24,
+          "fontWeight": "640",
+          "lineHeight": "30px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2",
+          "interactive": false,
+          "rect": {
+            "x": 289,
+            "y": 113.27,
+            "width": 187,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "projects",
+          "interactive": false,
+          "rect": {
+            "x": 289,
+            "y": 155.56,
+            "width": 187,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "6",
+          "interactive": false,
+          "rect": {
+            "x": 538,
+            "y": 113.27,
+            "width": 187,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "open jobs",
+          "interactive": false,
+          "rect": {
+            "x": 538,
+            "y": 155.56,
+            "width": 187,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "1",
+          "interactive": false,
+          "rect": {
+            "x": 787,
+            "y": 113.27,
+            "width": 187,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(242, 85, 90)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.54,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "needs human",
+          "interactive": false,
+          "rect": {
+            "x": 787,
+            "y": 155.56,
+            "width": 187,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-v",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2",
+          "interactive": false,
+          "rect": {
+            "x": 1036,
+            "y": 113.27,
+            "width": 187,
+            "height": 40.3
+          },
+          "fontSize": 26,
+          "fontWeight": "660",
+          "lineHeight": "40.3px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": true
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "stat-k",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "running",
+          "interactive": false,
+          "rect": {
+            "x": 1036,
+            "y": 155.56,
+            "width": 187,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h2",
+          "classes": [
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "Needs attention",
+          "interactive": false,
+          "rect": {
+            "x": 264,
+            "y": 221.61,
+            "width": 984,
+            "height": 19.38
+          },
+          "fontSize": 15.5,
+          "fontWeight": "640",
+          "lineHeight": "19.375px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc",
+            "needs-human"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 252.98,
+            "width": 984,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 274.59,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "conflict handling over HTTP",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 265.98,
+            "width": 273,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "harbor_needs-human-on-conflict-handling",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 288.45,
+            "width": 273,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-human",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "needs human",
+          "interactive": false,
+          "rect": {
+            "x": 1053.16,
+            "y": 273.78,
+            "width": 111.84,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(242, 85, 90, 0.14)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "14 min ago",
+          "interactive": false,
+          "rect": {
+            "x": 1173,
+            "y": 276.83,
+            "width": 58,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 327.27,
+            "width": 984,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 348.88,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "listener mutating API + run supervision",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 340.27,
+            "width": 250,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "farmer_part-2-of-web-ui-tui-path",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 362.73,
+            "width": 250,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-running",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "developer running",
+          "interactive": false,
+          "rect": {
+            "x": 1015.52,
+            "y": 348.06,
+            "width": 156.48,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2 min ago",
+          "interactive": false,
+          "rect": {
+            "x": 1180,
+            "y": 351.11,
+            "width": 51,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 401.55,
+            "width": 984,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "solyto-api",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 423.16,
+            "width": 88.41,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "rate limit headers missing on 429",
+          "interactive": false,
+          "rect": {
+            "x": 385.41,
+            "y": 414.55,
+            "width": 214,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "cedar_rate-limit-headers",
+          "interactive": false,
+          "rect": {
+            "x": 385.41,
+            "y": 437.02,
+            "width": 214,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-running",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "analyst running",
+          "interactive": false,
+          "rect": {
+            "x": 1038.39,
+            "y": 422.34,
+            "width": 141.61,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "just now",
+          "interactive": false,
+          "rect": {
+            "x": 1188,
+            "y": 425.39,
+            "width": 43,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 475.83,
+            "width": 984,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 497.44,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "prune orphaned containers on a timer",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 488.83,
+            "width": 243,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "quartz_prune-on-a-timer",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 511.3,
+            "width": 243,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "2026-08-26",
+          "interactive": false,
+          "rect": {
+            "x": 1167,
+            "y": 499.67,
+            "width": 64,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 550.11,
+            "width": 984,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 571.72,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "TUI bell rings at full volume",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 563.11,
+            "width": 175,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "ember_tui-bell-volume",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 585.58,
+            "width": 175,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "3 h ago",
+          "interactive": false,
+          "rect": {
+            "x": 1193,
+            "y": 573.95,
+            "width": 38,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "job",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 624.39,
+            "width": 984,
+            "height": 66.28
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 646,
+            "width": 66.09,
+            "height": 23.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "title",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "mg doctor health check",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 637.39,
+            "width": 175,
+            "height": 22.47
+          },
+          "fontSize": 14.5,
+          "fontWeight": "590",
+          "lineHeight": "22.475px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "lumen_doctor-health-check",
+          "interactive": false,
+          "rect": {
+            "x": 363.09,
+            "y": 659.86,
+            "width": 175,
+            "height": 17.81
+          },
+          "fontSize": 11.5,
+          "fontWeight": "400",
+          "lineHeight": "17.825px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "when",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "1 d ago",
+          "interactive": false,
+          "rect": {
+            "x": 1193,
+            "y": 648.23,
+            "width": 38,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h2",
+          "classes": [
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "Projects",
+          "interactive": false,
+          "rect": {
+            "x": 264,
+            "y": 722.67,
+            "width": 984,
+            "height": 19.38
+          },
+          "fontSize": 15.5,
+          "fontWeight": "640",
+          "lineHeight": "19.375px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "proj-card",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 264,
+            "y": 754.05,
+            "width": 237,
+            "height": 82.63
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 771.05,
+            "width": 203,
+            "height": 23.25
+          },
+          "fontSize": 15,
+          "fontWeight": "600",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-count",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "5 jobs",
+          "interactive": false,
+          "rect": {
+            "x": 281,
+            "y": 800.3,
+            "width": 203,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "proj-card",
+            "s-1uFe6eOMGzLc"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 513,
+            "y": 754.05,
+            "width": 237,
+            "height": 82.63
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-name",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "solyto-api",
+          "interactive": false,
+          "rect": {
+            "x": 530,
+            "y": 771.05,
+            "width": 203,
+            "height": 23.25
+          },
+          "fontSize": 15,
+          "fontWeight": "600",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "proj-count",
+            "s-1uFe6eOMGzLc"
+          ],
+          "text": "1 job",
+          "interactive": false,
+          "rect": {
+            "x": 530,
+            "y": 800.3,
+            "width": 203,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        }
+      ],
+      "overflow": [],
+      "alignment": [],
+      "spacingScale": [
+        2,
+        6,
+        8,
+        12,
+        16,
+        24,
+        32,
+        536
+      ],
+      "fonts": {
+        "status": "loaded",
+        "families": [
+          {
+            "family": "Familjen Grotesk Variable",
+            "loaded": true
+          },
+          {
+            "family": "IBM Plex Mono",
+            "loaded": true
+          }
+        ],
+        "fallbacks": []
+      },
+      "overlaps": []
+    }
+  ]
+}

@@ -8,6 +8,7 @@
   import JobDetailView from '$lib/views/JobDetailView.svelte'
   import AgentsView from '$lib/views/AgentsView.svelte'
   import HealthView from '$lib/views/HealthView.svelte'
+  import DashboardView from '$lib/views/DashboardView.svelte'
   import { connection } from '$lib/state/connection.svelte'
   import { data } from '$lib/state/data.svelte'
   import { parseHash, href, navigate } from '$lib/router'
@@ -44,11 +45,6 @@
     if (connection.established > 0) {
       void data.loadProjects()
     }
-  })
-
-  // Home with a known project redirects once projects land.
-  $effect(() => {
-    if (route.name === 'home' && data.active) navigate(href({ name: 'jobs', project: data.active }))
   })
 
   function onKeydown(e: KeyboardEvent) {
@@ -141,6 +137,8 @@
       <HealthView />
     {:else if route.name === 'jobs' && route.project}
       <JobsView project={route.project} />
+    {:else if route.name === 'home' && connection.status === 'up' && !data.projectsError && data.projects.length > 0}
+      <DashboardView />
     {:else}
       <div class="landing">
         <Logo size={40} />

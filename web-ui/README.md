@@ -53,7 +53,7 @@ src/
     api/                client, endpoint paths, types, mock backend, SSE stream
     components/         Pipeline, MarkdownView, DiffView, RunConsole, modals, …
     state/              connection, data (polling), toasts stores
-    views/              JobsView, JobDetailView, AgentsView, HealthView
+    views/              DashboardView, JobsView, JobDetailView, AgentsView, HealthView
     diff.ts             parse git log/stat/patch into renderable structures
     runlog.ts           parse run.log event timeline (incl. NEEDS-HUMAN-INPUT)
     markdown.ts         sanitized markdown render + verdict/status extraction
