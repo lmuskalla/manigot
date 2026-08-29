@@ -261,6 +261,14 @@ func TestHostileURLsRejectedOnMutatingSurface(t *testing.T) {
 	for _, seg := range hostileSegments {
 		urls = append(urls, mutURL{http.MethodPost, "/projects/" + base + "/orphans/" + seg + "/delete", "orphan name segment " + seg})
 	}
+	// Settings routes (job brother): the project position on GET/PUT
+	// /projects/{project}/settings — the same resolveProject choke point.
+	for _, seg := range hostileSegments {
+		urls = append(urls,
+			mutURL{http.MethodGet, "/projects/" + seg + "/settings", "settings project segment " + seg},
+			mutURL{http.MethodPut, "/projects/" + seg + "/settings", "settings project segment " + seg},
+		)
+	}
 
 	for _, u := range urls {
 		rec := request(t, srv, u.method, u.path, "", "")

@@ -157,6 +157,16 @@ func TestCredentialsNeverReturned(t *testing.T) {
 		// session-log stream: a bad ?from is a 400 before any SSE body — the
 		// error envelope (the stream itself is exercised in stream_test.go).
 		{http.MethodGet, "/projects/" + filepath.Base(jobProj) + "/jobs/wood_oak/session-log/stream?from=-1", ""},
+		// settings (job brother): the global profile GET/PUT and the project
+		// settings GET/PUT. The PUTs write MANIGOT_PROFILE / manigot.json —
+		// their envelopes carry only profile ids and ref names, and the 400s
+		// (unknown profile, bad ref value) never echo .env content.
+		{http.MethodGet, "/settings", ""},
+		{http.MethodPut, "/settings", `{"profile":"zai"}`},
+		{http.MethodPut, "/settings", `{"profile":"bogus-profile"}`},
+		{http.MethodGet, "/projects/" + filepath.Base(jobProj) + "/settings", ""},
+		{http.MethodPut, "/projects/" + filepath.Base(jobProj) + "/settings", `{"baseBranch":"develop","jobBranchPrefix":"jobs"}`},
+		{http.MethodPut, "/projects/" + filepath.Base(jobProj) + "/settings", `{"baseBranch":"bad value"}`},
 		// delete: resolves a real (non-git) job — the DeleteResult envelope.
 		// Kept last: it removes wood_oak, so every earlier request still
 		// resolves the job.

@@ -596,10 +596,31 @@ invariants below are non-negotiable.
     counts.
   - `GET /projects/<p>/orphans` — list the project's orphaned worktrees
     (`job.DiscoverOrphans`), read-only.
-  - `POST /projects/<p>/orphans/<name>/delete` — remove one named orphan
-    (`job.MatchOrphan` then `job.RemoveOrphansConfirmed`), the HTTP call
-    itself the confirmation. One named resource per call, never a
-    delete-everything route.
+   - `POST /projects/<p>/orphans/<name>/delete` — remove one named orphan
+     (`job.MatchOrphan` then `job.RemoveOrphansConfirmed`), the HTTP call
+     itself the confirmation. One named resource per call, never a
+     delete-everything route.
+  - `GET /settings` — the effective default profile (`MANIGOT_PROFILE` via
+    `config.EnvValue`, `claude-pro` when unset — the same "Active default"
+    chain `mg profiles` reports). A plain profile id only, never credential
+    material (readiness lives in `/health` as booleans).
+  - `PUT /settings` — set the default profile, body `{"profile": "<id>"}`:
+    the id is validated against `config.ProfileByID` (400 on unknown or
+    empty), then persisted via `config.UpsertEnv("MANIGOT_PROFILE", ...)` —
+    the exact write `mg profiles <name>` makes, so CLI, TUI, and API share
+    one default. Global (manigot's `.env`), so no project lock.
+  - `GET /projects/<p>/settings` — the project's `baseBranch` (effective —
+    `main` when unset) and `jobBranchPrefix` (empty = none), via
+    `project.Load`.
+  - `PUT /projects/<p>/settings` — replace both, body
+    `{"baseBranch": "...", "jobBranchPrefix": "..."}` — a wholesale
+    replacement (an absent field clears that setting to its default),
+    written via `project.Save` (the TUI settings screen's own writer into
+    `.manigot/manigot.json`). Non-empty values are validated as ref
+    components (no spaces/control chars, no `..`, no leading `-`, ...) so
+    garbage is a 400 at write time instead of an opaque git failure later.
+    Takes the project lock: create/done read these settings inside their
+    own locked sections, and the write must not interleave with them.
 - **Live run supervision.** `GET /projects/<p>/jobs/<j>/session-log/stream` —
   Server-Sent Events over the plain `net/http` server (no WebSocket upgrade,
   no new dependency): the network twin of the TUI's `l` key, tailing the same
@@ -635,8 +656,9 @@ invariants below are non-negotiable.
   tests over the whole surface, mutating endpoints included). (3) **Per-project
   serialization** — `serve.ProjectLocks` (keyed by registered root) serializes
   the git-mutating operations contending on the same project's git metadata:
-  create, edit-brief, done, delete, push, and orphan-delete take
-  `s.locks.Lock(root)`. Launch-agent, launch-jdi, prune, and every read
+  create, edit-brief, done, delete, push, orphan-delete, and the
+  project-settings write take `s.locks.Lock(root)`. Launch-agent, launch-jdi,
+  prune, the global settings write (no project scope), and every read
   endpoint deliberately do NOT — launching an agent or streaming logs doesn't
   touch git state and must not wait behind an unrelated done/delete (a
   job-launch that blocks behind a merge would defeat the point of a responsive

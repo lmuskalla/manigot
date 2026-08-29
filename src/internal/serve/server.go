@@ -89,6 +89,13 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /projects/{project}/orphans", s.handleProjectOrphans)
 	mux.HandleFunc("POST /projects/{project}/orphans/{name}/delete", s.handleDeleteOrphan)
 
+	// Settings (job brother): the global default profile, and the
+	// per-project baseBranch + jobBranchPrefix — see settings.go.
+	mux.HandleFunc("GET /settings", s.handleGetSettings)
+	mux.HandleFunc("PUT /settings", s.handlePutSettings)
+	mux.HandleFunc("GET /projects/{project}/settings", s.handleGetProjectSettings)
+	mux.HandleFunc("PUT /projects/{project}/settings", s.handlePutProjectSettings)
+
 	// Live run supervision (job two).
 	mux.HandleFunc("GET /projects/{project}/jobs/{job}/session-log/stream", s.handleSessionLogStream)
 }
