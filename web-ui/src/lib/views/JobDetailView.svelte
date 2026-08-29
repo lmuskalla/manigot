@@ -506,6 +506,9 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-m);
   }
+  .stage-row .chip {
+    margin-left: auto; /* pin the running/human badge to the box's right edge */
+  }
 
   .human {
     display: flex;
