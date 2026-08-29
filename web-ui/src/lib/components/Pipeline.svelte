@@ -30,31 +30,60 @@
   role="img"
   aria-label={`stage {stage} of define, plan, implement, review, finished`}
 >
-  {#each STAGES as s, i (s)}
-    {#if i > 0}
-      <span class="pipe-seg" class:seg-done={i <= idx}></span>
-    {/if}
-    <span class="pipe-station">
-      <span
-        class="pipe-node"
-        class:passed={i < idx}
-        class:current={i === idx}
-        class:pending={i > idx}
-        class:is-running={i === idx && running}
-        class:is-human={i === idx && needsHuman}
-        class:is-done={finished || i < idx}
-      ></span>
-      {#if variant === 'full'}
-        <span class="pipe-label" class:label-active={i === idx}>{s}</span>
+  {#if variant === 'full'}
+    <div class="pipe-track">
+      {#each STAGES as s, i (s)}
+        {#if i > 0}
+          <span class="pipe-seg" class:seg-done={i <= idx}></span>
+        {/if}
+        <span class="pipe-station">
+          <span
+            class="pipe-node"
+            class:passed={i < idx}
+            class:current={i === idx}
+            class:pending={i > idx}
+            class:is-running={i === idx && running}
+            class:is-human={i === idx && needsHuman}
+            class:is-done={finished || i < idx}
+          ></span>
+        </span>
+      {/each}
+    </div>
+    <div class="pipe-labels">
+      {#each STAGES as s, i (s)}
+        <span class="pipe-label-slot">
+          <span class="pipe-label" class:label-active={i === idx}>{s}</span>
+        </span>
+      {/each}
+    </div>
+  {:else}
+    {#each STAGES as s, i (s)}
+      {#if i > 0}
+        <span class="pipe-seg" class:seg-done={i <= idx}></span>
       {/if}
-    </span>
-  {/each}
+      <span class="pipe-station">
+        <span
+          class="pipe-node"
+          class:passed={i < idx}
+          class:current={i === idx}
+          class:pending={i > idx}
+          class:is-running={i === idx && running}
+          class:is-human={i === idx && needsHuman}
+          class:is-done={finished || i < idx}
+        ></span>
+      </span>
+    {/each}
+  {/if}
 </div>
 
 <style>
   .pipeline {
     display: flex;
     align-items: flex-start;
+  }
+  .pipeline:not(.mini) {
+    flex-direction: column;
+    align-items: stretch;
   }
   /* mini: real dimensions, not a transform — the layout box must shrink with
      the visuals or the row starves its text columns. */
@@ -78,6 +107,15 @@
     display: flex;
     align-items: center;
     height: 13px; /* node height — keeps the line vertically centered */
+  }
+
+  .pipe-track,
+  .pipe-labels {
+    display: flex;
+    align-items: center;
+  }
+  .pipe-labels {
+    align-items: flex-start;
   }
 
   .pipe-node {
@@ -138,10 +176,7 @@
   }
 
   .pipe-label {
-    position: absolute;
-    top: 19px;
-    left: 50%;
-    transform: translateX(-50%);
+    display: block;
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;
@@ -156,6 +191,10 @@
   .pipeline:not(.mini) .pipe-station {
     min-width: 62px; /* reserve the label's width so it never overflows */
     justify-content: center;
+  }
+  .pipeline:not(.mini) .pipe-label-slot {
+    min-width: 62px;
+    text-align: center;
   }
   .pipeline:not(.mini) .pipe-seg {
     width: 20px;
