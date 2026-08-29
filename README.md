@@ -298,6 +298,7 @@ its first argument:
 | `mg jdi` | drive a job's `@analyst` → `@developer` → `@reviewer` sequence unattended, in-process; needs `docs/` (thematic alias: `mg made-man`, same command/behavior) |
 | `mg host` | run a session directly on the host, without the docker container — the profile's CLI runs as-is from the project root, so the agent can touch the host itself (thematic alias: `mg wild`, same command/behavior) |
 | `mg serve` | the listener: a long-running daemon exposing a control API (projects, jobs, job files, jdi status + logs, diff, agents, health, mutating lifecycle endpoints, and a live session-log SSE stream) over a registry of project roots, so any surface — a web UI, a native GUI, a future CLI — can attach to it as a client, from localhost or from a VPS; see [Listener](#listener) below |
+| `mg serve-projects` | manage the projects registered for `mg serve` — list them, add a project root (`add [path] [name]`: path defaults to the current directory, name to the path's base name), remove one by name; edits `config/serve.json` with the daemon's own validation, picked up on the next daemon start |
 | `mg --help` | print usage and exit — no docker/auth setup touched |
 
 `mg` is a symlink back into the repo, so `git pull` updates it. `make
@@ -1172,7 +1173,10 @@ auto-adopting directories the daemon finds:
 `name` is required — the URL segment the project is served under, chosen by
 you (a single URL-safe path segment, unique across the registry). Nothing is
 auto-derived from the directory name. Registrations are read once at startup;
-changing them means editing the file and restarting (v1). Each entry's `path`
+change them with `mg serve-projects` (`add [path] [name]` / `rm <name>` /
+list — path defaulting to the current directory, name to the path's base
+name, the same validation applied on write) or by editing the file, then
+restart the daemon (v1). Each entry's `path`
 must be an existing directory; a root without `docs/` is accepted and simply
 lists no jobs.
 

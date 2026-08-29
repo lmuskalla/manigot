@@ -526,7 +526,8 @@ invariants below are non-negotiable.
   entry an operator-chosen `name` (the URL segment the project is served
   under) plus its `path`. No scanning, no auto-adopting directories the
   daemon finds. Registrations are read once at startup; changing them means
-  editing the file and restarting (v1). Each entry is validated at startup:
+  `mg serve-projects add/rm` (or editing the file) and restarting (v1). Each
+  entry is validated at startup:
   `name` non-empty, a single URL-safe path segment (no `/` or `\`, not `.` or
   `..`, charset `[A-Za-z0-9._-]`), unique across the registry; `path` an
   existing directory. A bad entry — an invalid or duplicate name, a duplicate
@@ -788,6 +789,14 @@ invariants below are non-negotiable.
   `$MG_SERVE_TOKEN`) or the daemon refuses to start. TLS is the reverse
   proxy's job (Caddy/nginx), never the daemon's. See "Listener / control
   plane" below.
+- `mg serve-projects [list|add|rm] [--registry <path>]` — manage the projects
+  registered for `mg serve` in `config/serve.json`: list them, add a project
+  root (`add [path] [name]` — path defaults to `$PWD`, name to the path's
+  base name), or remove one by name. Writes go through the store functions
+  beside `LoadRegistry`, so the same validation the daemon enforces at
+  startup (URL-safe unique name, existing directory, no duplicate paths) is
+  applied on write, and a corrupt file is never silently rewritten; a
+  running daemon picks the changes up on its next start.
 - `mg serve-token` — generate a fresh secure bearer token for `mg serve` and
   write it into manigot's `.env` as `MG_SERVE_TOKEN` (32 random bytes hex via
   `crypto/rand`); the daemon reads the token once at startup, so it takes

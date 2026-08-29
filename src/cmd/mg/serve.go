@@ -69,7 +69,8 @@ func serveCommand(args []string, stdout, stderr io.Writer, ln net.Listener) int 
 		fmt.Fprintf(stderr, "\"name\" is the URL segment the project is served under (a single URL-safe\n")
 		fmt.Fprintf(stderr, "path segment, unique across the registry); it is required and chosen by you.\n")
 		fmt.Fprintf(stderr, "Default location: <manigot checkout>/config/serve.json (override with --registry).\n")
-		fmt.Fprintf(stderr, "Changing the registered roots means editing the file and restarting.\n\n")
+		fmt.Fprintf(stderr, "Manage the registered roots with `mg serve-projects` (or edit the file by\n")
+		fmt.Fprintf(stderr, "hand); the daemon reads it once at startup, so restart to pick up changes.\n\n")
 		fmt.Fprintf(stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
@@ -133,7 +134,7 @@ func serveCommand(args []string, stdout, stderr io.Writer, ln net.Listener) int 
 		fmt.Fprintln(stdout, "No token configured — tokenless mode (safe only on a loopback bind).")
 	}
 	if len(reg.Projects()) == 0 {
-		fmt.Fprintln(stdout, "Warning: no projects registered — edit the registry config and restart to serve any.")
+		fmt.Fprintln(stdout, "Warning: no projects registered — add some with `mg serve-projects add` and restart to serve any.")
 	}
 
 	// Serve until SIGINT/SIGTERM, then drain in-flight requests within a

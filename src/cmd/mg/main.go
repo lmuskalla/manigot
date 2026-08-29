@@ -50,6 +50,8 @@ func main() {
 		os.Exit(runJDI(args[1:], os.Stdout, os.Stderr))
 	case "serve":
 		os.Exit(runServe(args[1:], os.Stdout, os.Stderr))
+	case "serve-projects":
+		os.Exit(runServeProjects(args[1:], os.Stdout, os.Stderr))
 	case "serve-token":
 		os.Exit(runServeToken(args[1:], os.Stdout, os.Stderr))
 	case "done":
@@ -140,11 +142,16 @@ Commands:
                                    the agent can touch the host itself
                                    (thematic alias: mg wild)
 mg serve                        The listener: a long-running daemon exposing
-                                    a read-only control API over a registry of
-                                    project roots (localhost default, tokenless;
-                                    a non-loopback bind requires a bearer token)
+                                     a read-only control API over a registry of
+                                     project roots (localhost default, tokenless;
+                                     a non-loopback bind requires a bearer token)
+  mg serve-projects [list|add|rm]  Manage the projects registered for
+                                     mg serve (config/serve.json): list them,
+                                     add a project root (path defaults to $PWD,
+                                     name to the path's base name), remove one
+                                     by name
    mg serve-token                   Generate a fresh secure token for mg serve
-                                    (writes MG_SERVE_TOKEN into manigot's .env)
+                                     (writes MG_SERVE_TOKEN into manigot's .env)
 
   mg -h, --help, help             Show this help
 

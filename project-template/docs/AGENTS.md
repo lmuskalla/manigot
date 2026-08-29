@@ -71,7 +71,8 @@ over a registry of named project roots (an explicit config file,
 `<manigot checkout>/config/serve.json`, holding `{"projects":
 [{"name": "my-project", "path": "/abs/root"}, ...]}` — `name` is the required,
 operator-chosen URL segment the project is served under; no scanning;
-changing it means editing and restarting), so any surface — a web UI, a
+change it with `mg serve-projects add/rm` — or by editing — and restart), so
+any surface — a web UI, a
 native GUI, a future CLI — can attach to it as a client from localhost or a
 VPS. It binds `127.0.0.1:8080` by default (tokenless —
 the machine's own user is the trust boundary); a non-loopback bind REQUIRES a

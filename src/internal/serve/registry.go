@@ -198,6 +198,106 @@ func (r *Registry) WarnMissingDocs(w io.Writer) {
 	}
 }
 
+// ValidProjectName reports whether name is an acceptable registry entry
+// name — the same rule the daemon enforces at startup (see LoadRegistry):
+// non-empty, a single URL-safe path segment ([A-Za-z0-9._-]), not "." or
+// "..". Exported for the mg serve-projects CLI, which validates a proposed
+// name (a default derived from a directory's base name can still fail it).
+func ValidProjectName(name string) bool {
+	return validProjectName(name)
+}
+
+// AddRegistryEntry appends one {name, root} entry to the registry config at
+// registryPath, creating the file (and its parent directory) when it does not
+// exist yet, and returns the stored entry (root resolved to its absolute,
+// cleaned form). The existing file is loaded through LoadRegistry's full
+// validation first — a broken registry is never silently rewritten — and the
+// new entry must satisfy the same rules the daemon enforces at startup: a
+// valid, registry-unique name; an existing directory; and a path not already
+// registered under another name. The daemon reads the registry once at
+// startup, so a running mg serve picks the change up on its next start.
+func AddRegistryEntry(registryPath, name, root string) (Entry, error) {
+	if !validProjectName(name) {
+		return Entry{}, fmt.Errorf("registry %s: entry name %q is invalid — it must be non-empty, a single URL-safe path segment (%s), not \".\" or \"..\"", registryPath, name, projectNamePattern.String())
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return Entry{}, fmt.Errorf("registry %s: entry %q: resolve %q: %w", registryPath, name, root, err)
+	}
+	abs = filepath.Clean(abs)
+	info, err := os.Stat(abs)
+	if err != nil {
+		return Entry{}, fmt.Errorf("registry %s: entry %q: %q is not an existing directory: %w", registryPath, name, root, err)
+	}
+	if !info.IsDir() {
+		return Entry{}, fmt.Errorf("registry %s: entry %q: %q is not a directory", registryPath, name, root)
+	}
+
+	reg, err := LoadRegistry(registryPath)
+	if err != nil {
+		return Entry{}, err
+	}
+	for _, e := range reg.entries {
+		if e.Name == name {
+			return Entry{}, fmt.Errorf("registry %s: a project named %q is already registered (path %s)", registryPath, name, e.Path)
+		}
+		if e.Path == abs {
+			return Entry{}, fmt.Errorf("registry %s: path %q is already registered as %q", registryPath, abs, e.Name)
+		}
+	}
+
+	entry := Entry{Name: name, Path: abs}
+	return entry, saveRegistry(registryPath, append(reg.Entries(), entry))
+}
+
+// RemoveRegistryEntry removes the entry named name from the registry config
+// at registryPath and returns the removed entry. The file is loaded through
+// LoadRegistry's full validation first (a broken registry is never silently
+// rewritten); a name matching no entry is an error. Removing the last entry
+// writes an empty projects list — the file is kept, not deleted.
+func RemoveRegistryEntry(registryPath, name string) (Entry, error) {
+	reg, err := LoadRegistry(registryPath)
+	if err != nil {
+		return Entry{}, err
+	}
+	kept := make([]Entry, 0, len(reg.entries))
+	var removed Entry
+	found := false
+	for _, e := range reg.entries {
+		if e.Name == name {
+			removed, found = e, true
+			continue
+		}
+		kept = append(kept, e)
+	}
+	if !found {
+		return Entry{}, fmt.Errorf("registry %s: no project named %q is registered", registryPath, name)
+	}
+	return removed, saveRegistry(registryPath, kept)
+}
+
+// saveRegistry writes entries to the registry config at registryPath as
+// indented JSON with a trailing newline, creating the parent directory as
+// needed. Entries are written with their stored (absolute, cleaned) paths.
+func saveRegistry(registryPath string, entries []Entry) error {
+	raw := make([]registryEntry, len(entries))
+	for i, e := range entries {
+		raw[i] = registryEntry{Name: e.Name, Path: e.Path}
+	}
+	if err := os.MkdirAll(filepath.Dir(registryPath), 0o755); err != nil {
+		return fmt.Errorf("create registry directory: %w", err)
+	}
+	data, err := json.MarshalIndent(registryFile{Projects: raw}, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(registryPath, data, 0o644); err != nil {
+		return fmt.Errorf("write registry %s: %w", registryPath, err)
+	}
+	return nil
+}
+
 // ErrNoRegistryPath is returned by mg serve when the registry path cannot be
 // determined (no --registry flag and the manigot checkout cannot be located).
 var ErrNoRegistryPath = errors.New("cannot determine the registry config location (set $MANIGOT_HOME or pass --registry)")
