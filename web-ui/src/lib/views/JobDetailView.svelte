@@ -541,7 +541,6 @@
 
   .tabs {
     display: flex;
-    width: 100%;
     gap: 2px;
     border-bottom: 1px solid var(--line);
     overflow-x: auto;
