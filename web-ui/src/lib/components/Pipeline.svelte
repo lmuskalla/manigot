@@ -157,6 +157,9 @@
     min-width: 62px; /* reserve the label's width so it never overflows */
     justify-content: center;
   }
+  .pipeline:not(.mini) {
+    padding-bottom: 20px; /* room for labels without pushing the timeline too high */
+  }
   .pipeline:not(.mini) .pipe-seg {
     width: 20px;
   }
