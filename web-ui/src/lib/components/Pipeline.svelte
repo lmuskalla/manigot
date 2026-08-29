@@ -154,7 +154,7 @@
   }
 
   .pipeline:not(.mini) {
-    padding: 18px 0 18px; /* symmetric — keeps the node line vertically centered in its box */
+    padding-bottom: 24px; /* room for labels */
   }
   .pipeline:not(.mini) .pipe-station {
     min-width: 62px; /* reserve the label's width so it never overflows */

@@ -498,6 +498,7 @@
   .stage-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--r-3) var(--r-4);
     flex-wrap: wrap;
     margin: var(--r-5) 0 var(--r-4);
@@ -506,10 +507,6 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-m);
   }
-  .stage-row .chip {
-    margin-left: auto; /* pin the running/human badge to the box's right edge */
-  }
-
   .human {
     display: flex;
     gap: var(--r-4);
