@@ -599,6 +599,7 @@
   }
 
   .body {
+    position: relative;
     padding-top: var(--r-5);
     min-height: 240px;
   }
@@ -616,9 +617,9 @@
   }
 
   .file-actions {
-    margin-top: var(--r-4);
-    padding-top: var(--r-4);
-    border-top: 1px solid var(--line);
+    position: absolute;
+    top: var(--r-5);
+    right: 0;
   }
 
   .verdict-line {
