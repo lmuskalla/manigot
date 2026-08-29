@@ -439,10 +439,14 @@
     align-items: flex-start;
   }
   .back {
+    display: inline-flex;
+    align-items: center;
     color: var(--ink-2);
     text-decoration: none;
     font-size: 18px;
-    padding: 4px 8px 0 0;
+    line-height: 1;
+    height: 1.2em;
+    padding: 0 8px 0 0;
     flex: none;
     transition: color var(--t-fast);
   }
