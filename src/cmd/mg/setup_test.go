@@ -385,6 +385,51 @@ func TestSetupWizardUserDefinedProfile(t *testing.T) {
 	}
 }
 
+// TestSetupWizardUserDefinedClaudeProfileModel pins TASK-6: a user-defined
+// claude-code profile with a ModelEnv/ModelDefault gets an optional model
+// prompt, analogous to setupOpenCodeProfile's model block.
+func TestSetupWizardUserDefinedClaudeProfileModel(t *testing.T) {
+	dir := profileCheckout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_ACCOUNT_UUID=u\nCLAUDE_EMAIL=e\nCLAUDE_ORG_UUID=o\n")
+	if err := config.AddProfile(config.Profile{
+		ID: "claude-opus", Label: "Claude Opus", Tool: config.ToolClaudeCode,
+		AuthKeys: []string{"CLAUDE_CODE_OAUTH_TOKEN"}, ModelEnv: "CLAUDE_OPUS_MODEL", ModelDefault: "opus",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	var out strings.Builder
+	// Credentials are already configured (the fixed CLAUDE_* keys), so the
+	// only prompt is the model one — accept the default.
+	code := runSetup([]string{"claude-opus"}, strings.NewReader("\n"), &out, &strings.Builder{}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, output:\n%s", code, out.String())
+	}
+	env, err := os.ReadFile(filepath.Join(dir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "CLAUDE_OPUS_MODEL=opus") {
+		t.Errorf(".env missing the user claude profile's default model:\n%s", env)
+	}
+	if !strings.Contains(out.String(), "Optional — the model this profile defaults to") {
+		t.Errorf("wizard output missing the model prompt:\n%s", out.String())
+	}
+}
+
+// TestSetupWizardClaudeProNoModelPrompt pins the no-model case: claude-pro
+// defines neither ModelEnv nor ModelDefault, so its wizard output is
+// unchanged — no model prompt block at all.
+func TestSetupWizardClaudeProNoModelPrompt(t *testing.T) {
+	profileCheckout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_ACCOUNT_UUID=u\nCLAUDE_EMAIL=e\nCLAUDE_ORG_UUID=o\n")
+	var out strings.Builder
+	code := runSetup([]string{"claude-pro"}, strings.NewReader(""), &out, &strings.Builder{}, true)
+	if code != 0 {
+		t.Fatalf("exit code = %d, output:\n%s", code, out.String())
+	}
+	if strings.Contains(out.String(), "Optional — the model this profile defaults to") {
+		t.Errorf("claude-pro must not show a model prompt:\n%s", out.String())
+	}
+}
+
 func TestSetupCheckIncludesUserProfile(t *testing.T) {
 	profileCheckout(t, "")
 	if err := config.AddProfile(config.Profile{ID: "zen-alt", Tool: config.ToolOpenCode, AuthKeys: []string{"OPENCODE_API_KEY"}}); err != nil {

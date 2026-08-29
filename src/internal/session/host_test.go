@@ -178,6 +178,65 @@ func TestBuildHostUserDefinedOpenCodeProfile(t *testing.T) {
 	}
 }
 
+// TestBuildHostClaudeModelForwarded pins TASK-4: a claude-code profile with a
+// resolved ClaudeModel forwards it via the same --model flag opencode uses —
+// mirroring TestBuildHostUserDefinedOpenCodeProfile's opencode case.
+func TestBuildHostClaudeModelForwarded(t *testing.T) {
+	_, _ = docProject(t)
+	fakeHostBinary(t)
+	if err := config.AddProfile(config.Profile{
+		ID: "claude-custom", Label: "Claude Custom", Tool: config.ToolClaudeCode,
+		AuthKeys: []string{"CLAUDE_CODE_OAUTH_TOKEN"}, ModelDefault: "sonnet",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	info, err := ResolveProfile(Options{Profile: "claude-custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	if inv.Argv[0] != "claude" {
+		t.Errorf("argv[0] = %q, want claude", inv.Argv[0])
+	}
+	containsAll(t, inv.Argv, "--model", "sonnet")
+}
+
+// TestBuildHostClaudeProNoModelFlag pins the no-model case: claude-pro's
+// ClaudeModel resolves to "", so mg host does not add a --model flag either.
+func TestBuildHostClaudeProNoModelFlag(t *testing.T) {
+	root, _ := docProject(t)
+	_ = root
+	fakeHostBinary(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildHostInvocation(Options{}, info, r, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildHostInvocation: %v", err)
+	}
+	if strings.Contains(strings.Join(inv.Argv, "\n"), "--model") {
+		t.Errorf("claude-pro host invocation should not carry --model: %v", inv.Argv)
+	}
+}
+
 // TestBuildHostOpenCodeThemeNotForwarded — OPENCODE_THEME is a container-only
 // knob (applied by scripts/entrypoint.sh writing a generated tui.json inside
 // the ephemeral container); mg host runs against the user's own real

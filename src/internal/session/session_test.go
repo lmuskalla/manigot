@@ -566,6 +566,63 @@ func TestResolveUserDefinedProfileModelFallback(t *testing.T) {
 	}
 }
 
+// TestResolveProfileClaudeModelForUserDefinedProfile pins TASK-2: a
+// user-defined claude-code profile resolves ClaudeModel the same way an
+// opencode profile resolves OpenCodeModel — an env override wins over the
+// stored default.
+func TestResolveProfileClaudeModelForUserDefinedProfile(t *testing.T) {
+	checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\nCLAUDE_CUSTOM_MODEL=opus\n")
+	if err := config.AddProfile(config.Profile{
+		ID: "claude-custom", Label: "Claude Custom", Tool: config.ToolClaudeCode,
+		AuthKeys: []string{"CLAUDE_CODE_OAUTH_TOKEN"},
+		ModelEnv: "CLAUDE_CUSTOM_MODEL", ModelDefault: "sonnet",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	info, err := ResolveProfile(Options{Profile: "claude-custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.ClaudeModel != "opus" {
+		t.Errorf("ClaudeModel = %q, want opus (from CLAUDE_CUSTOM_MODEL)", info.ClaudeModel)
+	}
+}
+
+// TestResolveProfileClaudeModelFallsBackToDefault: with no model-env override
+// set, a user-defined claude-code profile falls back to its stored
+// ModelDefault.
+func TestResolveProfileClaudeModelFallsBackToDefault(t *testing.T) {
+	checkout(t, "CLAUDE_CODE_OAUTH_TOKEN=t\n")
+	if err := config.AddProfile(config.Profile{
+		ID: "claude-custom", Label: "Claude Custom", Tool: config.ToolClaudeCode,
+		AuthKeys: []string{"CLAUDE_CODE_OAUTH_TOKEN"},
+		ModelEnv: "CLAUDE_CUSTOM_MODEL", ModelDefault: "sonnet",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	info, err := ResolveProfile(Options{Profile: "claude-custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.ClaudeModel != "sonnet" {
+		t.Errorf("ClaudeModel = %q, want the profile's ModelDefault", info.ClaudeModel)
+	}
+}
+
+// TestResolveProfileClaudeProHasNoModel pins the no-model case: claude-pro
+// defines neither ModelEnv nor ModelDefault, so ClaudeModel resolves to ""
+// and nothing is forwarded — unchanged behavior after TASK-1/TASK-2.
+func TestResolveProfileClaudeProHasNoModel(t *testing.T) {
+	checkout(t, "")
+	info, err := ResolveProfile(Options{Profile: "claude-pro"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.ClaudeModel != "" {
+		t.Errorf("ClaudeModel = %q, want empty for claude-pro", info.ClaudeModel)
+	}
+}
+
 // TestResolveUserDefinedProfileAsDefault: a user-defined profile set as the
 // MANIGOT_PROFILE default resolves like any other default.
 func TestResolveUserDefinedProfileAsDefault(t *testing.T) {

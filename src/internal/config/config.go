@@ -80,13 +80,19 @@ type Profile struct {
 	AuthKeys []string `json:"authKeys,omitempty"`
 
 	// ModelEnv is the .env key that overrides the profile's default model
-	// (e.g. OPENCODE_ZAI_MODEL). claude-pro has none — the CLI's own default.
-	// Only meaningful for opencode profiles.
+	// (e.g. OPENCODE_ZAI_MODEL, or a claude-code profile's own model env key).
+	// Empty means the profile has no override key — claude-pro has none, so
+	// its ModelEnv is "".
 	ModelEnv string `json:"modelEnv,omitempty"`
 
-	// ModelDefault is the model string used when no ModelEnv override is set.
-	// For claude-pro it is only a display value ("(Claude Code default)");
-	// for opencode profiles it is the compiled-in model the session forwards.
+	// ModelDefault is the model string used when no ModelEnv override is set,
+	// forwarded to the CLI as a real --model value for both opencode and
+	// claude-code profiles (session.ResolveProfile's envDefault(ModelEnv,
+	// ModelDefault)). Empty means "no override — let the CLI use its own
+	// default", which is claude-pro's shape: it defines neither field, so its
+	// resolved model is always "" and nothing is forwarded. (The display-only
+	// "(Claude Code default)" placeholder shown in `mg profiles`' table lives
+	// in cmd/mg/profiles.go's profileModel(), not in this field.)
 	ModelDefault string `json:"modelDefault,omitempty"`
 }
 
@@ -100,12 +106,15 @@ type Profile struct {
 // ModelDefault strings.
 var builtInProfiles = []Profile{
 	{
-		ID:           ProfileClaudePro,
-		Label:        "Claude Code · Claude Pro",
-		Tool:         ToolClaudeCode,
-		Auth:         "Claude Pro OAuth",
-		AuthKeys:     []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"},
-		ModelDefault: "(Claude Code default)",
+		ID:       ProfileClaudePro,
+		Label:    "Claude Code · Claude Pro",
+		Tool:     ToolClaudeCode,
+		Auth:     "Claude Pro OAuth",
+		AuthKeys: []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"},
+		// No ModelEnv/ModelDefault — claude-pro lets the CLI use its own
+		// default; see the Profile.ModelDefault doc comment for why this must
+		// not hold a display sentinel now that claude-tool profiles forward
+		// ModelDefault as a real --model value.
 	},
 	{
 		ID:           ProfileZAI,

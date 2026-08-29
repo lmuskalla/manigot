@@ -136,6 +136,13 @@ type ProfileInfo struct {
 	// ("" when none — only the legacy path can leave it unset).
 	OpenCodeModel string
 
+	// ClaudeModel is the effective model override for claude-code runs,
+	// resolved the same way as OpenCodeModel (envDefault(p.ModelEnv,
+	// p.ModelDefault)) — "" when the profile defines neither, which is what
+	// keeps claude-pro's behavior unchanged (no ModelEnv/ModelDefault, so
+	// nothing is forwarded and the CLI uses its own default).
+	ClaudeModel string
+
 	// OpenCodeTheme is the effective OPENCODE_THEME value for opencode runs
 	// ("" when unset — the global theme setting, config.Settings.Theme, is
 	// shared across every opencode profile, unlike OpenCodeModel).
@@ -198,6 +205,8 @@ func ResolveProfile(opts Options) (ProfileInfo, error) {
 			if p.Tool == config.ToolOpenCode {
 				info.OpenCodeKeys = append([]string(nil), p.AuthKeys...)
 				info.OpenCodeModel = envDefault(p.ModelEnv, p.ModelDefault)
+			} else if p.Tool == config.ToolClaudeCode {
+				info.ClaudeModel = envDefault(p.ModelEnv, p.ModelDefault)
 			}
 		}
 	} else {

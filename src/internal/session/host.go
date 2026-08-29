@@ -153,16 +153,20 @@ func BuildHostInvocation(opts Options, info ProfileInfo, root Root, diag io.Writ
 		}
 	}
 
-	// ── OpenCode model ──────────────────────────────────────────────────────
+	// ── Model ────────────────────────────────────────────────────────────
 	// The docker path forwards OPENCODE_MODEL and scripts/entrypoint.sh writes
 	// it into an opencode config inside the container. On the host mg must not
 	// write the user's real ~/.config/opencode/opencode.json, so the effective
 	// model is forwarded via opencode's own --model flag instead (verified
 	// supported: `opencode --help` shows -m/--model). OPENCODE_MODEL itself is
 	// deliberately not put into the child env — opencode does not read it.
+	// Claude Code takes the same --model flag directly (see docker.go); mg
+	// host forwards ClaudeModel the same way, no config file involved.
 	var modelArgs []string
 	if info.Tool == config.ToolOpenCode && info.OpenCodeModel != "" {
 		modelArgs = []string{"--model", info.OpenCodeModel}
+	} else if info.Tool == config.ToolClaudeCode && info.ClaudeModel != "" {
+		modelArgs = []string{"--model", info.ClaudeModel}
 	}
 
 	// ── Info banner ─────────────────────────────────────────────────────────

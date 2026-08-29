@@ -268,6 +268,49 @@ func TestProfilesAddInteractive(t *testing.T) {
 	}
 }
 
+// TestProfilesAddInteractiveClaudeModelOptional pins TASK-5: a claude-code
+// profile's model prompts are optional — leaving both blank still produces a
+// valid profile, matching claude-pro's own no-model-override shape.
+func TestProfilesAddInteractiveClaudeModelOptional(t *testing.T) {
+	dir := profileCheckout(t, "")
+	var out, errOut strings.Builder
+	// id given as arg; then five prompts: tool (type claude-code), label
+	// (Enter=id), creds (Enter=CLAUDE_CODE_OAUTH_TOKEN), billed (Enter=first
+	// key), modelEnv (Enter=blank), modelDefault (Enter=blank).
+	code := runProfiles([]string{"add", "claude-custom"}, strings.NewReader("claude-code\n\n\n\n\n\n"), &out, &errOut, true, pickerStub(t))
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr:\n%s\noutput:\n%s", code, errOut.String(), out.String())
+	}
+	p, ok := config.ProfileByID("claude-custom")
+	if !ok {
+		t.Fatalf("ProfileByID(claude-custom) not found after add")
+	}
+	if p.Tool != config.ToolClaudeCode || p.ModelEnv != "" || p.ModelDefault != "" {
+		t.Errorf("added profile = %+v, want empty ModelEnv/ModelDefault", p)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "config", "profiles.json")); err != nil {
+		t.Errorf("profiles.json not written: %v", err)
+	}
+}
+
+// TestProfilesAddInteractiveClaudeModelSet: a claude-code profile can also be
+// given an explicit model env key / default, forwarded through like opencode's.
+func TestProfilesAddInteractiveClaudeModelSet(t *testing.T) {
+	profileCheckout(t, "")
+	var out, errOut strings.Builder
+	code := runProfiles([]string{"add", "claude-opus"}, strings.NewReader("claude-code\n\n\n\nCLAUDE_OPUS_MODEL\nopus\n"), &out, &errOut, true, pickerStub(t))
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr:\n%s\noutput:\n%s", code, errOut.String(), out.String())
+	}
+	p, ok := config.ProfileByID("claude-opus")
+	if !ok {
+		t.Fatalf("ProfileByID(claude-opus) not found after add")
+	}
+	if p.ModelEnv != "CLAUDE_OPUS_MODEL" || p.ModelDefault != "opus" {
+		t.Errorf("added profile = %+v, want ModelEnv=CLAUDE_OPUS_MODEL ModelDefault=opus", p)
+	}
+}
+
 func TestProfilesAddNonTTYRefuses(t *testing.T) {
 	profileCheckout(t, "")
 	var out, errOut strings.Builder

@@ -79,6 +79,9 @@ func TestSaveUnresolvableHomeErrors(t *testing.T) {
 // TestBuiltInProfilesCarryAuthAndModelMetadata pins TASK-1's data model: the
 // built-in table is the single source of each profile's auth keys and model
 // env/default (moved here from cmd/mg/profiles.go and internal/session).
+// claude-pro's ModelDefault is empty — it defines no model override, and the
+// "(Claude Code default)" sentinel now lives only in cmd/mg/profiles.go's
+// display-only profileModel(), never in this data field (see TASK-1/TASK-5).
 func TestBuiltInProfilesCarryAuthAndModelMetadata(t *testing.T) {
 	if got := len(Profiles()); got != 5 {
 		t.Fatalf("built-in profile count = %d, want 5", got)
@@ -89,7 +92,7 @@ func TestBuiltInProfilesCarryAuthAndModelMetadata(t *testing.T) {
 		wantModelEnv string
 		wantModelDef string
 	}{
-		{ProfileClaudePro, []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"}, "", "(Claude Code default)"},
+		{ProfileClaudePro, []string{"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_ACCOUNT_UUID", "CLAUDE_EMAIL", "CLAUDE_ORG_UUID"}, "", ""},
 		{ProfileZAI, []string{"ZHIPU_API_KEY"}, "OPENCODE_ZAI_MODEL", "zai-coding-plan/glm-5.2"},
 		{ProfileOpenCodeGo, []string{"OPENCODE_API_KEY"}, "OPENCODE_GO_MODEL", "opencode-go/glm-5.2"},
 		{ProfileOpenCodeZen, []string{"OPENCODE_API_KEY"}, "OPENCODE_ZEN_MODEL", "opencode/deepseek-v4-flash"},

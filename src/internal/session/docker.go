@@ -349,6 +349,18 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		agentFlag = []string{"--agent", opts.Agent}
 	}
 
+	// ── Claude Code model ────────────────────────────────────────────────
+	// scripts/entrypoint.sh execs claude directly with the docker CMD args
+	// (unlike OpenCode's config-file approach), so the resolved model rides
+	// through as a CLI flag rather than an environment variable — it lands in
+	// the container command's argv via "$@". Empty ClaudeModel (claude-pro's
+	// shape — no ModelEnv/ModelDefault) means no flag, letting the CLI use
+	// its own default.
+	var modelArgs []string
+	if info.Tool == config.ToolClaudeCode && info.ClaudeModel != "" {
+		modelArgs = []string{"--model", info.ClaudeModel}
+	}
+
 	// Claude takes the prompt positionally; OpenCode as --prompt.
 	var promptArgs []string
 	if initialPrompt != "" {
@@ -497,6 +509,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, "--security-opt=no-new-privileges")
 	argv = append(argv, dockerImageName)
 	argv = append(argv, agentFlag...)
+	argv = append(argv, modelArgs...)
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 

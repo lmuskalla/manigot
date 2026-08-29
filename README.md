@@ -540,9 +540,11 @@ launcher for work that must touch the host itself.
   symlink** (a symlink would let Claude's `/memory` writes and agent edits land
   back in the manigot checkout) — and never clobbers an existing host file
   (your own file wins).
-- **OpenCode model.** The zai/opencode-go/opencode-zen/opencode-zen-free
-  profiles' plan model is forwarded via opencode's `--model` flag; mg never
-  writes your host's opencode config.
+- **Model.** The zai/opencode-go/opencode-zen/opencode-zen-free profiles' plan
+  model is forwarded via opencode's `--model` flag; mg never writes your
+  host's opencode config. A claude-code profile with its own model configured
+  (via `mg profiles add` or `mg setup`) is forwarded the same way via
+  claude's own `--model` flag; claude-pro defines none, so it is unaffected.
 - **`--print` stays a container path.** `mg host --print` is rejected with a
   clear error — non-interactive runs (and `mg jdi`) still use the container.
 

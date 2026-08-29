@@ -84,10 +84,11 @@ func runProfiles(args []string, r io.Reader, stdout, stderr io.Writer, tty bool,
 
 // profilesAdd implements `mg profiles add [<id>]` — the interactive
 // user-defined-profile creation wizard. On a TTY it walks the fields of a
-// profile (tool, credential key(s), model env/default for opencode) with the
-// built-ins' values offered as defaults, then persists the profile to
-// config/profiles.json via config.AddProfile. Off a TTY it refuses — profile
-// creation is inherently interactive, matching `mg setup`'s stance.
+// profile (tool, credential key(s), model env/default — required for
+// opencode, optional for claude-code) with the built-ins' values offered as
+// defaults, then persists the profile to config/profiles.json via
+// config.AddProfile. Off a TTY it refuses — profile creation is inherently
+// interactive, matching `mg setup`'s stance.
 func profilesAdd(args []string, r io.Reader, stdout, stderr io.Writer, tty bool) int {
 	if !tty {
 		fmt.Fprintln(stderr, "mg profiles add: interactive profile creation needs a terminal.")
@@ -168,6 +169,13 @@ func profilesAdd(args []string, r io.Reader, stdout, stderr io.Writer, tty bool)
 			fmt.Fprintln(stderr, "Error: an opencode profile needs a default model.")
 			return 1
 		}
+		p.ModelEnv = modelEnv
+		p.ModelDefault = modelDefault
+	} else {
+		// Optional for claude-code: leaving both blank matches claude-pro's own
+		// no-model-override shape (the CLI's own default).
+		modelEnv, _ := cli.PromptValue("Model .env key (optional)", "", "", br, stdout)
+		modelDefault, _ := cli.PromptValue("Default model (optional)", "", "", br, stdout)
 		p.ModelEnv = modelEnv
 		p.ModelDefault = modelDefault
 	}
@@ -340,7 +348,11 @@ func profilesList(r io.Reader, w io.Writer, tty bool, pick pickerRunFunc) int {
 // profileModel returns the model column for a profile: the effective .env /
 // environment override when set, else the compiled-in default. Both come from
 // the profile's definition (config.ProfileByID), so a user-defined profile
-// renders its own model env/default.
+// renders its own model env/default. When the effective value is empty and
+// the profile's tool is claude-code, it displays the sentinel
+// "(Claude Code default)" instead of a blank column — display-only, never
+// stored in ModelDefault (which is forwarded as a real --model value once a
+// claude-tool profile does define one).
 func profileModel(id string) string {
 	p, ok := config.ProfileByID(id)
 	if !ok {
@@ -350,6 +362,9 @@ func profileModel(id string) string {
 		if v := config.EnvValue(p.ModelEnv); v != "" {
 			return v
 		}
+	}
+	if p.ModelDefault == "" && p.Tool == config.ToolClaudeCode {
+		return "(Claude Code default)"
 	}
 	return p.ModelDefault
 }

@@ -207,12 +207,13 @@ func claudeAccountFromJSON() (uuid, email, org string, ok bool) {
 		a.AccountUUID != "" && a.EmailAddress != "" && a.OrganizationUUID != ""
 }
 
-func setupClaudePro(r io.Reader, w io.Writer) {
+func setupClaudePro(p config.Profile, r io.Reader, w io.Writer) {
 	fmt.Fprintln(w, sepLine)
 	fmt.Fprintln(w, "  claude-pro — Claude Code, billed to your Claude Pro/Max subscription")
 	fmt.Fprintln(w, sepLine)
 	if have("CLAUDE_CODE_OAUTH_TOKEN") && have("CLAUDE_ACCOUNT_UUID") && have("CLAUDE_EMAIL") && have("CLAUDE_ORG_UUID") {
 		fmt.Fprintf(w, "  ✓ Already configured (token %s, %s).\n", cli.Mask(config.EnvValue("CLAUDE_CODE_OAUTH_TOKEN")), config.EnvValue("CLAUDE_EMAIL"))
+		setupClaudeModel(p, r, w)
 		return
 	}
 	fmt.Fprintln(w, "  Claude Code runs with your subscription's OAuth credentials. You need")
@@ -238,6 +239,7 @@ func setupClaudePro(r io.Reader, w io.Writer) {
 			_ = config.UpsertEnv("CLAUDE_ACCOUNT_UUID", uuid)
 			_ = config.UpsertEnv("CLAUDE_EMAIL", email)
 			_ = config.UpsertEnv("CLAUDE_ORG_UUID", org)
+			setupClaudeModel(p, r, w)
 			return
 		}
 		fmt.Fprintln(w, "  Could not read them from ~/.claude.json here. On the host where")
@@ -248,6 +250,26 @@ func setupClaudePro(r io.Reader, w io.Writer) {
 		promptValue("  CLAUDE_EMAIL", "CLAUDE_EMAIL", "", r, w)
 		promptValue("  CLAUDE_ORG_UUID", "CLAUDE_ORG_UUID", "", r, w)
 	}
+	setupClaudeModel(p, r, w)
+}
+
+// setupClaudeModel is the optional model block of a claude-code profile's
+// setup wizard, analogous to setupOpenCodeProfile's model prompt: it uses the
+// profile's own ModelEnv/ModelDefault, so it is a complete no-op for
+// claude-pro (which defines neither) — unchanged output there. A user-defined
+// claude-code profile that does define a model gets prompted the same way an
+// opencode profile does.
+func setupClaudeModel(p config.Profile, r io.Reader, w io.Writer) {
+	if p.ModelEnv == "" && p.ModelDefault == "" {
+		return
+	}
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  Optional — the model this profile defaults to (e.g. sonnet, opus).")
+	if p.ModelEnv != "" {
+		promptValue("  "+p.ModelEnv, p.ModelEnv, p.ModelDefault, r, w)
+		return
+	}
+	fmt.Fprintf(w, "  Default model: %s (no .env override key configured for this profile)\n", p.ModelDefault)
 }
 
 // setupProfile runs the setup wizard block for one profile, dispatching on its
@@ -257,7 +279,7 @@ func setupClaudePro(r io.Reader, w io.Writer) {
 // too — a generic spec when its id has no bespoke entry in setupSpecs.
 func setupProfile(p config.Profile, br *bufio.Reader, w io.Writer) {
 	if p.Tool == config.ToolClaudeCode {
-		setupClaudePro(br, w)
+		setupClaudePro(p, br, w)
 		return
 	}
 	spec, ok := setupSpecs[p.ID]

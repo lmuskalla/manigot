@@ -1137,6 +1137,79 @@ func TestBuildPromptWinsOverJobAndAgentFlag(t *testing.T) {
 	containsAll(t, inv.Argv, "--agent", "analyst", "hello there")
 }
 
+// TestBuildClaudeModelFlagForwarded pins TASK-3: a claude-code profile with a
+// resolved ClaudeModel forwards it as a --model argv flag, positioned after
+// --agent and before the prompt/passthrough args — matching the ordering
+// scripts/entrypoint.sh's `exec claude --dangerously-skip-permissions "$@"`
+// expects.
+func TestBuildClaudeModelFlagForwarded(t *testing.T) {
+	root, _ := docProject(t)
+	_ = root
+	if err := config.AddProfile(config.Profile{
+		ID: "claude-custom", Label: "Claude Custom", Tool: config.ToolClaudeCode,
+		AuthKeys: []string{"CLAUDE_CODE_OAUTH_TOKEN"}, ModelDefault: "sonnet",
+	}); err != nil {
+		t.Fatalf("AddProfile: %v", err)
+	}
+	info, err := ResolveProfile(Options{Profile: "claude-custom"})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if info.ClaudeModel != "sonnet" {
+		t.Fatalf("ClaudeModel = %q, want sonnet", info.ClaudeModel)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{Agent: "analyst"}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	agentIdx := indexOf(inv.Argv, "--agent")
+	modelIdx := indexOf(inv.Argv, "--model")
+	if agentIdx == -1 || modelIdx == -1 {
+		t.Fatalf("argv missing --agent or --model: %v", inv.Argv)
+	}
+	if modelIdx <= agentIdx {
+		t.Errorf("--model (%d) should come after --agent (%d): %v", modelIdx, agentIdx, inv.Argv)
+	}
+	if modelIdx+1 >= len(inv.Argv) || inv.Argv[modelIdx+1] != "sonnet" {
+		t.Errorf("--model value = %v, want sonnet", inv.Argv)
+	}
+}
+
+// TestBuildClaudeProNoModelFlag pins the no-model case: claude-pro's ClaudeModel
+// resolves to "", so no --model flag is added — unchanged argv shape.
+func TestBuildClaudeProNoModelFlag(t *testing.T) {
+	docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	if indexOf(inv.Argv, "--model") != -1 {
+		t.Errorf("claude-pro session should not carry --model: %v", inv.Argv)
+	}
+}
+
+// indexOf returns the index of the first occurrence of s in argv, or -1.
+func indexOf(argv []string, s string) int {
+	for i, v := range argv {
+		if v == s {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestEnvShadowMounts(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{".env", ".env.local", ".env.example", ".env.sample", "other.txt"} {
