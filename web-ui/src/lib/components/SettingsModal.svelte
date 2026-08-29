@@ -17,11 +17,14 @@
     busy = true
     connection.set(baseUrl, token)
     const ok = await connection.check()
-    busy = false
     if (ok) {
+      busy = false
+      // The establishment bump already reloaded the project list (the
+      // App-level effect) — the dropdown fills without a page reload.
       toasts.ok('Connected to the daemon')
       onclose()
     } else {
+      busy = false
       // connection.lastError is precise (CORS / unreachable / token / …);
       // surface it instead of a generic "check the URL".
       toasts.error(connection.lastError || 'Could not reach the daemon — check the URL')

@@ -96,6 +96,23 @@ describe('client', () => {
     expect(err.message).not.toMatch(/cross-origin/i)
   })
 
+  it('names a 2xx HTML body as a mis-pointed connection, with the /api hint', async () => {
+    // The vite dev server happily serves index.html for GET /health when the
+    // connection is left same-origin — a 200 that is not the daemon's JSON.
+    vi.stubGlobal(
+      'fetch',
+      stubFetch(() => ({
+        status: 200,
+        body: '<!doctype html><html><body>dev server</body></html>',
+        contentType: 'text/html',
+      })),
+    )
+    client.setConnection({ baseUrl: '', token: '' })
+    const err = await client.getHealth().catch((e) => e)
+    expect(err.message).toMatch(/HTML page, not the daemon/i)
+    expect(err.message).toContain('/api')
+  })
+
   it('returns raw text for job files', async () => {
     vi.stubGlobal(
       'fetch',

@@ -127,7 +127,23 @@ async function request(method: string, path: string, opts: ReqOpts = {}): Promis
 
 async function json<T>(method: string, path: string, opts: ReqOpts = {}): Promise<T> {
   const text = await request(method, path, opts)
-  return (text === '' ? undefined : (JSON.parse(text) as T)) as T
+  if (text === '') return undefined as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    // A 2xx that is not JSON is a mis-pointed connection: the vite dev
+    // server (or any static host) happily serves index.html for GET
+    // /health. Name it so the user lands on the connection settings
+    // instead of a JSON parse error.
+    const where = conn.baseUrl || '(same origin)'
+    const looksHtml = /^\s*<(?:!doctype|html|head)\b/i.test(text)
+    throw new ApiError(
+      0,
+      looksHtml
+        ? `${where} served an HTML page, not the daemon's JSON — point the connection at the daemon (in dev: /api)`
+        : `${where} answered with a non-JSON body (${JSON.stringify(text.slice(0, 40))})`,
+    )
+  }
 }
 
 function post<T>(path: string, body?: unknown): Promise<T> {

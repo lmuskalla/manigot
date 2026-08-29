@@ -22,18 +22,28 @@
     return () => window.removeEventListener('hashchange', onHash)
   })
 
-  // Bootstrap: check the daemon, load projects, land on a real route.
+  // Bootstrap: check the daemon, poll its liveness and the active project's
+  // jobs. The project list itself loads from the connection effect below —
+  // never in parallel with the health check against a half-configured URL.
   onMount(() => {
-    void (async () => {
-      void connection.check()
-      await data.loadProjects().catch(() => {})
-      if (parseHash(location.hash).name === 'home' && data.active) {
-        navigate(href({ name: 'jobs', project: data.active }))
-      }
-    })()
+    void connection.check()
     data.startPolling()
     const t = setInterval(() => void connection.check(), 30_000)
-    return () => clearInterval(t)
+    return () => {
+      clearInterval(t)
+      data.stopPolling()
+    }
+  })
+
+  // A connection becoming established — first boot, a settings change, or the
+  // daemon coming back — (re)loads the project list once per establishment,
+  // so the dropdown populates without a page reload. Keying off the
+  // establishment edge (not the list being empty) keeps an empty registry
+  // from retriggering the load — and the fetch — forever.
+  $effect(() => {
+    if (connection.established > 0) {
+      void data.loadProjects()
+    }
   })
 
   // Home with a known project redirects once projects land.
@@ -76,7 +86,9 @@
           <option value={p.name}>{p.name}</option>
         {/each}
       </select>
-      {#if data.projects.length === 0 && connection.status !== 'connecting'}
+      {#if data.projectsError}
+        <p class="no-projects err">Couldn't load projects — {data.projectsError}</p>
+      {:else if data.projects.length === 0 && connection.status === 'up'}
         <p class="no-projects">No projects registered.<br />Edit <code>config/serve.json</code> on the daemon.</p>
       {/if}
     </div>
@@ -132,7 +144,20 @@
     {:else}
       <div class="landing">
         <Logo size={40} />
-        <p>Connecting to the daemon{data.projects.length > 0 ? '' : '…'}</p>
+        {#if connection.status === 'down'}
+          <p>The daemon is unreachable.</p>
+          <button class="btn" onclick={() => (showSettings = true)}>Connection…</button>
+        {:else if data.projectsError}
+          <p>Couldn't load projects.</p>
+          <p class="landing-detail">{data.projectsError}</p>
+        {:else if connection.status === 'up' && data.projects.length === 0}
+          <p>No projects registered.</p>
+          <p class="landing-detail">
+            Edit <code>config/serve.json</code> on the daemon and restart <code>mg serve</code>.
+          </p>
+        {:else}
+          <p>Connecting to the daemon…</p>
+        {/if}
       </div>
     {/if}
   </main>
@@ -215,6 +240,9 @@
   }
   .no-projects code {
     color: var(--ink-1);
+  }
+  .no-projects.err {
+    color: #ffb3b6;
   }
 
   nav[aria-label='Primary'] {
@@ -335,6 +363,15 @@
     justify-content: center;
     gap: var(--r-3);
     color: var(--ink-2);
+  }
+  .landing-detail {
+    font-size: 13px;
+    max-width: 46ch;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .landing-detail code {
+    color: var(--ink-1);
   }
 
   /* mobile tab bar — hidden on desktop */

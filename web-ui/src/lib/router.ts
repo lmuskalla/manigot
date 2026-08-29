@@ -34,10 +34,12 @@ export function href(route: Route): string {
   switch (route.name) {
     case 'health':
       return '#/health'
+    // No project yet (fresh boot, daemon down, nothing registered): link
+    // home — '#/p/' and '#/p//agents' parse to garbage, not to home.
     case 'jobs':
-      return `#/p/${encodeURIComponent(route.project ?? '')}`
+      return route.project ? `#/p/${encodeURIComponent(route.project)}` : '#/'
     case 'agents':
-      return `#/p/${encodeURIComponent(route.project ?? '')}/agents`
+      return route.project ? `#/p/${encodeURIComponent(route.project)}/agents` : '#/'
     case 'job':
       return `#/p/${encodeURIComponent(route.project ?? '')}/j/${encodeURIComponent(route.job ?? '')}${route.tab && route.tab !== 'brief' ? `/${route.tab}` : ''}`
     default:
@@ -46,5 +48,9 @@ export function href(route: Route): string {
 }
 
 export function navigate(to: string) {
-  location.hash = to.replace(/^#/, '').startsWith('/') ? `#${to}` : to
+  // href() already returns '#/…' — never double-prefix the fragment:
+  // '#/p/manigot' fed through '#${to}' becomes '##/p/manigot', which
+  // parseHash cannot parse, so the app never leaves the landing.
+  const path = to.replace(/^#/, '')
+  location.hash = path.startsWith('/') ? `#${path}` : to
 }

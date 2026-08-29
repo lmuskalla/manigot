@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { href, parseHash } from '$lib/router'
+import { afterEach, describe, expect, it } from 'vitest'
+import { href, navigate, parseHash } from '$lib/router'
+
+afterEach(() => {
+  location.hash = ''
+})
 
 describe('parseHash', () => {
   it('parses the jobs route', () => {
@@ -49,5 +53,41 @@ describe('href', () => {
   it('omits the default tab for clean job URLs', () => {
     expect(href({ name: 'job', project: 'p', job: 'j', tab: 'brief' })).toBe('#/p/p/j/j')
     expect(href({ name: 'job', project: 'p', job: 'j', tab: 'run' })).toBe('#/p/p/j/j/run')
+  })
+
+  it('falls home when there is no project yet (nav before a project is active)', () => {
+    // '#/p/' and '#/p//agents' parse to garbage ('home' at best, a project
+    // literally named 'agents' at worst) — an empty project must link home.
+    expect(href({ name: 'jobs', project: '' })).toBe('#/')
+    expect(href({ name: 'jobs' })).toBe('#/')
+    expect(href({ name: 'agents', project: '' })).toBe('#/')
+    expect(href({ name: 'agents' })).toBe('#/')
+  })
+})
+
+describe('navigate', () => {
+  it('sets a single-hash fragment so parseHash round-trips', () => {
+    // Regression: '#/p/manigot' fed through '#${to}' became '##/p/manigot',
+    // which parseHash cannot parse — the app stayed on the landing forever.
+    navigate(href({ name: 'jobs', project: 'manigot' }))
+    expect(location.hash).toBe('#/p/manigot')
+    expect(parseHash(location.hash)).toEqual({ name: 'jobs', project: 'manigot' })
+  })
+
+  it('navigates to health', () => {
+    navigate('#/health')
+    expect(location.hash).toBe('#/health')
+    expect(parseHash(location.hash)).toEqual({ name: 'health' })
+  })
+
+  it('navigates home', () => {
+    navigate(href({ name: 'home' }))
+    expect(location.hash).toBe('#/')
+    expect(parseHash(location.hash)).toEqual({ name: 'home' })
+  })
+
+  it('also accepts a bare path without the leading hash', () => {
+    navigate('/p/manigot')
+    expect(location.hash).toBe('#/p/manigot')
   })
 })

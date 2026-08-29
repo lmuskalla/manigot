@@ -14,6 +14,7 @@ class DataStore {
   jobs = $state<JobRow[]>([])
   loadingProjects = $state(false)
   loadingJobs = $state(false)
+  projectsError = $state('')
   jobsError = $state('')
 
   #jobsTimer: ReturnType<typeof setInterval> | null = null
@@ -23,11 +24,20 @@ class DataStore {
     try {
       const res = await api.getProjects()
       this.projects = res.projects ?? []
+      this.projectsError = ''
       if (this.active && this.projects.some((p) => p.name === this.active)) return
       const remembered = localStorage.getItem('mg-control.project')
       this.active =
         this.projects.find((p) => p.name === remembered)?.name ?? this.projects[0]?.name ?? ''
       if (this.active) localStorage.setItem('mg-control.project', this.active)
+    } catch (e) {
+      // A failed load must reach the user — a silent empty dropdown reads as
+      // "no projects". Unlike refreshJobs's tight 2s poll, this only fires
+      // once per connection establishment, so there's no flicker to guard
+      // against — a status-0 failure (unreachable, or a 2xx that isn't JSON)
+      // must still surface, since that's exactly the "daemon answers but not
+      // with JSON" case the brief called out.
+      this.projectsError = e instanceof Error ? e.message : String(e)
     } finally {
       this.loadingProjects = false
     }
