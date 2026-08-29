@@ -221,17 +221,17 @@
       </button>
       <button class="btn" onclick={() => (showAgents = true)}>Launch agent</button>
       <div class="more" role="group" aria-label="Lifecycle">
-        <button class="btn btn-sm" onclick={() => (confirmKind = 'push')} disabled={!job?.branch}>
+        <button class="btn" onclick={() => (confirmKind = 'push')} disabled={!job?.branch}>
           Push
         </button>
         <button
-          class="btn btn-sm"
+          class="btn"
           class:btn-primary={job?.stage === 'finished'}
           onclick={() => (confirmKind = 'done')}
         >
           Done
         </button>
-        <button class="btn btn-sm btn-danger" onclick={() => (confirmKind = 'delete')}>Delete</button>
+        <button class="btn btn-danger" onclick={() => (confirmKind = 'delete')}>Delete</button>
       </div>
     </div>
   </header>
