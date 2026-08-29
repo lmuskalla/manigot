@@ -83,6 +83,11 @@
               <span class="who">@{ev.agent}</span>
               <span class="what">invoked</span>
               <span class="att">{ev.text.match(/attempt \d+/)?.[0] ?? ''}</span>
+            {:else if ev.kind === 'finished'}
+              <span class="who">@{ev.agent}</span>
+              <span class="what">finished</span>
+              <span class="att">{ev.attempt ? `attempt ${ev.attempt}` : ''}</span>
+              {#if ev.text}<p class="response">{ev.text}</p>{/if}
             {:else if ev.kind === 'start'}
               <span class="who">mg jdi</span>
               <span class="what">{ev.text}</span>
@@ -207,6 +212,9 @@
     border-color: var(--accent);
     background: var(--accent);
   }
+  .ev-finished::before {
+    border-color: var(--accent);
+  }
   .ev-start::before {
     border-color: var(--st-info);
   }
@@ -225,7 +233,8 @@
     min-width: 92px;
     flex: none;
   }
-  .ev-invoke .who {
+  .ev-invoke .who,
+  .ev-finished .who {
     color: var(--accent-bright);
   }
   .ev-human .who {
@@ -243,6 +252,16 @@
     color: #ffb3b6;
     font-family: var(--font-mono);
     font-size: 12.5px;
+  }
+  /* The agent's grouped final-response text — a wrapped-prose block under
+     its own finished/attempt marker, not a bulleted row per line. */
+  .response {
+    flex-basis: 100%;
+    margin: 4px 0 0;
+    color: var(--ink-1);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
   }
   .stopped-human {
     color: #ffb3b6;

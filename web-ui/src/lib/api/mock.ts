@@ -219,15 +219,35 @@ export function fixtureState(): MockState {
     },
     logs: {
       'manigot/farmer_part-2-of-web-ui-tui-path': {
+        // Shaped like the real generator (src/cmd/mg/jdioutput.go's
+        // logInvocation): a "finished (attempt N)" header, two blank lines,
+        // then the agent's full final-response text — not a one-line
+        // summary — so ?mock=1 exercises the same run.log parsing path
+        // production hits.
         runLog: [
           '=== 2026-08-28T16:02:11+02:00 mg jdi started: job farmer_part-2-of-web-ui-tui-path, profile claude-pro ===',
           '',
           '=== 2026-08-28T16:02:11+02:00 analyst invoked (attempt 1) ===',
-          'analyst finished — tasks.md written (3 tasks)',
+          '=== 2026-08-28T16:10:47+02:00 analyst finished (attempt 1) ===',
+          '',
+          '',
+          'Wrote tasks.md with 3 tasks covering the create-job endpoint, the brief',
+          'edit endpoint, and per-project request serialization.',
+          '',
+          'No open questions — ready for the developer.',
           '=== 2026-08-28T16:11:40+02:00 developer invoked (attempt 1) ===',
-          'developer finished — 5 commits, implementation.md written',
+          '=== 2026-08-28T17:58:20+02:00 developer finished (attempt 1) ===',
+          '',
+          '',
+          'Implemented all 3 tasks across 5 commits and wrote implementation.md.',
+          'All endpoints are wired behind serve.ProjectLocks as specified.',
           '=== 2026-08-28T18:04:02+02:00 reviewer invoked (attempt 1) ===',
-          'reviewer verdict: NEEDS WORK — profile validation missing',
+          '=== 2026-08-28T18:05:31+02:00 reviewer finished (attempt 1) ===',
+          '',
+          '',
+          'NEEDS WORK — the launch endpoint does not validate the profile before',
+          'detaching, so a typo silently burns the claude-pro default. See',
+          'verdict.md for the full finding.',
           '=== 2026-08-28T18:06:19+02:00 developer invoked (attempt 2) ===',
         ].join('\n'),
         sessionLog: [
@@ -241,11 +261,37 @@ export function fixtureState(): MockState {
       'manigot/harbor_needs-human-on-conflict-handling': {
         runLog: [
           '=== 2026-08-27T09:14:00+02:00 mg jdi started: job harbor_needs-human-on-conflict-handling, profile zai ===',
-          'analyst finished — tasks.md written (4 tasks)',
-          'developer finished — 2 commits',
-          'reviewer verdict: NEEDS WORK',
+          '',
+          '=== 2026-08-27T09:14:00+02:00 analyst invoked (attempt 1) ===',
+          '=== 2026-08-27T09:22:18+02:00 analyst finished (attempt 1) ===',
+          '',
+          '',
+          'Wrote tasks.md with 4 tasks covering the conflict-handling contract.',
+          '=== 2026-08-27T09:23:05+02:00 developer invoked (attempt 1) ===',
+          '=== 2026-08-27T10:40:33+02:00 developer finished (attempt 1) ===',
+          '',
+          '',
+          'Landed the structured conflict error on done across 2 commits.',
+          '=== 2026-08-27T11:02:10+02:00 reviewer invoked (attempt 1) ===',
+          '=== 2026-08-27T11:15:44+02:00 reviewer finished (attempt 1) ===',
+          '',
+          '',
+          'NEEDS WORK — see verdict.md.',
           '=== 2026-08-27T13:41:02+02:00 developer invoked (attempt 2) ===',
-          '=== 2026-08-27T14:02:55+02:00 stopped: needs human ===',
+          '=== 2026-08-27T14:02:51+02:00 developer finished (attempt 2) ===',
+          '',
+          '',
+          'The done-conflict fix is straightforward, but I need a product decision',
+          'before touching the handoff behavior.',
+          'NEEDS-HUMAN-INPUT: should done auto-hand-off to @git-solver on conflict, or always require an explicit human call?',
+          '',
+          // The real job-level terminal header (logJobFinished in
+          // src/cmd/mg/jdioutput.go), not the old idealized single-line
+          // "stopped: needs human" convention — this is the exact line whose
+          // mismatch let the TASK-2 parser bug ship undetected against
+          // ?mock=1 (see verdict.md).
+          '=== 2026-08-27T14:02:55+02:00 mg jdi finished: stop-needs-human ===',
+          'developer asked for human input: should done auto-hand-off to @git-solver on conflict, or always require an explicit human call?',
         ].join('\n'),
         sessionLog: [
           '14:02:51 NEEDS-HUMAN-INPUT: should done auto-hand-off to @git-solver when a merge conflicts over HTTP, or always require an explicit human call?',

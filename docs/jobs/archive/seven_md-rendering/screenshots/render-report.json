@@ -1,0 +1,2551 @@
+{
+  "url": "http://localhost:5199/?mock=1#/p/manigot/j/harbor_needs-human-on-conflict-handling/run",
+  "capturedAt": "2026-08-29T13:31:38.977Z",
+  "options": {
+    "widths": [
+      1280
+    ],
+    "fullPage": true,
+    "describe": false
+  },
+  "prose": [],
+  "measures": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "devicePixelRatio": 1,
+      "documentSize": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280
+      },
+      "inventory": [
+        {
+          "tag": "a",
+          "classes": [
+            "brand",
+            "s-XsEmFtvddWTw"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 24,
+            "width": 199,
+            "height": 25.56
+          },
+          "fontSize": 15,
+          "fontWeight": "400",
+          "lineHeight": "23.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "word",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "manigot",
+          "interactive": false,
+          "rect": {
+            "x": 49,
+            "y": 24,
+            "width": 56.7,
+            "height": 25.56
+          },
+          "fontSize": 16.5,
+          "fontWeight": "680",
+          "lineHeight": "25.575px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "role",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "control plane",
+          "interactive": false,
+          "rect": {
+            "x": 112.7,
+            "y": 27.92,
+            "width": 95.3,
+            "height": 17.72
+          },
+          "fontSize": 9.5,
+          "fontWeight": "400",
+          "lineHeight": "14.725px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "label",
+          "classes": [
+            "eyebrow",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "project",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 73.56,
+            "width": 199,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "select",
+          "id": "project-select",
+          "classes": [
+            "select",
+            "s-XsEmFtvddWTw"
+          ],
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 95.83,
+            "width": 199,
+            "height": 39.69
+          },
+          "fontSize": 14,
+          "fontWeight": "400",
+          "lineHeight": "21.7px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(26, 22, 34)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static"
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw",
+            "active"
+          ],
+          "text": "Jobs",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 159.52,
+            "width": 199,
+            "height": 35.69
+          },
+          "fontSize": 14,
+          "fontWeight": "520",
+          "lineHeight": "21.7px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(139, 108, 246, 0.16)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Crew",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 197.2,
+            "width": 199,
+            "height": 35.69
+          },
+          "fontSize": 14,
+          "fontWeight": "520",
+          "lineHeight": "21.7px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "Daemon",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 234.89,
+            "width": 199,
+            "height": 35.69
+          },
+          "fontSize": 14,
+          "fontWeight": "520",
+          "lineHeight": "21.7px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "conn",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "connected",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 805.88,
+            "width": 199,
+            "height": 33.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "palette-hint",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "commands",
+          "interactive": true,
+          "rect": {
+            "x": 16,
+            "y": 847.25,
+            "width": 199,
+            "height": 28.75
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "kbd",
+            "s-XsEmFtvddWTw"
+          ],
+          "text": "⌘K",
+          "interactive": false,
+          "rect": {
+            "x": 18,
+            "y": 851.25,
+            "width": 25.33,
+            "height": 20.75
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "15.75px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "a",
+          "classes": [
+            "back",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "←",
+          "interactive": true,
+          "rect": {
+            "x": 348,
+            "y": 24,
+            "width": 23.09,
+            "height": 31.89
+          },
+          "fontSize": 18,
+          "fontWeight": "400",
+          "lineHeight": "27.9px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "h1",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "conflict handling over HTTP",
+          "interactive": false,
+          "rect": {
+            "x": 387.09,
+            "y": 24,
+            "width": 371.91,
+            "height": 26.25
+          },
+          "fontSize": 21,
+          "fontWeight": "640",
+          "lineHeight": "26.25px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "mono",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "harbor_needs-human-on-conflict-handling",
+          "interactive": false,
+          "rect": {
+            "x": 387.09,
+            "y": 55.25,
+            "width": 273,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "sep",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "·",
+          "interactive": false,
+          "rect": {
+            "x": 666.09,
+            "y": 54.25,
+            "width": 3,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "mono",
+            "dim",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "feature/harbor_needs-human-on-conflict-handling",
+          "interactive": false,
+          "rect": {
+            "x": 387.09,
+            "y": 80.84,
+            "width": 329,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "sep",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "·",
+          "interactive": false,
+          "rect": {
+            "x": 722.09,
+            "y": 79.84,
+            "width": 3,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "feature",
+          "interactive": false,
+          "rect": {
+            "x": 387.09,
+            "y": 105.44,
+            "width": 38,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "sep",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "·",
+          "interactive": false,
+          "rect": {
+            "x": 431.09,
+            "y": 105.44,
+            "width": 3,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "dim",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "2026-08-27",
+          "interactive": false,
+          "rect": {
+            "x": 440.09,
+            "y": 105.44,
+            "width": 64,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "sep",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "·",
+          "interactive": false,
+          "rect": {
+            "x": 510.09,
+            "y": 105.44,
+            "width": 3,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "dim",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "reviewer · 14 min ago",
+          "interactive": false,
+          "rect": {
+            "x": 519.09,
+            "y": 105.44,
+            "width": 114,
+            "height": 19.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Run mg jdi",
+          "interactive": true,
+          "rect": {
+            "x": 775,
+            "y": 24,
+            "width": 93,
+            "height": 36.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "520",
+          "lineHeight": "20.925px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Launch agent",
+          "interactive": true,
+          "rect": {
+            "x": 876,
+            "y": 24,
+            "width": 114,
+            "height": 36.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "520",
+          "lineHeight": "20.925px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "btn-sm",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Push",
+          "interactive": true,
+          "rect": {
+            "x": 998,
+            "y": 27.77,
+            "width": 49,
+            "height": 29.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "520",
+          "lineHeight": "19.375px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "btn-sm",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Done",
+          "interactive": true,
+          "rect": {
+            "x": 1053,
+            "y": 27.77,
+            "width": 50,
+            "height": 29.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "520",
+          "lineHeight": "19.375px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "btn-sm",
+            "btn-danger",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Delete",
+          "interactive": true,
+          "rect": {
+            "x": 1109,
+            "y": 27.77,
+            "width": 55,
+            "height": 29.38
+          },
+          "fontSize": 12.5,
+          "fontWeight": "520",
+          "lineHeight": "19.375px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(242, 85, 90, 0.14)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "pipe-label",
+            "s-dgkc_qaBtH-N"
+          ],
+          "text": "define",
+          "interactive": false,
+          "rect": {
+            "x": 375.59,
+            "y": 180.81,
+            "width": 40.81,
+            "height": 15.5
+          },
+          "fontSize": 10,
+          "fontWeight": "400",
+          "lineHeight": "15.5px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "absolute",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "pipe-label",
+            "s-dgkc_qaBtH-N"
+          ],
+          "text": "plan",
+          "interactive": false,
+          "rect": {
+            "x": 464.4,
+            "y": 180.81,
+            "width": 27.2,
+            "height": 15.5
+          },
+          "fontSize": 10,
+          "fontWeight": "400",
+          "lineHeight": "15.5px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "absolute",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "pipe-label",
+            "s-dgkc_qaBtH-N"
+          ],
+          "text": "implement",
+          "interactive": false,
+          "rect": {
+            "x": 529.4,
+            "y": 180.81,
+            "width": 61.2,
+            "height": 15.5
+          },
+          "fontSize": 10,
+          "fontWeight": "400",
+          "lineHeight": "15.5px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "absolute",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "pipe-label",
+            "s-dgkc_qaBtH-N",
+            "label-active"
+          ],
+          "text": "review",
+          "interactive": false,
+          "rect": {
+            "x": 621.59,
+            "y": 180.81,
+            "width": 40.81,
+            "height": 15.5
+          },
+          "fontSize": 10,
+          "fontWeight": "500",
+          "lineHeight": "15.5px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "absolute",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "pipe-label",
+            "s-dgkc_qaBtH-N"
+          ],
+          "text": "finished",
+          "interactive": false,
+          "rect": {
+            "x": 696.8,
+            "y": 180.81,
+            "width": 54.41,
+            "height": 15.5
+          },
+          "fontSize": 10,
+          "fontWeight": "400",
+          "lineHeight": "15.5px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "absolute",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "chip",
+            "chip-human",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "stopped for a human",
+          "interactive": false,
+          "rect": {
+            "x": 771,
+            "y": 167.97,
+            "width": 171.38,
+            "height": 24.69
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "18.7px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(242, 85, 90, 0.14)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "eyebrow",
+            "human-eyebrow",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "handoff",
+          "interactive": false,
+          "rect": {
+            "x": 373,
+            "y": 244.81,
+            "width": 496,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "human-text",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "The run stopped with  — a decision only you can make.\n          Answer it in the",
+          "interactive": false,
+          "rect": {
+            "x": 373,
+            "y": 265.08,
+            "width": 496,
+            "height": 41.84
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "code",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "NEEDS-HUMAN-INPUT",
+          "interactive": false,
+          "rect": {
+            "x": 495,
+            "y": 268.08,
+            "width": 119,
+            "height": 15
+          },
+          "fontSize": 12.15,
+          "fontWeight": "400",
+          "lineHeight": "18.8325px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Edit brief",
+          "interactive": true,
+          "rect": {
+            "x": 923,
+            "y": 257.41,
+            "width": 82,
+            "height": 36.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "520",
+          "lineHeight": "20.925px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(33, 28, 45)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "btn",
+            "btn-primary",
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Relaunch mg jdi",
+          "interactive": true,
+          "rect": {
+            "x": 1013,
+            "y": 257.41,
+            "width": 126,
+            "height": 36.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "620",
+          "lineHeight": "20.925px",
+          "color": "rgb(236, 232, 244)",
+          "background": "rgb(102, 71, 230)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 15.49,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Brief",
+          "interactive": true,
+          "rect": {
+            "x": 348,
+            "y": 347.92,
+            "width": 55,
+            "height": 40.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "530",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Tasks",
+          "interactive": true,
+          "rect": {
+            "x": 405,
+            "y": 347.92,
+            "width": 62,
+            "height": 40.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "530",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Implementation",
+          "interactive": true,
+          "rect": {
+            "x": 469,
+            "y": 347.92,
+            "width": 121,
+            "height": 40.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "530",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Verdict",
+          "interactive": true,
+          "rect": {
+            "x": 592,
+            "y": 347.92,
+            "width": 70,
+            "height": 40.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "530",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "s-DFkUa5ubVnDR"
+          ],
+          "text": "Diff",
+          "interactive": true,
+          "rect": {
+            "x": 664,
+            "y": 347.92,
+            "width": 49,
+            "height": 40.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "530",
+          "lineHeight": "20.925px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "button",
+          "classes": [
+            "s-DFkUa5ubVnDR",
+            "active"
+          ],
+          "text": "Run",
+          "interactive": true,
+          "rect": {
+            "x": 715,
+            "y": 347.92,
+            "width": 52,
+            "height": 40.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "530",
+          "lineHeight": "20.925px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "eyebrow",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "run.log",
+          "interactive": false,
+          "rect": {
+            "x": 348,
+            "y": 413.84,
+            "width": 59.3,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "sub",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "invocation events",
+          "interactive": false,
+          "rect": {
+            "x": 419.3,
+            "y": 412.84,
+            "width": 91,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "mg jdi",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 450.44,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "mg jdi started: job harbor_needs-human-on-conflict-handling, profile zai",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 448.44,
+            "width": 404,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@analyst",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 481.36,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "invoked",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 479.36,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 1",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 482.36,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@analyst",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 512.28,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "finished",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 510.28,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 1",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 513.28,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "response",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "Wrote tasks.md with 4 tasks covering the conflict-handling contract.",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 545.2,
+            "width": 792,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@developer",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 578.13,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "invoked",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 576.13,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 1",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 579.13,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@developer",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 609.05,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "finished",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 607.05,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 1",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 610.05,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "response",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "Landed the structured conflict error on done across 2 commits.",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 641.97,
+            "width": 792,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@reviewer",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 674.89,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "invoked",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 672.89,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 1",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 675.89,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@reviewer",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 705.81,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "finished",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 703.81,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 1",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 706.81,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "response",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "NEEDS WORK — see verdict.md.",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 738.73,
+            "width": 792,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@developer",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 771.66,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "invoked",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 769.66,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 2",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 772.66,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "@developer",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 802.58,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(167, 139, 250)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 6.87,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "finished",
+          "interactive": false,
+          "rect": {
+            "x": 474,
+            "y": 800.58,
+            "width": 44,
+            "height": 20.92
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "att",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "attempt 2",
+          "interactive": false,
+          "rect": {
+            "x": 528,
+            "y": 803.58,
+            "width": 63,
+            "height": 17.05
+          },
+          "fontSize": 11,
+          "fontWeight": "400",
+          "lineHeight": "17.05px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "p",
+          "classes": [
+            "response",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "The done-conflict fix is straightforward, but I need a product decision\nbefore t",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 835.5,
+            "width": 792,
+            "height": 41.84
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "handoff",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 887.34,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(255, 141, 145)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.43,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "human-text",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "NEEDS-HUMAN-INPUT: should done auto-hand-off to @git-solver on conflict, or alwa",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 915.94,
+            "width": 792,
+            "height": 38.75
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "19.375px",
+          "color": "rgb(255, 179, 182)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 11.01,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "who",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "stopped",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 964.69,
+            "width": 92,
+            "height": 18.59
+          },
+          "fontSize": 12,
+          "fontWeight": "400",
+          "lineHeight": "18.6px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "what",
+            "s-ZkoJKFl-qBiX",
+            "stopped-human"
+          ],
+          "text": "needs human — developer asked for human input: should done auto-hand-off to @git",
+          "interactive": false,
+          "rect": {
+            "x": 372,
+            "y": 993.28,
+            "width": 792,
+            "height": 41.84
+          },
+          "fontSize": 13.5,
+          "fontWeight": "400",
+          "lineHeight": "20.925px",
+          "color": "rgb(255, 179, 182)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"Familjen Grotesk Variable\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 11.01,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "eyebrow",
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "session.log",
+          "interactive": false,
+          "rect": {
+            "x": 348,
+            "y": 1066.13,
+            "width": 93.17,
+            "height": 16.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(143, 134, 165)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 5.45,
+            "aa": true,
+            "aaa": false,
+            "large": false
+          }
+        },
+        {
+          "tag": "span",
+          "classes": [
+            "live-pill",
+            "s-ZkoJKFl-qBiX",
+            "polling"
+          ],
+          "text": "polling",
+          "interactive": false,
+          "rect": {
+            "x": 453.17,
+            "y": 1064.13,
+            "width": 74.36,
+            "height": 20.27
+          },
+          "fontSize": 10.5,
+          "fontWeight": "400",
+          "lineHeight": "16.275px",
+          "color": "rgb(227, 179, 65)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 9.6,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        },
+        {
+          "tag": "pre",
+          "classes": [
+            "s-ZkoJKFl-qBiX"
+          ],
+          "text": "14:02:51 NEEDS-HUMAN-INPUT: should done auto-hand-off to @git-solver when a merg",
+          "interactive": false,
+          "rect": {
+            "x": 365,
+            "y": 1109.39,
+            "width": 782,
+            "height": 41.25
+          },
+          "fontSize": 12.5,
+          "fontWeight": "400",
+          "lineHeight": "20.625px",
+          "color": "rgb(180, 171, 199)",
+          "background": "rgba(0, 0, 0, 0)",
+          "backgroundEffective": "rgb(20, 17, 25)",
+          "fontFamily": "\"IBM Plex Mono\"",
+          "zIndex": "auto",
+          "position": "static",
+          "contrast": {
+            "ratio": 8.53,
+            "aa": true,
+            "aaa": true,
+            "large": false
+          }
+        }
+      ],
+      "overflow": [],
+      "alignment": [
+        {
+          "element": "span.sep.s-DFkUa5ubVnDR\"·\"",
+          "kind": "grid-line-near-miss",
+          "detail": "left 431.1 is 9px off the sibling grid line 440.1"
+        },
+        {
+          "element": "span.pipe-label.s-dgkc_qaBtH-N\"plan\"",
+          "kind": "grid-line-near-miss",
+          "detail": "left 464.4 is 8.6px off the sibling grid line 473"
+        },
+        {
+          "element": "header.sec-head.s-ZkoJKFl-qBiX\"run.log invocation events\"",
+          "kind": "grid-line-near-miss",
+          "detail": "left 348 is 5px off the sibling grid line 353"
+        }
+      ],
+      "spacingScale": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        24,
+        536
+      ],
+      "fonts": {
+        "status": "loaded",
+        "families": [
+          {
+            "family": "Familjen Grotesk Variable",
+            "loaded": true
+          },
+          {
+            "family": "IBM Plex Mono",
+            "loaded": true
+          }
+        ],
+        "fallbacks": []
+      },
+      "overlaps": []
+    }
+  ]
+}
