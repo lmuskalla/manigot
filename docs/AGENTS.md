@@ -49,6 +49,27 @@ is possible without code changes.
   global instruction file (a symlink would let Claude's `/memory` writes and
   agent edits land back in the checkout). Non-clobbering and optional: a
   checkout without `prompts/meta.md` yields no delivery.
+- MCP (Model Context Protocol) servers: JSON files in `mcp/` (`<name>.json`),
+  mirroring `agents/` + `docs/agents/` and `skills/` + `docs/skills/` exactly
+  — global + project, project overriding global by filename
+  (`docs/mcp/<name>.json`). Each file is manigot's own canonical,
+  CLI-agnostic schema (`{"type": "http", "url": "...", "headers": {...}}` for
+  a hosted server, or `{"type": "stdio", "command": "...", "args": [...],
+  "env": {...}}` for a locally-spawned one); a `"$VARNAME"` token in any
+  string value is resolved against manigot's own `.env` at session launch
+  (`internal/session/mcp.go`) — servers never carry a literal secret in a
+  committed file, and neither CLI's own config-file env expansion is relied
+  on. The merged, resolved set is converted into each CLI's native config
+  shape and mounted read-only: a generated `.mcp.json` shadow-mounted at the
+  workspace root for Claude Code, folded into the generated `opencode.json`
+  for OpenCode (see `internal/session`'s Architecture entry below). manigot
+  ships one server this way, `mcp/context7.json` (Context7, a hosted
+  documentation-lookup server, working unauthenticated at a lower rate limit
+  or with an optional `CONTEXT7_API_KEY`); no servers configured anywhere
+  means nothing is generated or mounted. Not yet covered: `mg host` sessions
+  (out of scope — see `host.go`) and an `mg mcp` CLI surface (file-based
+  only today, the same way `agents/`/`skills/` shipped before `mg agents`
+  existed).
 - The `shot` render tool (`scripts/shot.js`, baked into the image as
   `/usr/local/bin/shot`): Playwright (chromium-headless-shell, installed via
   `--with-deps` at build) renders a URL to a PNG and produces a model-free
@@ -90,7 +111,30 @@ The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
   is mounted read-only the same way at each CLI's *global instruction*
   location (`~/.claude/CLAUDE.md` for Claude Code,
   `~/.config/opencode/AGENTS.md` for OpenCode) — plain markdown, so no
-  conversion and no temp dir. It also decides the job git-common-dir
+  conversion and no temp dir. MCP servers follow the same global+project
+  discovery as agents/skills but a different merge unit — a canonical JSON
+  file, not a markdown file or a directory (`internal/session/mcp.go`):
+  `mcp/*.json` (global) and `docs/mcp/*.json` (project) are parsed, merged by
+  filename (project wins), `$VARNAME`-resolved against manigot's own `.env`,
+  and converted into each CLI's native config — Claude Code's `.mcp.json`
+  (`{"mcpServers": {...}}`, a near-verbatim wrap of the canonical schema) and
+  a block folded into OpenCode's `mcp` config key (a field remap — OpenCode's
+  own schema, confirmed against the installed `opencode-ai` package, names
+  things differently: a hosted server's canonical `type: "http"` becomes
+  `"remote"`, a spawned server's `type: "stdio"` becomes `"local"` with
+  `command`+`args` merged into one array and `env` renamed `environment`).
+  For Claude Code the generated `.mcp.json` is shadow-mounted read-only at
+  the workspace root, the same shadow-mount-over-a-real-file pattern the
+  `.env` shadow mount uses. For OpenCode the resolved model and the resolved
+  MCP block now compose into one complete generated `opencode.json`, written
+  host-side and mounted read-only at OpenCode's global config location —
+  this replaced `scripts/entrypoint.sh`'s old container-side, model-only,
+  write-if-missing `opencode.json` write (which could not compose a second,
+  independently-generated piece of content into the same file). Either
+  generated file is staged into a temp dir cleaned up via the invocation's
+  Cleanup hook, like the agent/skill temp dirs above; no servers configured
+  anywhere and no model resolved means nothing is generated or mounted. It
+  also decides the job git-common-dir
   mount mode from the resolved agent's `commit:` frontmatter marker (see
   "Read-only git mount for non-committing agents").
 - `internal/job` — the job lifecycle (was `new-job.sh`/`finish-job.sh`/
@@ -118,8 +162,9 @@ The Go module lives in `src/` (module root: `src/go.mod`, `src/cmd/`,
   (`GetEnv`/`UpsertEnv`).
 - `internal/home` — locates the manigot checkout the binary belongs to
   (`$MANIGOT_HOME`, the binary's own location, or the working directory) —
-  the source of `.env`, `config/`, `agents/`, `skills/`, `assets/` (quotes.json),
-  `prompts/` (the meta prompt) and `project-template/`.
+  the source of `.env`, `config/`, `agents/`, `skills/`, `mcp/` (global MCP
+  server definitions), `assets/` (quotes.json), `prompts/` (the meta prompt)
+  and `project-template/`.
 - `scripts/entrypoint.sh` — the ONLY bash, container-side. Branches on
   `manigot_TOOL`: writes `~/.claude.json` to skip Claude Code's onboarding
   wizard, pre-accepts folder trust for `/workspace`, and starts it in
@@ -172,15 +217,18 @@ least one of their key vars.
 For OpenCode sessions, the launcher also forwards the global theme setting
 (`OPENCODE_THEME`, set via `mg theme` — see below) into the container as
 `-e OPENCODE_THEME=<value>`, independent of which profile/API key is in use.
-`scripts/entrypoint.sh` turns the per-profile `OPENCODE_MODEL` and the global
-`OPENCODE_THEME` into two separate OpenCode config files via `{env:...}`
-substitution: `~/.config/opencode/opencode.json`'s `model` key for the model,
-and a separate `~/.config/opencode/tui.json`'s `theme` key for the theme —
+`scripts/entrypoint.sh` turns the global `OPENCODE_THEME` into a separate
+`~/.config/opencode/tui.json` config file via `{env:...}` substitution —
 OpenCode's own docs mark `opencode.json`'s top-level `theme` key as legacy/
 deprecated (auto-migrated when possible), so the theme is written to its
-current, non-deprecated home instead. Each file is written once, only when it
-doesn't already exist and its respective env var is set. Claude Code already
-respects the host terminal's own theme, so no equivalent exists there.
+current, non-deprecated home instead. The file is written once, only when it
+doesn't already exist and `OPENCODE_THEME` is set. Claude Code already
+respects the host terminal's own theme, so no equivalent exists there. The
+per-profile `OPENCODE_MODEL` no longer goes through this write-if-missing,
+`{env:...}`-substitution path: it is resolved host-side, alongside the MCP
+mechanism above, into a complete `~/.config/opencode/opencode.json`
+(model + `mcp`) generated in Go and mounted read-only — see
+`internal/session`'s Architecture entry above.
 
 The `--print` stdout contract: the agent's own output (JSON) on stdout,
 *everything else* (diagnostics, banner, warnings) on stderr — Go separates

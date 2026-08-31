@@ -77,20 +77,14 @@ else
         exit 1
     fi
 
-    # OpenCode doesn't read OPENCODE_MODEL directly — the model must come from a
-    # config file. run.sh forwards OPENCODE_MODEL; emit a minimal global config
-    # using {env:...} substitution so it actually takes effect. Without this
-    # OpenCode boots with its built-in default model (often the wrong provider).
-    OPENCODE_CFG="$HOME/.config/opencode/opencode.json"
-    if [[ -n "${OPENCODE_MODEL:-}" && ! -f "$OPENCODE_CFG" ]]; then
-        mkdir -p "$(dirname "$OPENCODE_CFG")"
-        cat > "$OPENCODE_CFG" <<'EOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}"
-}
-EOF
-    fi
+    # opencode.json (model + mcp servers) is no longer written here — it is
+    # generated host-side in Go (session.buildOpenCodeConfig) and mounted
+    # read-only at $HOME/.config/opencode/opencode.json by
+    # BuildDockerInvocation, the same way agents/skills/the meta prompt are
+    # delivered. That move lets a single generated file compose both the
+    # resolved model and the resolved MCP server set, which a
+    # "write-if-missing" guard in this script couldn't do for two
+    # independently-generated pieces of content.
 
     # The theme setting is TUI-specific and lives in its own tui.json, not
     # opencode.json — confirmed against https://opencode.ai/docs/config/,

@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -361,9 +362,11 @@ func TestBuildNoAgentsConversionMount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildDockerInvocation: %v", err)
 	}
-	if inv2.Cleanup != nil {
-		t.Error("no-agents opencode invocation must not carry a Cleanup hook")
-	}
+	// zai always resolves an OPENCODE_MODEL, so BuildDockerInvocation now
+	// legitimately generates+mounts an opencode.json (TASK-4/5's MCP-delivery
+	// mechanism) and carries a Cleanup hook for it — orthogonal to this
+	// test's own concern (no *agent* conversion/mount happened), which is
+	// what the mount-path check above already pins.
 	if strings.Contains(strings.Join(inv2.Argv, "\n"), "/workspace/.opencode/agents") {
 		t.Error("no-agents invocation must not mount converted agents")
 	}
@@ -490,9 +493,10 @@ func TestBuildNoGlobalAgentsNoMount(t *testing.T) {
 	if strings.Contains(joined2, "/home/claude/.config/opencode/agents") {
 		t.Errorf("opencode invocation must not mount global agents when agents/ is absent:\n%s", joined2)
 	}
-	if inv2.Cleanup != nil {
-		t.Error("no-global-agents opencode invocation must not carry a Cleanup hook")
-	}
+	// zai always resolves an OPENCODE_MODEL, so a Cleanup hook is now
+	// legitimately present for the generated opencode.json (TASK-4/5) —
+	// orthogonal to this test's own concern, which the mount-path check
+	// above already pins.
 }
 
 func TestBuildJobWorktreeGitCommonDirMount(t *testing.T) {
@@ -776,9 +780,10 @@ func TestBuildNoGlobalSkillsNoMount(t *testing.T) {
 	if strings.Contains(joined2, "/home/claude/.config/opencode/skills") {
 		t.Errorf("opencode invocation must not mount global skills when skills/ is absent:\n%s", joined2)
 	}
-	if inv2.Cleanup != nil {
-		t.Error("no-global-skills opencode invocation must not carry a Cleanup hook")
-	}
+	// zai always resolves an OPENCODE_MODEL, so a Cleanup hook is now
+	// legitimately present for the generated opencode.json (TASK-4/5) —
+	// orthogonal to this test's own concern, which the mount-path check
+	// above already pins.
 }
 
 // TestBuildClaudeGlobalMetaMountedReadOnly: the global meta prompt
@@ -815,7 +820,10 @@ func TestBuildClaudeGlobalMetaMountedReadOnly(t *testing.T) {
 
 // TestBuildOpenCodeGlobalMetaMountedReadOnly: OpenCode reads its global rules
 // from ~/.config/opencode/AGENTS.md, so the global meta prompt is mounted
-// read-only at that path. No conversion, no temp dir, no Cleanup hook.
+// read-only at that path. No conversion, no temp dir — the meta mount itself
+// carries no Cleanup hook (a zai profile's resolved model still triggers one
+// via the unrelated generated-opencode.json mechanism, see the comment
+// below).
 func TestBuildOpenCodeGlobalMetaMountedReadOnly(t *testing.T) {
 	_, _ = docProject(t)
 	// A zai checkout whose prompts/meta.md carries the system-wide meta prompt.
@@ -839,9 +847,10 @@ func TestBuildOpenCodeGlobalMetaMountedReadOnly(t *testing.T) {
 	containsAll(t, inv.Argv,
 		"-v", filepath.Join(home, "prompts", "meta.md")+":/home/claude/.config/opencode/AGENTS.md:ro",
 	)
-	if inv.Cleanup != nil {
-		t.Error("opencode global-meta mount must not carry a Cleanup hook")
-	}
+	// zai always resolves an OPENCODE_MODEL, so a Cleanup hook is now
+	// legitimately present for the generated opencode.json (TASK-4/5) —
+	// orthogonal to the global-meta mount this test pins, which carries no
+	// Cleanup of its own (plain markdown, no conversion, no temp dir).
 }
 
 // TestBuildNoGlobalMetaNoMount: with no prompts/meta.md in the manigot checkout there
@@ -1197,6 +1206,204 @@ func TestBuildClaudeProNoModelFlag(t *testing.T) {
 	}
 	if indexOf(inv.Argv, "--model") != -1 {
 		t.Errorf("claude-pro session should not carry --model: %v", inv.Argv)
+	}
+}
+
+// writeMCPServerFile writes a canonical MCP server definition file at
+// <dir>/mcp/<name>.json, creating the mcp/ subdir.
+func writeMCPServerFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	mcpDir := filepath.Join(dir, "mcp")
+	if err := os.MkdirAll(mcpDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mcpDir, name+".json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestBuildClaudeMCPConfigMounted pins TASK-5 for Claude Code: a global MCP
+// server definition is merged, $VARNAME-resolved and mounted read-only as a
+// generated .mcp.json shadow-mounted at the workspace root, cleaned up via
+// the invocation's Cleanup hook.
+func TestBuildClaudeMCPConfigMounted(t *testing.T) {
+	root, home := docProject(t)
+	writeMCPServerFile(t, home, "context7", `{"type": "http", "url": "https://mcp.context7.com/mcp", "headers": {"CONTEXT7_API_KEY": "$CONTEXT7_API_KEY"}}`)
+	if err := os.WriteFile(filepath.Join(home, ".env"), []byte("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-token\nCLAUDE_ACCOUNT_UUID=uuid-1\nCLAUDE_EMAIL=me@x.io\nCLAUDE_ORG_UUID=org-1\nCONTEXT7_API_KEY=ctx7-secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	_ = root
+	joined := strings.Join(inv.Argv, "\n")
+	if !strings.Contains(joined, ":/workspace/.mcp.json:ro") {
+		t.Fatalf("argv missing .mcp.json mount:\n%s", joined)
+	}
+	if inv.Cleanup == nil {
+		t.Fatal("claude mcp mount must carry a Cleanup hook (a generated temp file)")
+	}
+	// Find the staged .mcp.json's host path from the argv and check its
+	// resolved contents.
+	var hostPath string
+	for i, a := range inv.Argv {
+		if a == "-v" && i+1 < len(inv.Argv) && strings.HasSuffix(inv.Argv[i+1], ":/workspace/.mcp.json:ro") {
+			hostPath = strings.TrimSuffix(inv.Argv[i+1], ":/workspace/.mcp.json:ro")
+		}
+	}
+	if hostPath == "" {
+		t.Fatal("could not find staged .mcp.json host path in argv")
+	}
+	data, err := os.ReadFile(hostPath)
+	if err != nil {
+		t.Fatalf("read staged .mcp.json: %v", err)
+	}
+	if !strings.Contains(string(data), "ctx7-secret") || strings.Contains(string(data), "$CONTEXT7_API_KEY") {
+		t.Errorf("staged .mcp.json = %s, want resolved CONTEXT7_API_KEY", data)
+	}
+	inv.Cleanup()
+	if _, err := os.Stat(hostPath); !os.IsNotExist(err) {
+		t.Errorf("Cleanup did not remove the staged .mcp.json temp dir")
+	}
+}
+
+// TestBuildOpenCodeMCPConfigMounted pins TASK-5 for OpenCode: the resolved
+// model and the resolved MCP server set compose into one generated
+// opencode.json, mounted read-only at OpenCode's global config location.
+func TestBuildOpenCodeMCPConfigMounted(t *testing.T) {
+	root, _ := docProject(t)
+	home := checkout(t, "MANIGOT_PROFILE=zai\nZHIPU_API_KEY=z-secret\nCONTEXT7_API_KEY=ctx7-secret\n")
+	writeMCPServerFile(t, home, "context7", `{"type": "http", "url": "https://mcp.context7.com/mcp", "headers": {"CONTEXT7_API_KEY": "$CONTEXT7_API_KEY"}}`)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	_ = root
+	var hostPath string
+	for i, a := range inv.Argv {
+		if a == "-v" && i+1 < len(inv.Argv) && strings.HasSuffix(inv.Argv[i+1], ":/home/claude/.config/opencode/opencode.json:ro") {
+			hostPath = strings.TrimSuffix(inv.Argv[i+1], ":/home/claude/.config/opencode/opencode.json:ro")
+		}
+	}
+	if hostPath == "" {
+		t.Fatalf("argv missing generated opencode.json mount:\n%s", strings.Join(inv.Argv, "\n"))
+	}
+	data, err := os.ReadFile(hostPath)
+	if err != nil {
+		t.Fatalf("read staged opencode.json: %v", err)
+	}
+	var cfg openCodeConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal staged opencode.json: %v", err)
+	}
+	if cfg.Model != "zai-coding-plan/glm-5.2" {
+		t.Errorf("staged opencode.json model = %q", cfg.Model)
+	}
+	if got := cfg.MCP["context7"]; got.Type != "remote" || got.Headers["CONTEXT7_API_KEY"] != "ctx7-secret" {
+		t.Errorf("staged opencode.json mcp[context7] = %+v", got)
+	}
+	if inv.Cleanup == nil {
+		t.Fatal("opencode mcp mount must carry a Cleanup hook")
+	}
+	inv.Cleanup()
+	if _, err := os.Stat(hostPath); !os.IsNotExist(err) {
+		t.Errorf("Cleanup did not remove the staged opencode.json temp dir")
+	}
+}
+
+// TestBuildNoMCPServersNoMCPMount: with no mcp/*.json / docs/mcp/*.json
+// anywhere and no OPENCODE_MODEL resolved, nothing MCP-related is generated
+// or mounted.
+func TestBuildNoMCPServersNoMCPMount(t *testing.T) {
+	root, _ := docProject(t)
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	_ = root
+	joined := strings.Join(inv.Argv, "\n")
+	if strings.Contains(joined, ".mcp.json") {
+		t.Errorf("argv must not mount .mcp.json when no MCP servers are configured:\n%s", joined)
+	}
+	if inv.Cleanup != nil {
+		t.Error("claude session with no mcp servers configured must not carry a Cleanup hook")
+	}
+}
+
+// TestBuildMCPProjectOverridesGlobalByFilename: a project server file
+// (docs/mcp/<name>.json) replaces a global one of the same name, exactly
+// the agents/skills global+project precedence.
+func TestBuildMCPProjectOverridesGlobalByFilename(t *testing.T) {
+	root, home := docProject(t)
+	writeMCPServerFile(t, home, "context7", `{"type": "http", "url": "https://global.example.com/mcp"}`)
+	writeMCPServerFile(t, filepath.Join(root, "docs"), "context7", `{"type": "http", "url": "https://project-override.example.com/mcp"}`)
+	if err := os.WriteFile(filepath.Join(home, ".env"), []byte("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-token\nCLAUDE_ACCOUNT_UUID=uuid-1\nCLAUDE_EMAIL=me@x.io\nCLAUDE_ORG_UUID=org-1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := ResolveProfile(Options{})
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if err := info.CheckAuth(); err != nil {
+		t.Fatalf("CheckAuth: %v", err)
+	}
+	r, err := ResolveRoot(Options{})
+	if err != nil {
+		t.Fatalf("ResolveRoot: %v", err)
+	}
+	inv, err := BuildDockerInvocation(Options{}, info, r, false, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("BuildDockerInvocation: %v", err)
+	}
+	var hostPath string
+	for i, a := range inv.Argv {
+		if a == "-v" && i+1 < len(inv.Argv) && strings.HasSuffix(inv.Argv[i+1], ":/workspace/.mcp.json:ro") {
+			hostPath = strings.TrimSuffix(inv.Argv[i+1], ":/workspace/.mcp.json:ro")
+		}
+	}
+	if hostPath == "" {
+		t.Fatalf("argv missing .mcp.json mount:\n%s", strings.Join(inv.Argv, "\n"))
+	}
+	data, err := os.ReadFile(hostPath)
+	if err != nil {
+		t.Fatalf("read staged .mcp.json: %v", err)
+	}
+	if !strings.Contains(string(data), "project-override.example.com") || strings.Contains(string(data), "global.example.com") {
+		t.Errorf("staged .mcp.json = %s, want the project override only", data)
 	}
 }
 

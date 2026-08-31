@@ -29,6 +29,21 @@ and to agentless invocations; custom project skills in `docs/skills/`
 tools the same way — write them in the standard format (a directory with a
 SKILL.md carrying name:/description: frontmatter, plus optional support
 files), no per-tool format needed.
+Global MCP (Model Context Protocol) server definitions (from the manigot
+checkout's `mcp/` — JSON files, one per server) are merged with any custom
+project servers in `docs/mcp/` (same filename overrides the global server
+entirely, a new filename adds one) and delivered into every session: manigot
+resolves `$VARNAME` tokens in each server's config against its own `.env`
+host-side, converts the merged, resolved set into whichever CLI is running,
+and mounts it read-only — a generated `.mcp.json` for Claude Code, folded
+into OpenCode's config for OpenCode. A server definition never carries a
+literal secret; write one in the standard format (`{"type": "http", "url":
+"...", "headers": {"SOME_KEY": "$SOME_KEY"}}` for a hosted server, or
+`{"type": "stdio", "command": "...", "args": [...], "env": {"SOME_KEY":
+"$SOME_KEY"}}` for a locally-spawned one), no per-tool format needed.
+Unlike agents/skills (which `mg host` still delivers, via a symlink/copy
+into your own CLI config), `mg host` sessions don't deliver MCP servers at
+all — they'd need to already be configured in your own CLI's own config.
 A system-wide meta prompt (from the manigot checkout's `prompts/meta.md` — mounted
 read-only into the container at each CLI's global instruction location
 `~/.claude/CLAUDE.md` for Claude Code, `~/.config/opencode/AGENTS.md` for

@@ -317,6 +317,50 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 		}
 	}
 
+	// ── MCP servers ───────────────────────────────────────────────────────
+	// Global (<home>/mcp) + project (docs/mcp) MCP server definitions are
+	// merged and $VARNAME-resolved once per session (see mcp.go), then
+	// converted into the resolved tool's native config shape and mounted
+	// read-only: Claude Code gets a generated .mcp.json shadow-mounted at the
+	// workspace root (shadowing any real project .mcp.json, the same
+	// shadow-mount-over-a-real-file pattern the .env block below uses);
+	// OpenCode gets a generated opencode.json (model + mcp — TASK-4 moved the
+	// model-only write scripts/entrypoint.sh used to do host-side so both
+	// pieces can compose into one file) mounted at its global config
+	// location. Neither a model nor any MCP server configured anywhere →
+	// nothing generated, nothing mounted, argv unchanged from before this
+	// mechanism existed.
+	var mcpMount []string
+	var mcpCleanup func()
+	if merged, err := discoverMCPServers(home.Root(), root.DocsDir); err != nil {
+		return DockerInvocation{}, fmt.Errorf("discover mcp servers: %w", err)
+	} else {
+		resolved := resolveMCPServers(merged)
+		if info.Tool == config.ToolOpenCode {
+			if data, ok, err := buildOpenCodeConfig(info.OpenCodeModel, resolved); err != nil {
+				return DockerInvocation{}, fmt.Errorf("build opencode.json: %w", err)
+			} else if ok {
+				tmp, err := stageMCPFile("opencode.json", data)
+				if err != nil {
+					return DockerInvocation{}, fmt.Errorf("stage opencode.json: %w", err)
+				}
+				mcpMount = []string{"-v", filepath.Join(tmp, "opencode.json") + ":/home/claude/.config/opencode/opencode.json:ro"}
+				mcpCleanup = func() { os.RemoveAll(tmp) }
+			}
+		} else {
+			if data, ok, err := claudeMCPConfig(resolved); err != nil {
+				return DockerInvocation{}, fmt.Errorf("build .mcp.json: %w", err)
+			} else if ok {
+				tmp, err := stageMCPFile(".mcp.json", data)
+				if err != nil {
+					return DockerInvocation{}, fmt.Errorf("stage .mcp.json: %w", err)
+				}
+				mcpMount = []string{"-v", filepath.Join(tmp, ".mcp.json") + ":/workspace/.mcp.json:ro"}
+				mcpCleanup = func() { os.RemoveAll(tmp) }
+			}
+		}
+	}
+
 	// ── Project skills ────────────────────────────────────────────────────
 	// Project skills (docs/skills/<name>/SKILL.md) need no staging or shadow
 	// mount: the docs bind mount above maps the whole docs/ dir, so
@@ -487,6 +531,7 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, globalAgentMount...)
 	argv = append(argv, globalSkillMount...)
 	argv = append(argv, globalMetaMount...)
+	argv = append(argv, mcpMount...)
 	argv = append(argv, contextMount...)
 	argv = append(argv, envMounts...)
 	argv = append(argv, gitDirEnv...)
@@ -513,11 +558,11 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 	argv = append(argv, promptArgs...)
 	argv = append(argv, opts.Pass...)
 
-	// Combine the project-agent, global-agent and global-skill temp-dir
-	// cleanups (whichever are non-nil) into a single hook run after the
-	// container exits.
+	// Combine the project-agent, global-agent, global-skill and generated-mcp-
+	// config temp-dir cleanups (whichever are non-nil) into a single hook run
+	// after the container exits.
 	var cleanup func()
-	if agentCleanup != nil || globalAgentCleanup != nil || globalSkillCleanup != nil {
+	if agentCleanup != nil || globalAgentCleanup != nil || globalSkillCleanup != nil || mcpCleanup != nil {
 		cleanup = func() {
 			if agentCleanup != nil {
 				agentCleanup()
@@ -527,6 +572,9 @@ func BuildDockerInvocation(opts Options, info ProfileInfo, root Root, interactiv
 			}
 			if globalSkillCleanup != nil {
 				globalSkillCleanup()
+			}
+			if mcpCleanup != nil {
+				mcpCleanup()
 			}
 		}
 	}
